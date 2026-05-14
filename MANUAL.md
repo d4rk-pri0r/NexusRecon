@@ -1294,4 +1294,4 @@ Add `source /path/to/agentic-osint/venv/bin/activate` to your shell's rc file
 
 ---
 
-*This manual covers NexusRecon v2.0.0 (89 tools, dynamic dispatch, credential harvest, attack surface scoring). Authorized use only — see DISCLAIMER.md.*
+*This manual covers NexusRecon v0.5.0 (pre-beta, 89 tools, dynamic dispatch, credential harvest, attack surface scoring, interactive TUI). Authorized use only — see DISCLAIMER.md.*

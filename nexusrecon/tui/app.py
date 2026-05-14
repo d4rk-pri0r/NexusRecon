@@ -1,4 +1,10 @@
-"""NexusRecon V3 TUI — Textual app entry point."""
+"""NexusRecon TUI — Textual app entry point.
+
+Internal iteration label: this module was added during the "V3 UX Polish"
+development phase. The "V3" refers to the development iteration, not a
+product version — see __version__ in `nexusrecon/__init__.py` for the
+actual semver-tracked release number.
+"""
 from __future__ import annotations
 
 import sys
@@ -11,7 +17,10 @@ class NexusReconApp(App):
 
     CSS_PATH = "app.tcss"
     TITLE = "NexusRecon — Agentic OSINT Orchestration"
-    SUB_TITLE = "v3.0"
+    # Display version pulled from the package __version__ so banner /
+    # subtitle / pyproject can never drift apart.
+    from nexusrecon import __version__ as _pkg_version
+    SUB_TITLE = f"v{_pkg_version}"
 
     BINDINGS = [
         ("ctrl+q", "quit", "Quit"),

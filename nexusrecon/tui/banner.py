@@ -10,6 +10,15 @@ from __future__ import annotations
 import os
 import shutil
 
+# Single source of truth for the version string — derived from the
+# package __version__ in `nexusrecon/__init__.py` (which mirrors
+# pyproject.toml). Bump the version in __init__.py; the banner picks
+# it up automatically.
+try:
+    from nexusrecon import __version__ as _PKG_VERSION
+except Exception:
+    _PKG_VERSION = "?.?.?"
+
 
 # The ASCII logo block. Each line starts at column 0 and the rightmost
 # glyph lands at column 45. Width of the logo when measured by visible
@@ -22,12 +31,14 @@ BANNER_LOGO = """\
   ██║ ╚████║███████╗██╔╝ ██╗╚██████╔╝███████║
   ╚═╝  ╚═══╝╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝"""
 
-VERSION_STR = "RECON v3.0"
+VERSION_STR = f"RECON v{_PKG_VERSION}"
 
 ATTRIBUTION = "// d4rk pri0r · darkpriorlabs //"
 
 # Fallback for narrow / non-UTF-8 terminals — single line so it fits.
-BANNER_FALLBACK = f"NEXUSRECON {VERSION_STR}  {ATTRIBUTION}"
+# Strips the "RECON " prefix from VERSION_STR since "NEXUSRECON" already
+# contains it — avoids the awkward "NEXUSRECON RECON v0.5.0" doubling.
+BANNER_FALLBACK = f"NEXUSRECON v{_PKG_VERSION}  {ATTRIBUTION}"
 
 
 def _terminal_supports_full_banner() -> bool:
@@ -54,7 +65,7 @@ def render_banner() -> str:
 
 
 def render_version() -> str:
-    """Return the version string ('RECON v3.0').
+    """Return the formatted version string (e.g. 'RECON v0.5.0').
 
     Rendered as a separate small Static below the logo so it centers
     independently from the ASCII art.

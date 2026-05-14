@@ -1,6 +1,6 @@
 # Dynamic Dispatch Agent Loop
 
-_Reference guide for the NexusRecon v2 self-steering reconnaissance loop._
+_Reference guide for the NexusRecon self-steering reconnaissance loop._
 
 ---
 

@@ -4,7 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nexusrecon"
-version = "1.0.0"
+# Pre-beta. Bump minor (0.x → 0.x+1) for substantial features, patch (0.x.y → 0.x.y+1)
+# for fixes. 1.0.0 is reserved for the first public-beta release.
+version = "0.5.0"
 description = "Agentic OSINT orchestration framework for professional red team engagements"
 license = {text = "Proprietary — authorized use only. See DISCLAIMER.md"}
 readme = "README.md"
