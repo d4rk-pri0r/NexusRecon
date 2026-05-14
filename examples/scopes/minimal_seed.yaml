@@ -1,0 +1,30 @@
+# NexusRecon — Minimal Starter Scope
+#
+# Copy this file to start a new engagement:
+#   cp examples/scopes/minimal_seed.yaml my-scope.yaml
+#
+# Only the fields below are required.  NexusRecon's agentic loop discovers
+# subdomains, cloud assets, employees, and related infrastructure automatically
+# from a single seed domain — you don't need to enumerate them upfront.
+#
+# See examples/scopes/*_completed_example.yaml for fully-populated examples
+# showing every optional field.
+
+engagement:
+  client: "Acme Corp"                        # Customer / target org name
+  engagement_id: "ACM-2026-Q2-RT01"          # Unique engagement reference
+  authorized_by: "Jane Smith, CISO"          # Who signed off
+  authorization_date: "2026-05-01"           # Date authorization was granted
+  signed_sow_hash: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  start_date: "2026-05-01"                   # Campaign window start
+  end_date: "2026-05-30"                     # Campaign window end
+
+scope:
+  in_scope:
+    domains:
+      - "acme.com"                           # Replace with your target domain
+
+constraints:
+  max_tier: "T1"                             # T0=pure passive | T1=DNS/passive DNS | T2=light active | T3=active
+  stealth_profile: "high"                    # paranoid | high | normal | loud
+  max_llm_cost_usd: 10.0                     # Hard spend cap for LLM calls

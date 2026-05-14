@@ -1,0 +1,47 @@
+# NexusRecon Global Defaults
+# Override per-client in ./configs/clients/<client>.yaml
+
+# ── Default tool rate limits ──────────────────────────────────────────────────
+tool_rates:
+  shodan: 1.0
+  censys: 0.5
+  github: 2.0
+  hunter: 1.0
+  hibp: 1.0
+  crtsh: 3.0
+  virustotal: 0.5
+  securitytrails: 0.5
+  urlscan: 1.0
+  default: 2.0
+
+# ── Default TTL per source (seconds) ─────────────────────────────────────────
+cache_ttls:
+  crtsh: 86400
+  shodan: 21600
+  virustotal: 14400
+  greynoise: 3600
+  hibp: 604800
+  securitytrails: 21600
+  dns: 3600
+  whois: 86400
+  github: 7200
+  default: 3600
+
+# ── Agent step budgets ───────────────────────────────────────────────────────
+agent_budgets:
+  campaign_planner: 15
+  passive_recon: 30
+  active_recon: 30
+  cloud_identity: 30
+  pretext_humint: 25
+  correlation: 25
+  risk_analyst: 20
+  vuln_correlator: 20
+  evidence_auditor: 15
+  executive_reporter: 25
+
+# ── Default campaign settings ────────────────────────────────────────────────
+default_mode: medium
+default_stealth_profile: high
+default_max_tier: T1
+default_max_llm_cost_usd: 50.0

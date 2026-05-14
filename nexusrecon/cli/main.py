@@ -1,0 +1,913 @@
+"""NexusRecon CLI — Typer-based command interface."""
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+import os
+import sys
+from pathlib import Path
+from typing import Optional
+
+import structlog
+import typer
+from rich.console import Console
+from rich.panel import Panel
+from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.table import Table
+
+from nexusrecon.core.campaign import CampaignManager, ROE_BANNER
+from nexusrecon.core.config import get_config
+from nexusrecon.core.scope import ScopeGuard, ScopeModel, OutOfScopeError, TierViolationError, preflight_check
+from nexusrecon.models.campaign import CampaignMode
+from nexusrecon.reports.engine import ReportEngine
+
+
+def _check_runtime_env() -> None:
+    """Fail fast if the runtime environment is obviously broken."""
+    if sys.version_info < (3, 11) or sys.version_info >= (3, 14):
+        sys.stderr.write(
+            f"\n[ERROR] NexusRecon requires Python 3.11–3.13. "
+            f"Detected: {sys.version_info.major}.{sys.version_info.minor}.\n"
+            f"Install Python 3.13 and re-run inside its venv.\n\n"
+        )
+        sys.exit(1)
+    # Soft warning when not running inside any venv.
+    # Uses reliable stdlib signals instead of a path-string heuristic:
+    #   - sys.real_prefix  set by legacy virtualenv
+    #   - sys.prefix != sys.base_prefix  set by the stdlib venv module
+    #   - VIRTUAL_ENV env var  set by every venv/virtualenv activate script
+    _in_venv = (
+        hasattr(sys, "real_prefix")
+        or sys.prefix != sys.base_prefix
+        or os.environ.get("VIRTUAL_ENV")
+    )
+    if not _in_venv:
+        sys.stderr.write(
+            "[WARN] nexusrecon may not be running inside a venv. "
+            "If commands fail unexpectedly, run: source venv/bin/activate\n"
+        )
+
+
+_check_runtime_env()
+
+
+def _warn_empty_env_keys() -> None:
+    """Warn about API key env vars set to empty string that silently beat .env values.
+
+    pydantic-settings precedence is ``env > .env > default``.  An empty-string
+    env var wins over a populated ``.env`` entry.  This causes callers that do
+    ``if get_secret(...):`` to fall through to degraded mode (e.g. MockLLM)
+    with no diagnostic.  This function detects the trap and emits a clear warning.
+    """
+    _KEY_VARS = [
+        "ANTHROPIC_API_KEY", "OPENAI_API_KEY",
+        "SHODAN_API_KEY", "CENSYS_API_ID", "CENSYS_API_SECRET",
+        "VIRUSTOTAL_API_KEY", "GREYNOISE_API_KEY", "BINARYEDGE_API_KEY",
+        "FULLHUNT_API_KEY", "ABUSEIPDB_API_KEY", "URLSCAN_API_KEY",
+        "SECURITYTRAILS_API_KEY", "HUNTER_API_KEY", "HAVEIBEENPWNED_API_KEY",
+        "DEHASHED_API_KEY", "INTELX_API_KEY", "EMAILREP_API_KEY",
+        "NEWSAPI_API_KEY", "ADZUNA_API_KEY", "GITHUB_TOKEN", "GITLAB_TOKEN",
+        "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY",
+    ]
+    # Parse .env values once (best-effort — if the file is missing that's fine)
+    _dot_env: dict = {}
+    _env_file = Path(".env")
+    if _env_file.exists():
+        for _line in _env_file.read_text(encoding="utf-8").splitlines():
+            _line = _line.strip()
+            if _line and not _line.startswith("#") and "=" in _line:
+                _k, _, _v = _line.partition("=")
+                _dot_env[_k.strip()] = _v.strip().strip('"').strip("'")
+
+    for _key in _KEY_VARS:
+        if os.environ.get(_key, None) == "":  # set but empty — only catches the trap case
+            _dot_val = _dot_env.get(_key, "")
+            if _dot_val:
+                sys.stderr.write(
+                    f"[WARN] {_key} is set to empty string in the shell environment.\n"
+                    f"       This overrides the non-empty value in .env "
+                    f"(pydantic-settings precedence: env > .env > default).\n"
+                    f"       To use the .env value, run:  unset {_key}\n"
+                )
+
+
+_warn_empty_env_keys()
+
+app = typer.Typer(
+    name="nexusrecon",
+    help="Agentic OSINT Orchestration Framework — Authorized use only.",
+    add_completion=False,
+    rich_markup_mode="rich",
+    invoke_without_command=True,
+)
+console = Console()
+
+
+# V3 Move 1: invoking `nexusrecon` with no subcommand launches the TUI
+# when stdin/stdout are TTYs. Non-TTY environments (CI, pipes) get a
+# clear fallback message and the CLI help text.
+@app.callback(invoke_without_command=True)
+def _default_command(ctx: typer.Context) -> None:
+    if ctx.invoked_subcommand is not None:
+        return
+    if sys.stdin.isatty() and sys.stdout.isatty():
+        # Import lazily so CLI users without textual aren't penalized
+        from nexusrecon.tui.app import run_tui
+        run_tui()
+        raise typer.Exit(0)
+    sys.stderr.write(
+        "[info] No TTY detected — falling back to CLI. "
+        "Use 'nexusrecon run --help' for options.\n"
+    )
+    console.print(ctx.get_help())
+    raise typer.Exit(0)
+
+
+def setup_logging(level: str = "WARNING") -> None:
+    """
+    Configure structlog to write to stderr at the requested level.
+
+    Logs go to stderr so they never mix with Rich table/panel output on stdout.
+    Call this once at CLI startup before any tool imports trigger registration messages.
+    """
+    log_level = getattr(logging, level.upper(), logging.WARNING)
+
+    structlog.configure(
+        wrapper_class=structlog.make_filtering_bound_logger(log_level),
+        logger_factory=structlog.PrintLoggerFactory(file=sys.stderr),
+        processors=[
+            structlog.stdlib.add_log_level,
+            structlog.dev.ConsoleRenderer(colors=False),
+        ],
+    )
+
+
+# Configure logging before any tool modules are imported (which triggers @register_tool
+# and fires INFO-level "Registered tool" messages that would otherwise pollute stdout).
+setup_logging(get_config().log_level)
+
+
+@app.command()
+def run(
+    scope: str = typer.Option(..., "--scope", "-s", help="Path to engagement scope YAML file"),
+    seeds: Optional[str] = typer.Option(None, "--seeds", help="Comma-separated initial targets"),
+    mode: str = typer.Option("medium", "--mode", "-m", help="Campaign mode: light, medium, deep, monitor"),
+    resume: Optional[str] = typer.Option(None, "--resume", "-r", help="Resume a campaign by ID"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Validate scope and plan without running tools"),
+    use_graph: bool = typer.Option(False, "--use-graph", help="Use LangGraph workflow engine"),
+    validate_creds: bool = typer.Option(False, "--validate-creds", help="Validate harvested credentials via read-only API calls (AWS sts, GitHub /user, etc.). Off by default."),
+    generate_phishing: bool = typer.Option(False, "--generate-phishing", help="Generate per-target phishing email drafts. Authorized engagements only."),
+    dispatch_mode: str = typer.Option("lite", "--dispatch-mode", help="Dynamic dispatch mode: lite (default), full, or off."),
+) -> None:
+    """
+    Launch a NexusRecon reconnaissance campaign.
+
+    Requires a valid scope YAML file. Every tool invocation is validated
+    against the scope before execution. Out-of-scope targets are dropped.
+    """
+    # NOTE: ROE banner is displayed by campaign.setup() → _display_roe_banner().
+    # Do NOT add a second console.print(ROE_BANNER) here — it would print twice.
+
+    # Load scope
+    try:
+        scope_model = ScopeModel.from_yaml(scope)
+    except Exception as e:
+        console.print(f"[bold red]Scope validation failed:[/bold red] {e}")
+        raise typer.Exit(1)
+
+    # Preflight check
+    warnings = preflight_check(scope_model)
+    for level, msg in warnings:
+        style = "bold red" if level == "ERROR" else "yellow"
+        console.print(f"[{style}][{level}][/{style}] {msg}")
+
+    if any(l == "ERROR" for l, _ in warnings):
+        console.print("[bold red]Preflight errors — campaign aborted.[/bold red]")
+        raise typer.Exit(1)
+
+    # Parse mode
+    try:
+        campaign_mode = CampaignMode(mode.lower())
+    except ValueError:
+        console.print(f"[bold red]Invalid mode: {mode}. Use: light, medium, deep, monitor[/bold red]")
+        raise typer.Exit(1)
+
+    # Parse seeds
+    seed_list = [s.strip() for s in seeds.split(",") if s.strip()] if seeds else []
+
+    # Guard: seeds must be within the scope envelope (scope is the legal boundary).
+    # Seeds that are not an exact in-scope domain or a subdomain of one are refused.
+    # When --seeds is omitted the scope domains themselves become the seeds (safe by definition).
+    if seed_list:
+        _in_scope_domains = list(scope_model.scope.in_scope.domains or [])
+        _out_of_scope = [
+            s for s in seed_list
+            if not any(
+                s == d or s.endswith("." + d)
+                for d in _in_scope_domains
+            )
+        ]
+        if _out_of_scope:
+            console.print(
+                f"[bold red]Seeds outside scope:[/bold red] {', '.join(_out_of_scope)}\n"
+                f"Seeds must be in scope.in_scope.domains or subdomains thereof.\n"
+                f"In-scope domains: {', '.join(_in_scope_domains)}"
+            )
+            raise typer.Exit(1)
+
+    # Create campaign
+    campaign = CampaignManager(
+        scope=scope_model,
+        mode=campaign_mode,
+        campaign_id=resume,
+    )
+
+    try:
+        campaign.setup()
+    except Exception as e:
+        console.print(f"[bold red]Campaign setup failed:[/bold red] {e}")
+        raise typer.Exit(1)
+
+    # Wire scope guard and campaign services into the tool registry
+    from nexusrecon.tools.registry import get_registry
+    scope_guard = ScopeGuard(scope_model)
+    get_registry().set_campaign_context(scope_guard, campaign.cache, campaign.audit_log)
+
+    if dry_run:
+        console.print("[bold green]Dry run — scope is valid, campaign ready.[/bold green]")
+        console.print(f"Campaign ID: [cyan]{campaign.campaign_id}[/cyan]")
+        console.print(f"Would create output at: [cyan]{campaign.campaign_dir}[/cyan]")
+        console.print(scope_model.summary())
+        return
+
+    # Run the campaign
+    console.print(f"\n[bold green]Launching campaign[/bold green] [cyan]{campaign.campaign_id}[/cyan]")
+    console.print(f"Mode: [yellow]{mode}[/yellow] | Tier: [yellow]{scope_model.constraints.max_tier}[/yellow]\n")
+
+    state = {
+        "campaign_id": campaign.campaign_id,
+        "engagement_id": scope_model.engagement.engagement_id,
+        "scope_hash": scope_model.scope_hash or "",
+        "seeds": seed_list or scope_model.scope.in_scope.domains,
+        "completed_phases": [],
+        "current_phase": "init",
+        "findings": [],
+        "subdomain_intel": {},
+        "email_intel": {"emails": {}},
+        "cloud_intel": {},
+        "code_intel": {},
+        "infra_intel": {},
+        "domain_intel": {},
+        "vuln_intel": {},
+        "pretext_intel": {},
+        "entity_graph": {},
+        "hypotheses": [],
+        "confirmed_leads": [],
+        "validate_credentials": validate_creds,
+        "generate_phishing_drafts": generate_phishing,
+        "dispatch_mode": dispatch_mode if dispatch_mode in ("lite", "full", "off") else "lite",
+        "llm_cost_usd": 0.0,
+        "max_llm_cost_usd": getattr(scope_model.constraints, "max_llm_cost_usd", 10.0),
+        "tool_cost_usd": 0.0,
+        "step_count": 0,
+        "errors": [],
+        "agent_messages": [],
+        "report_paths": {},
+    }
+
+    # Run the campaign via the reusable campaign_runner (V3 Move 1 refactor —
+    # both CLI and TUI share this loop).
+    try:
+        from nexusrecon.core.campaign_runner import run_campaign
+
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+        ) as progress:
+            if use_graph:
+                from nexusrecon.graph.workflow import run_workflow
+                task = progress.add_task("Running LangGraph campaign workflow...", total=None)
+                try:
+                    state = asyncio.run(run_workflow(state))
+                    progress.update(task, description="[green]Complete: LangGraph workflow finished[/green]")
+                except Exception as e:
+                    state["errors"].append(f"workflow: {str(e)}")
+                    progress.update(task, description=f"[red]Error in workflow: {e}[/red]")
+            else:
+                _progress_tasks: dict = {}
+
+                def _cli_on_event(evt: dict) -> None:
+                    etype = evt.get("type", "")
+                    phase_id = evt.get("phase", "")
+                    name = evt.get("name", phase_id)
+                    if etype == "phase_start":
+                        task = progress.add_task(f"Running: {name}...", total=None)
+                        _progress_tasks[phase_id] = task
+                    elif etype == "phase_end":
+                        t = _progress_tasks.get(phase_id)
+                        if t is not None:
+                            progress.update(t, description=f"[green]Complete: {name}[/green]")
+                    elif etype == "phase_skipped":
+                        progress.add_task(
+                            f"[dim]Skipped: {name} ({evt.get('reason', '')})[/dim]"
+                        )
+                    elif etype == "campaign_error":
+                        t = _progress_tasks.get(phase_id)
+                        msg = f"[red]Error in {name}: {evt.get('error', '')}[/red]"
+                        if t is not None:
+                            progress.update(t, description=msg)
+                        else:
+                            progress.add_task(msg)
+
+                state = asyncio.run(
+                    run_campaign(state, campaign, scope_model, on_event=_cli_on_event)
+                )
+
+        # F-019: populate real EntityGraph from execution state
+        try:
+            eg = campaign.entity_graph
+            if eg is not None:
+                seeds = state.get("seeds", [])
+                for domain in seeds:
+                    eg.add_domain(domain, source="scope")
+                eg_state = state.get("entity_graph", {})
+                for sub in eg_state.get("subdomains", []):
+                    eg.add_subdomain(sub, parent=seeds[0] if seeds else "", source="campaign")
+                for email in eg_state.get("emails", []):
+                    eg.add_email(email, source="campaign")
+        except Exception:
+            pass
+
+        # Generate reports
+        report_dir = campaign.report_dir
+        engine = ReportEngine(
+            campaign_id=campaign.campaign_id,
+            engagement_id=scope_model.engagement.engagement_id,
+            scope_hash=scope_model.scope_hash or "",
+            output_dir=report_dir,
+        )
+        report_paths = engine.generate_all(state)
+
+        # Finalize
+        summary = campaign.finalize()
+
+        console.print()
+        console.print(Panel(
+            f"Findings: {summary['findings']}\n"
+            f"Entities: {summary['graph'].get('total_entities', 0)}\n"
+            f"Reports: {len(report_paths)}\n"
+            f"Output: {summary['campaign_dir']}\n"
+            f"Audit Chain: {'VALID' if summary['audit_chain_ok'] else 'BROKEN'}",
+            title="[bold green]Campaign Complete[/bold green]",
+            border_style="green",
+        ))
+
+        console.print("\n[bold]Reports:[/bold]")
+        for name, path in report_paths.items():
+            console.print(f"  {name}: {path}")
+
+    except Exception as e:
+        console.print(f"[bold red]Campaign failed:[/bold red] {e}")
+        raise typer.Exit(1)
+
+
+@app.command()
+def validate(scope: str = typer.Argument(..., help="Path to scope YAML file")) -> None:
+    """Validate a scope file without running a campaign."""
+    try:
+        scope_model = ScopeModel.from_yaml(scope)
+        console.print("[bold green]Scope file is valid![/bold green]\n")
+        console.print(scope_model.summary())
+
+        warnings = preflight_check(scope_model)
+        if warnings:
+            console.print("\n[bold yellow]Warnings:[/bold yellow]")
+            for level, msg in warnings:
+                style = "bold red" if level == "ERROR" else "yellow"
+                console.print(f"  [{style}][{level}][/{style}] {msg}")
+        else:
+            console.print("\n[bold green]No warnings — scope is ready for use.[/bold green]")
+
+    except Exception as e:
+        console.print(f"[bold red]Validation failed:[/bold red] {e}")
+        raise typer.Exit(1)
+
+
+@app.command()
+def resume(campaign_id: str = typer.Argument(..., help="Campaign ID to resume")) -> None:
+    """Resume a campaign from its last checkpoint."""
+    console.print(f"[bold green]Resuming campaign[/bold green] [cyan]{campaign_id}[/cyan]")
+
+    # Find campaign directory by scanning output dirs
+    config = get_config()
+    output_dir = Path(config.output_dir)
+
+    state_path = None
+    scope_meta_path = None
+    for campaign_dir in output_dir.rglob(campaign_id):
+        if campaign_dir.is_dir():
+            candidate = campaign_dir / "state.json"
+            if candidate.exists():
+                state_path = candidate
+                scope_meta_path = campaign_dir / "scope_metadata.json"
+                break
+
+    if not state_path:
+        console.print(f"[bold red]Campaign {campaign_id} not found in {output_dir}[/bold red]")
+        raise typer.Exit(1)
+
+    # Load state
+    state_data = json.loads(state_path.read_text(encoding="utf-8"))
+    completed = set(state_data.get("completed_phases", []))
+    current = state_data.get("current_phase", "phase1")
+
+    console.print(f"Completed phases: {', '.join(completed)}")
+    console.print(f"Current phase: {current}")
+    console.print(f"Findings so far: {len(state_data.get('findings', []))}")
+
+    # Load scope metadata to reconstruct scope model
+    if scope_meta_path and scope_meta_path.exists():
+        scope_meta = json.loads(scope_meta_path.read_text())
+        console.print(f"Client: {scope_meta.get('engagement', {}).get('client', 'unknown')}")
+        console.print(f"Max Tier: {scope_meta.get('constraints', {}).get('max_tier', 'T0')}")
+
+    # Skip completed phases, continue from current
+    console.print("\n[bold green]Continuing campaign execution...[/bold green]")
+
+    # Use the same state dict structure as run()
+    state = {
+        "campaign_id": state_data.get("campaign_id", campaign_id),
+        "engagement_id": state_data.get("engagement_id", ""),
+        "scope_hash": state_data.get("scope_hash", ""),
+        "seeds": state_data.get("seeds", []),
+        "completed_phases": list(completed),
+        "current_phase": current,
+        "findings": state_data.get("findings", []),
+        "subdomain_intel": state_data.get("subdomain_intel", {}),
+        "email_intel": state_data.get("email_intel", {"emails": {}}),
+        "cloud_intel": state_data.get("cloud_intel", {}),
+        "code_intel": state_data.get("code_intel", {}),
+        "infra_intel": state_data.get("infra_intel", {}),
+        "domain_intel": state_data.get("domain_intel", {}),
+        "vuln_intel": state_data.get("vuln_intel", {}),
+        "pretext_intel": state_data.get("pretext_intel", {}),
+        "entity_graph": state_data.get("entity_graph", {}),
+        "hypotheses": state_data.get("hypotheses", []),
+        "confirmed_leads": state_data.get("confirmed_leads", []),
+        "llm_cost_usd": state_data.get("llm_cost_usd", 0.0),
+        "tool_cost_usd": state_data.get("tool_cost_usd", 0.0),
+        "step_count": state_data.get("step_count", 0),
+        "errors": state_data.get("errors", []),
+        "agent_messages": state_data.get("agent_messages", []),
+        "report_paths": {},
+    }
+
+    # Import and run remaining phases
+    try:
+        from nexusrecon.graph.nodes import (
+            phase1_passive_footprinting,
+            phase2_identity_cloud,
+            phase3_code_leakage,
+            phase4_correlation,
+            phase5_light_active,
+            phase6_active,
+            phase7_vuln_pretext,
+            phase8_attack_surface,
+            phase9_reporting,
+        )
+
+        phases = [
+            ("phase1", "Passive Footprinting", phase1_passive_footprinting),
+            ("phase2", "Identity & Cloud", phase2_identity_cloud),
+            ("phase3", "Code Leakage", phase3_code_leakage),
+            ("phase4", "Correlation", phase4_correlation),
+            ("phase5", "Light Active", phase5_light_active),
+            ("phase6", "Active (T3)", phase6_active),
+            ("phase7", "Vuln & Pretext", phase7_vuln_pretext),
+            ("phase8", "Attack Surface", phase8_attack_surface),
+            ("phase9", "Reporting", phase9_reporting),
+        ]
+
+        # Parse max tier from scope metadata
+        max_tier = 3
+        if scope_meta_path and scope_meta_path.exists():
+            tier_str = scope_meta.get("constraints", {}).get("max_tier", "T0")
+            if tier_str.startswith("T"):
+                try:
+                    max_tier = int(tier_str[1])
+                except (ValueError, IndexError):
+                    max_tier = 0
+        phase_map = {
+            "phase1": 0, "phase2": 0, "phase3": 0, "phase4": 0,
+            "phase5": 2, "phase6": 3, "phase7": 0, "phase8": 0, "phase9": 0,
+        }
+
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+        ) as progress:
+            async def _resume_campaign_phases() -> dict:
+                s = state
+                for phase_id, phase_name, phase_fn in phases:
+                    if phase_id in completed:
+                        progress.add_task(f"[dim]Skipped (done): {phase_name}[/dim]")
+                        continue
+                    if phase_map.get(phase_id, 0) > max_tier:
+                        progress.add_task(f"[dim]Skipped: {phase_name} (above max tier)[/dim]")
+                        continue
+                    task = progress.add_task(f"Running: {phase_name}...", total=None)
+                    try:
+                        s = await phase_fn(s)
+                        progress.update(task, description=f"[green]Complete: {phase_name}[/green]")
+                    except Exception as e:
+                        s["errors"].append(f"{phase_id}: {str(e)}")
+                        progress.update(task, description=f"[red]Error in {phase_name}: {e}[/red]")
+                return s
+
+            state = asyncio.run(_resume_campaign_phases())
+
+        # Save updated state
+        campaign_dir = state_path.parent
+        campaign_dir.joinpath("state.json").write_text(
+            json.dumps(state, indent=2, default=str), encoding="utf-8"
+        )
+
+        # Generate reports
+        report_dir = campaign_dir / "reports"
+        engine = ReportEngine(
+            campaign_id=state["campaign_id"],
+            engagement_id=state.get("engagement_id", ""),
+            scope_hash=state.get("scope_hash", ""),
+            output_dir=report_dir,
+        )
+        report_paths = engine.generate_all(state)
+
+        console.print("\n" + Panel(
+            f"Findings: {len(state.get('findings', []))}\n"
+            f"Reports: {len(report_paths)}\n"
+            f"Output: {campaign_dir}",
+            title="[bold green]Campaign Resumed Complete[/bold green]",
+            border_style="green",
+        ))
+
+        console.print("\n[bold]Reports:[/bold]")
+        for name, path in report_paths.items():
+            console.print(f"  {name}: {path}")
+
+    except Exception as e:
+        console.print(f"[bold red]Resume failed:[/bold red] {e}")
+        raise typer.Exit(1)
+
+
+@app.command()
+def diff(old: str = typer.Argument(...), new: str = typer.Argument(...)) -> None:
+    """Diff two campaign states to see what changed."""
+    from nexusrecon.core.campaign import CampaignManager
+    result = CampaignManager.diff_campaigns(old, new)
+    console.print(json.dumps(result, indent=2, default=str))
+
+
+@app.command()
+def tools(
+    available_only: bool = typer.Option(False, "--available", "-a", help="Show only available tools"),
+    category: Optional[str] = typer.Option(None, "--category", "-c", help="Filter by category"),
+) -> None:
+    """List all registered tools, their availability, and what they require."""
+    from nexusrecon.tools.registry import get_registry
+    registry = get_registry()
+
+    all_tools = sorted(registry.list_tools(), key=lambda x: (x["category"], x["name"]))
+
+    if available_only:
+        all_tools = [t for t in all_tools if t["available"] == "True"]
+    if category:
+        all_tools = [t for t in all_tools if t["category"] == category.lower()]
+
+    available_count = sum(1 for t in all_tools if t["available"] == "True")
+    total_count = len(all_tools)
+
+    table = Table(
+        title=f"NexusRecon Tools  ({available_count}/{total_count} available)",
+        show_lines=False,
+        header_style="bold cyan",
+    )
+    table.add_column("Tool", style="bold", min_width=18)
+    table.add_column("Category", min_width=14)
+    table.add_column("Tier", justify="center", min_width=5)
+    table.add_column("Status", justify="center", min_width=9)
+    table.add_column("Requires", min_width=22, no_wrap=False)
+    table.add_column("Description", no_wrap=False)
+
+    TIER_STYLE = {"T0": "green", "T1": "yellow", "T2": "dark_orange", "T3": "red"}
+
+    for t in all_tools:
+        avail = t["available"] == "True"
+        tier = t["tier"]
+        requires = t.get("requires", "") or "[dim]—[/dim]"
+        description = t.get("description") or ""
+
+        table.add_row(
+            t["name"],
+            t["category"],
+            f"[{TIER_STYLE.get(tier, 'white')}]{tier}[/]",
+            "[green]✓ ready[/green]" if avail else "[red]✗ missing[/red]",
+            f"[dim]{requires}[/dim]" if not avail and requires != "[dim]—[/dim]" else requires,
+            description,
+        )
+
+    console.print()
+    console.print(table)
+    console.print()
+
+    if not available_only:
+        missing = [t for t in all_tools if t["available"] != "True"]
+        if missing:
+            need_keys = [t for t in missing if t.get("requires") and "bin:" not in t.get("requires", "")]
+            need_bins = [t for t in missing if "bin:" in t.get("requires", "")]
+            need_both = [t for t in missing if t.get("requires") and "bin:" in t.get("requires", "") and any(
+                k for k in t.get("requires", "").split(", ") if not k.startswith("bin:")
+            )]
+
+            if need_bins:
+                bin_names = sorted({
+                    r.replace("bin:", "")
+                    for t in need_bins
+                    for r in t.get("requires", "").split(", ")
+                    if r.startswith("bin:")
+                })
+                console.print(f"[yellow]Missing binaries:[/yellow] {', '.join(bin_names)}")
+                console.print("  Install Go tools: [dim]go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest[/dim]")
+            if need_keys:
+                key_names = sorted({
+                    r
+                    for t in need_keys
+                    for r in t.get("requires", "").split(", ")
+                    if not r.startswith("bin:")
+                })
+                console.print(f"[yellow]Missing API keys:[/yellow] {', '.join(key_names)}")
+                console.print("  Add keys to [dim].env[/dim] — see [dim].env.example[/dim] for all variables.")
+
+
+@app.command()
+def config() -> None:
+    """Show current configuration and API key availability."""
+    cfg = get_config()
+    table = Table(title="Configuration")
+    table.add_column("Setting")
+    table.add_column("Value")
+
+    table.add_row("LLM Provider", cfg.llm_provider)
+    table.add_row("LLM Model", cfg.llm_model)
+    table.add_row("Output Dir", cfg.output_dir)
+    table.add_row("DB Path", cfg.db_path)
+    table.add_row("Log Level", cfg.log_level)
+    table.add_row("Proxy", cfg.proxy_url or "(none)")
+
+    for key, available in cfg.available_keys().items():
+        table.add_row(f"Key: {key}", "[green]Set[/green]" if available else "[red]Not set[/red]")
+
+    console.print(table)
+
+
+@app.command()
+def campaign_list(
+    client: Optional[str] = typer.Option(None, "--client", "-c", help="Filter by client name"),
+) -> None:
+    """List all campaigns and their status."""
+    config = get_config()
+    output_dir = Path(config.output_dir)
+
+    if not output_dir.exists():
+        console.print("[yellow]No campaigns found — output directory does not exist.[/yellow]")
+        return
+
+    table = Table(title="Campaigns")
+    table.add_column("Campaign ID")
+    table.add_column("Client")
+    table.add_column("Engagement")
+    table.add_column("Phases")
+    table.add_column("Findings")
+    table.add_column("Status")
+
+    count = 0
+    for state_file in output_dir.rglob("state.json"):
+        try:
+            data = json.loads(state_file.read_text(encoding="utf-8"))
+            campaign_id = data.get("campaign_id", state_file.parent.name)
+            engagement_id = data.get("engagement_id", "?")
+            completed = len(data.get("completed_phases", []))
+            findings = len(data.get("findings", []))
+            errors = len(data.get("errors", []))
+
+            # Try to find client name from scope_metadata.json
+            scope_meta_path = state_file.parent / "scope_metadata.json"
+            client_name = "?"
+            if scope_meta_path.exists():
+                scope_meta = json.loads(scope_meta_path.read_text())
+                client_name = scope_meta.get("engagement", {}).get("client", "?")
+
+            if client and client.lower() not in client_name.lower():
+                continue
+
+            status = "[red]ERROR[/red]" if errors else "[green]DONE[/green]"
+            table.add_row(campaign_id, client_name, engagement_id, str(completed), str(findings), status)
+            count += 1
+        except Exception:
+            continue
+
+    if count == 0:
+        console.print("[yellow]No campaigns found.[/yellow]")
+    else:
+        console.print(table)
+        console.print(f"\n[bold]{count}[/bold] campaign(s) found in [cyan]{output_dir}[/cyan]")
+
+
+@app.command()
+def tools_check() -> None:
+    """Check tool binary dependencies and API key availability."""
+    from nexusrecon.tools.registry import get_registry
+    registry = get_registry()
+
+    missing_bins = []
+    available_keys = 0
+    total_keys = 0
+
+    for t in registry.list_tools():
+        # Check binary requirements
+        for req_bin in t.get("requires_binary", []):
+            import shutil
+            if shutil.which(req_bin):
+                pass
+            else:
+                missing_bins.append((t["name"], req_bin))
+
+        # Check API keys
+        for req_key in t.get("requires_keys", []):
+            total_keys += 1
+            if req_key:
+                available_keys += 1
+
+    table = Table(title="Tool Dependencies")
+    table.add_column("Tool")
+    table.add_column("Missing Binary")
+    for tool_name, binary in sorted(missing_bins):
+        table.add_row(tool_name, f"[red]{binary} not found[/red]")
+
+    if not missing_bins:
+        console.print("[bold green]All required binaries found.[/bold green]")
+    else:
+        console.print(table)
+        console.print(f"\n[yellow]{len(missing_bins)}[/yellow] missing binary dependencies.")
+
+    console.print(f"API keys: {available_keys}/{total_keys} configured")
+
+
+@app.command()
+def export(
+    campaign_id: str = typer.Argument(..., help="Campaign ID to export"),
+    fmt: str = typer.Option("csv", "--format", "-f", help="Export format: csv, json, markdown"),
+    output: Optional[str] = typer.Option(None, "--output", "-o", help="Output file path"),
+) -> None:
+    """Export campaign findings to CSV, JSON, or Markdown."""
+    config = get_config()
+    output_dir = Path(config.output_dir)
+
+    state_path = None
+    for candidate in output_dir.rglob(campaign_id):
+        if candidate.is_dir():
+            sp = candidate / "state.json"
+            if sp.exists():
+                state_path = sp
+                break
+
+    if not state_path:
+        console.print(f"[bold red]Campaign {campaign_id} not found.[/bold red]")
+        raise typer.Exit(1)
+
+    data = json.loads(state_path.read_text(encoding="utf-8"))
+    findings = data.get("findings", [])
+
+    if not output:
+        output = str(state_path.parent / f"findings_export.{fmt}")
+
+    out_path = Path(output)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if fmt == "csv":
+        import csv
+        with open(out_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(["Title", "Severity", "Confidence", "Category", "Source", "Description", "Assets", "MITRE"])
+            for f_item in findings:
+                writer.writerow([
+                    f_item.get("title", ""),
+                    f_item.get("severity", ""),
+                    f"{f_item.get('confidence', 0):.0%}",
+                    f_item.get("category", ""),
+                    f_item.get("source", ""),
+                    f_item.get("description", ""),
+                    ", ".join(f_item.get("affected_assets", [])),
+                    ", ".join(f_item.get("mitre_techniques", [])),
+                ])
+    elif fmt == "json":
+        out_path.write_text(json.dumps(findings, indent=2, default=str), encoding="utf-8")
+    elif fmt == "markdown":
+        lines = ["# Findings Export", "", f"**Campaign:** {campaign_id}", ""]
+        for i, f_item in enumerate(findings, 1):
+            lines.extend([
+                f"### {i}. [{f_item.get('severity', 'info').upper()}] {f_item.get('title', '')}",
+                f"**Confidence:** {f_item.get('confidence', 0):.0%}",
+                f"**Category:** {f_item.get('category', '')}",
+                f"**Source:** {f_item.get('source', '')}",
+                f"**Description:** {f_item.get('description', '')}",
+                f"**Assets:** {', '.join(f_item.get('affected_assets', []))}",
+                "",
+            ])
+        out_path.write_text("\n".join(lines), encoding="utf-8")
+    else:
+        console.print(f"[bold red]Unknown format: {fmt}. Use csv, json, or markdown.[/bold red]")
+        raise typer.Exit(1)
+
+    console.print(f"[bold green]Exported {len(findings)} findings to {out_path}[/bold green]")
+
+
+@app.command()
+def smoke(
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show individual test output"),
+    tb: str = typer.Option("short", "--tb", help="Traceback style: short, long, no, line"),
+    keyword: Optional[str] = typer.Option(None, "-k", help="Only run tests matching this keyword"),
+) -> None:
+    """Run the NexusRecon smoke test suite.
+
+    Exercises real module code against synthetic data. Network-dependent tests
+    are soft-skipped when no keys / network are available. Hard failures indicate
+    real integration bugs that must be fixed before a campaign is run.
+    """
+    import pytest
+
+    console.print(
+        Panel(
+            "NexusRecon Smoke Test Suite\n"
+            "Tests run against synthetic data — network failures are skipped,\n"
+            "logic failures are hard errors.",
+            title="[bold cyan]Smoke Tests[/bold cyan]",
+            border_style="cyan",
+        )
+    )
+
+    smoke_dir = str(Path(__file__).parent.parent.parent / "tests" / "smoke")
+
+    args: list[str] = [smoke_dir, f"--tb={tb}"]
+    if verbose:
+        args.append("-v")
+    if keyword:
+        args.extend(["-k", keyword])
+
+    exit_code = pytest.main(args)
+
+    console.print()
+    if exit_code == 0:
+        console.print(
+            Panel(
+                "[bold green]ALL SMOKE TESTS PASSED[/bold green]\n"
+                "The module integration is healthy.",
+                border_style="green",
+            )
+        )
+    elif exit_code == 5:
+        console.print(
+            Panel(
+                "[bold yellow]NO TESTS COLLECTED[/bold yellow]\n"
+                f"Check that {smoke_dir} contains test_*.py files.",
+                border_style="yellow",
+            )
+        )
+        raise typer.Exit(1)
+    else:
+        console.print(
+            Panel(
+                f"[bold red]SMOKE TESTS FAILED (exit {exit_code})[/bold red]\n"
+                "Fix the failures above before running a live campaign.",
+                border_style="red",
+            )
+        )
+        raise typer.Exit(exit_code)
+
+
+@app.command()
+def tui() -> None:
+    """Launch the interactive Textual UI (default when no subcommand given)."""
+    from nexusrecon.tui.app import run_tui
+    run_tui()
+
+
+def main() -> None:
+    """Entry point for the nexusrecon CLI."""
+    app()
+
+
+if __name__ == "__main__":
+    main()

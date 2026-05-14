@@ -1,0 +1,90 @@
+# ============================================================
+# NexusRecon — .gitignore
+# Protects customer data, secrets, and runtime artifacts from
+# being committed and distributed.
+# ============================================================
+
+# ── Secrets ─────────────────────────────────────────────────
+.env
+.env.local
+.env.*
+!.env.example
+
+# ── Runtime: campaigns and reports (CONTAIN CUSTOMER DATA) ──
+campaigns/
+reports/
+artifacts/
+*.audit.jsonl
+
+# ── Python build artifacts ──────────────────────────────────
+venv/
+.venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+*.egg
+MANIFEST
+
+# ── Test / lint cache ───────────────────────────────────────
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# ── IDE / tooling ───────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ── Claude Code session config (per-machine) ────────────────
+.claude/
+
+# ── Logs and temp artifacts ─────────────────────────────────
+*.log
+nexusrecon.db
+nexusrecon.db-journal
+nexusrecon.db-wal
+*.tmp
+"file::memory:?cache=shared"
+
+# ── Local scope YAMLs (real engagements — DO NOT COMMIT) ────
+# Operators should keep their working scope files OUTSIDE this
+# repo or use the my_scope.yaml convention which is gitignored:
+my_scope.yaml
+my_*.yaml
+test_scope.yaml
+local_*.yaml
+*_engagement.yaml
+# The examples/scopes/ directory only ships sanitized templates.
+
+# ── Bug-report bundles ──────────────────────────────────────
+nexusrecon-bug-report*.tgz
+*-bug-report*.zip
+
+# ── OS-level junk ───────────────────────────────────────────
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db

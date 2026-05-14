@@ -1,0 +1,37 @@
+# FULLY-POPULATED EXAMPLE — shows what a mature engagement scope looks like.
+# This is NOT a starter template. For a new campaign, copy minimal_seed.yaml instead:
+#   cp examples/scopes/minimal_seed.yaml my-scope.yaml
+#
+# Sample Scope — M365-heavy Enterprise
+# For a large enterprise with Microsoft 365/Entra ID primary identity
+
+engagement:
+  client: "Contoso Ltd"
+  engagement_id: "CON-2026-Q2-RT01"
+  authorized_by: "Jane Wilson, CISO"
+  authorization_date: "2026-04-15"
+  signed_sow_hash: "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+  start_date: "2026-05-01"
+  end_date: "2026-05-30"
+  rules_of_engagement_doc: "./roe-contoso.pdf"
+
+scope:
+  in_scope:
+    domains: ["contoso.com", "contoso-corp.io", "contoso.net"]
+    ip_ranges: ["198.51.100.0/24"]
+    asns: ["AS64500"]
+    cloud_tenants:
+      m365: ["contoso.onmicrosoft.com"]
+      aws_accounts: ["123456789012"]
+    github_orgs: ["contoso-ltd"]
+  out_of_scope:
+    domains: ["*.partner.contoso.com", "contoso-acquired.com"]
+    ip_ranges: ["198.51.100.200/29"]
+    third_parties: ["Office 365 shared infrastructure", "Azure shared infrastructure"]
+
+constraints:
+  max_tier: "T1"
+  stealth_profile: "high"
+  allow_breach_db_lookup: true
+  allow_paid_apis: true
+  max_llm_cost_usd: 50.0

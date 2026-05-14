@@ -1,0 +1,352 @@
+/* NexusRecon TUI — dark terminal-hacker theme */
+
+Screen {
+    background: #0a0e1a;
+    color: #c9d1d9;
+}
+
+Header {
+    background: #0a0e1a;
+    color: #00ff9c;
+    text-style: bold;
+}
+
+Footer {
+    background: #0a0e1a;
+    color: #7f8c8d;
+}
+
+/* Welcome screen
+   The #welcome-content wrapper fills the screen area between Header and
+   Footer (height: 1fr) and centers its child stack both horizontally and
+   vertically (align: center middle). On a large monitor the banner +
+   menu now sit in the middle of the viewport instead of pinning to the
+   top-left corner. */
+
+#welcome-content {
+    width: 100%;
+    height: 1fr;
+    align: center middle;
+}
+
+#welcome-stack {
+    width: auto;
+    height: auto;
+    max-width: 80;
+}
+
+#welcome-banner {
+    color: #00ff9c;
+    text-style: bold;
+    text-align: center;
+    margin-bottom: 0;
+    padding: 1 2 0 2;
+    width: auto;
+    height: auto;
+}
+
+/* Dim author attribution line — subtle by design, sits just below the
+   banner without competing for visual weight. */
+#welcome-attribution {
+    color: #4a5568;
+    text-style: italic;
+    text-align: center;
+    margin-bottom: 1;
+    width: auto;
+}
+
+#welcome-subtitle {
+    color: #c9d1d9;
+    text-align: center;
+    margin-bottom: 1;
+    width: auto;
+}
+
+#welcome-stats {
+    color: #7f8c8d;
+    text-align: center;
+    margin-bottom: 1;
+    width: auto;
+}
+
+#welcome-hint {
+    color: #4a5568;
+    text-align: center;
+    margin-bottom: 2;
+    width: auto;
+}
+
+#welcome-menu {
+    border: round #1f6feb;
+    padding: 1 2;
+    width: 60;
+    margin: 0 1;
+    align-horizontal: center;
+}
+
+#welcome-menu Button {
+    width: 100%;
+    margin-bottom: 1;
+    background: #11151f;
+    color: #c9d1d9;
+    border: tall #11151f;
+}
+
+#welcome-menu Button:hover {
+    background: #1f6feb;
+    color: #ffffff;
+}
+
+#welcome-menu Button.-primary {
+    background: #00ff9c 20%;
+    color: #00ff9c;
+    border: tall #00ff9c;
+}
+
+/* Wizard
+   Same centering pattern as the welcome screen. The form has a max-width
+   so input fields don't stretch across the full viewport on a 4K
+   monitor — at that size lines become hard to read end-to-end. */
+
+#wizard-content {
+    width: 100%;
+    height: 1fr;
+    align: center middle;
+}
+
+#wizard-stack {
+    width: 100%;
+    height: 100%;
+    max-width: 100;
+    padding: 1 2;
+}
+
+#wizard-title {
+    text-align: center;
+    margin-bottom: 1;
+}
+
+#wizard-body {
+    height: 1fr;
+    max-width: 100;
+}
+
+.wizard-step {
+    padding: 1 2;
+    border: round #1f6feb;
+    margin: 1 2;
+    height: auto;
+}
+
+.wizard-label {
+    color: #00ff9c;
+    text-style: bold;
+    margin-top: 1;
+}
+
+.wizard-help {
+    color: #7f8c8d;
+    margin-bottom: 1;
+}
+
+.wizard-error {
+    color: #ff5555;
+    text-style: bold;
+    margin-top: 1;
+}
+
+.wizard-nav {
+    margin-top: 1;
+    align: center middle;
+    height: 3;
+}
+
+/* Runner screen */
+
+#runner-stats {
+    border: round #1f6feb;
+    padding: 1 2;
+    margin: 1 1;
+    height: auto;
+}
+
+#runner-progress-label {
+    color: #00ff9c;
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+#runner-activity {
+    border: round #7f8c8d;
+    padding: 0 1;
+    height: 12;
+    margin: 1 1;
+}
+
+.severity-critical { color: #ff3838; text-style: bold; }
+.severity-high     { color: #ff8c00; text-style: bold; }
+.severity-medium   { color: #f1c40f; }
+.severity-low      { color: #5dade2; }
+.severity-info     { color: #7f8c8d; }
+
+/* Configuration screen — two-pane categorized .env editor */
+
+#config-content {
+    width: 100%;
+    height: 1fr;
+    padding: 0 2;
+}
+
+#config-stack {
+    width: 100%;
+    height: 100%;
+}
+
+#config-title {
+    text-align: center;
+    margin: 1 0 0 0;
+    height: auto;
+}
+
+#config-hint {
+    text-align: center;
+    color: #7f8c8d;
+    margin-bottom: 1;
+    height: auto;
+}
+
+#config-panes {
+    width: 100%;
+    height: 1fr;
+}
+
+#cat-pane {
+    width: 32;
+    border: round #1f6feb;
+    padding: 1;
+    margin: 0 1 0 0;
+}
+
+#cat-pane-header {
+    color: #00ff9c;
+    text-style: bold;
+    margin-bottom: 1;
+    height: auto;
+}
+
+#cat-list {
+    height: 1fr;
+}
+
+#cat-list > ListItem {
+    padding: 0 1;
+}
+
+#cat-list > ListItem.--highlight {
+    background: #1f6feb;
+    color: #ffffff;
+}
+
+#keys-pane {
+    width: 1fr;
+    border: round #1f6feb;
+    padding: 1;
+}
+
+#keys-pane-header {
+    text-style: bold;
+    height: auto;
+}
+
+#keys-pane-desc {
+    color: #7f8c8d;
+    margin-bottom: 1;
+    height: auto;
+}
+
+#keys-table {
+    height: 1fr;
+}
+
+/* Edit-key modal */
+
+EditKeyModal {
+    align: center middle;
+    background: #0a0e1a 70%;
+}
+
+#edit-modal {
+    width: 80;
+    max-width: 80%;
+    height: auto;
+    max-height: 80%;
+    background: #0a0e1a;
+    border: thick #00ff9c;
+    padding: 1 2;
+}
+
+#edit-stack {
+    width: 100%;
+    height: auto;
+}
+
+#edit-title {
+    text-align: center;
+    margin-bottom: 1;
+    height: auto;
+}
+
+#edit-help {
+    color: #c9d1d9;
+    margin-bottom: 1;
+    height: auto;
+}
+
+#edit-current {
+    color: #7f8c8d;
+    margin-bottom: 1;
+    height: auto;
+}
+
+#edit-input, #edit-select {
+    margin-bottom: 1;
+}
+
+#edit-hint {
+    color: #4a5568;
+    text-align: center;
+    margin-top: 1;
+    margin-bottom: 1;
+    height: auto;
+}
+
+#edit-buttons {
+    height: auto;
+    align: center middle;
+}
+
+#edit-buttons Button {
+    margin: 0 1;
+}
+
+/* Results screen */
+
+#results-summary {
+    border: round #00ff9c;
+    padding: 1 2;
+    margin: 1 1;
+}
+
+#results-threads {
+    border: round #1f6feb;
+    padding: 0 1;
+    margin: 1 1;
+    height: auto;
+}
+
+#results-reports {
+    border: round #7f8c8d;
+    padding: 0 1;
+    margin: 1 1;
+    height: auto;
+}

@@ -1,0 +1,32 @@
+# FULLY-POPULATED EXAMPLE — shows what a mature engagement scope looks like.
+# This is NOT a starter template. For a new campaign, copy minimal_seed.yaml instead:
+#   cp examples/scopes/minimal_seed.yaml my-scope.yaml
+#
+# Sample Scope — AWS-native Startup
+
+engagement:
+  client: "CloudFirst Inc"
+  engagement_id: "CFI-2026-Q3-RT01"
+  authorized_by: "Alex Chen, VP Engineering"
+  authorization_date: "2026-05-01"
+  signed_sow_hash: "sha256:f1e2d3c4b5a6f1e2d3c4b5a6f1e2d3c4b5a6f1e2d3c4b5a6f1e2d3c4b5a6f1e2"
+  start_date: "2026-06-01"
+  end_date: "2026-06-15"
+
+scope:
+  in_scope:
+    domains: ["cloudfirst.io", "cf-staging.com"]
+    ip_ranges: ["203.0.113.0/24"]
+    cloud_tenants:
+      aws_accounts: ["987654321098"]
+      gcp_projects: ["cloudfirst-prod-12345"]
+  out_of_scope:
+    domains: ["*.aws.amazon.com", "*.cloudfront.net"]
+    third_parties: ["AWS shared infrastructure", "Cloudflare"]
+
+constraints:
+  max_tier: "T2"
+  stealth_profile: "high"
+  allow_breach_db_lookup: true
+  allow_paid_apis: true
+  max_llm_cost_usd: 30.0

@@ -1,0 +1,43 @@
+version: "3.9"
+
+services:
+  nexusrecon:
+    build: .
+    image: nexusrecon:latest
+    container_name: nexusrecon
+    env_file: .env
+    volumes:
+      - ./campaigns:/data/campaigns
+      - ./nexusrecon.db:/data/nexusrecon.db
+      - ./.env:/app/.env:ro
+      - ./configs:/app/configs:ro
+    stdin_open: true
+    tty: true
+    network_mode: host     # or use a proxy network
+
+  # ── Optional: Tor proxy for paranoid/high OPSEC ──────────────
+  tor:
+    image: dperson/torproxy:latest
+    container_name: nexusrecon-tor
+    ports:
+      - "9050:9050"
+      - "8118:8118"
+    restart: unless-stopped
+
+  # ── Optional: Streamlit UI ────────────────────────────────────
+  ui:
+    build: .
+    image: nexusrecon:latest
+    container_name: nexusrecon-ui
+    command: ["streamlit", "run", "nexusrecon/ui/app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+    env_file: .env
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./campaigns:/data/campaigns
+      - ./nexusrecon.db:/data/nexusrecon.db
+      - ./.env:/app/.env:ro
+
+networks:
+  default:
+    name: nexusrecon_net

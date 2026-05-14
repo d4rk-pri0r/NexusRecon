@@ -1,0 +1,85 @@
+# Per-tool configuration — rate limits, TTLs, key requirements
+
+tools:
+  crtsh:
+    rate_per_second: 3.0
+    ttl_seconds: 86400
+    requires_keys: false
+    tier: T0
+
+  shodan:
+    rate_per_second: 1.0
+    ttl_seconds: 21600
+    requires_keys: true
+    key_env: SHODAN_API_KEY
+    tier: T0
+
+  censys:
+    rate_per_second: 0.5
+    ttl_seconds: 21600
+    requires_keys: true
+    key_env: CENSYS_API_ID,CENSYS_API_SECRET
+    tier: T0
+
+  github_recon:
+    rate_per_second: 2.0
+    ttl_seconds: 7200
+    requires_keys: true
+    key_env: GITHUB_TOKEN
+    tier: T0
+
+  hunter:
+    rate_per_second: 1.0
+    ttl_seconds: 86400
+    requires_keys: true
+    key_env: HUNTER_API_KEY
+    tier: T0
+
+  breach_lookup:
+    rate_per_second: 1.0
+    ttl_seconds: 604800
+    requires_keys: true
+    key_env: HAVEIBEENPWNED_API_KEY
+    tier: T0
+
+  azure_m365_recon:
+    rate_per_second: 5.0
+    ttl_seconds: 3600
+    requires_keys: false
+    tier: T0
+
+  aws_recon:
+    rate_per_second: 5.0
+    ttl_seconds: 3600
+    requires_keys: false
+    tier: T0
+
+  dns:
+    rate_per_second: 10.0
+    ttl_seconds: 3600
+    requires_keys: false
+    tier: T1
+
+  whois:
+    rate_per_second: 1.0
+    ttl_seconds: 86400
+    requires_keys: false
+    tier: T0
+
+  gitleaks:
+    rate_per_second: 1.0
+    requires_keys: false
+    binary: gitleaks
+    tier: T0
+
+  trufflehog:
+    rate_per_second: 1.0
+    requires_keys: false
+    binary: trufflehog
+    tier: T0
+
+  httpx:
+    rate_per_second: 5.0
+    requires_keys: false
+    binary: httpx
+    tier: T2

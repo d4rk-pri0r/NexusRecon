@@ -1,0 +1,145 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nexusrecon"
+version = "1.0.0"
+description = "Agentic OSINT orchestration framework for professional red team engagements"
+license = {text = "Proprietary — authorized use only. See DISCLAIMER.md"}
+readme = "README.md"
+# Upper bound tracks crewai's requires-python constraint.
+requires-python = ">=3.11,<3.14"
+keywords = ["osint", "recon", "red-team", "security", "intelligence", "pentest"]
+
+dependencies = [
+    # Orchestration
+    "crewai>=0.80.0",
+    "langgraph>=0.2.0",
+    "langchain-anthropic>=0.3.0",
+    "langchain-community>=0.3.0",
+    "langchain-ollama>=0.2.0",
+    "langchain-openai>=0.3.0",
+    # Data models
+    "pydantic>=2.7.0",
+    "pydantic-settings>=2.3.0",
+    # CLI + TUI
+    "typer[all]>=0.12.0",
+    "rich>=13.7.0",
+    "textual>=0.50.0",
+    # HTTP clients
+    "httpx[socks,http2]>=0.27.0",
+    "requests>=2.32.0",
+    "aiohttp>=3.9.0",
+    # DNS
+    "dnspython>=2.6.0",
+    # WHOIS
+    "python-whois>=0.9.0",
+    # Graph
+    "networkx>=3.3",
+    "pyvis>=0.3.2",
+    # Data processing
+    "pyyaml>=6.0.1",
+    "jinja2>=3.1.4",
+    "beautifulsoup4>=4.12.0",
+    "lxml>=5.2.0",
+    "tabulate>=0.9.0",
+    # OSINT library bindings
+    "shodan>=1.31.0",
+    "waybackpy>=3.0.6",
+    # Logging
+    "structlog>=24.1.0",
+    # Date/time
+    "python-dateutil>=2.9.0",
+    # Async helpers
+    "tenacity>=8.3.0",
+    "anyio>=4.4.0",
+    # IP/network handling
+    "netaddr>=1.3.0",
+    # Reporting
+    "python-pptx>=1.0.0",
+    "openpyxl>=3.1.0",
+    "markdown>=3.6",
+    # UI
+    "streamlit>=1.35.0",
+    "plotly>=5.22.0",
+    # PDF metadata extraction
+    "pymupdf>=1.24.0",
+    # Favicon hashing
+    "mmh3>=4.1.0",
+    # Move 1: coverage gap tools
+    "holehe>=1.4.0",
+    "python-Levenshtein>=0.25.0",
+    # Move 5: mobile / TLS tools
+    "sslyze>=5.2.0",
+    "google-play-scraper>=1.2.7",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=5.0.0",
+    "black>=24.4.0",
+    "ruff>=0.5.0",
+    "mypy>=1.10.0",
+    "respx>=0.21.0",
+]
+neo4j = ["neo4j>=5.20.0"]
+censys = ["censys>=2.2.0"]
+pdf = ["weasyprint>=62.0"]
+
+[project.scripts]
+nexusrecon = "nexusrecon.cli.main:app"
+
+[project.entry-points."nexusrecon.tools"]
+crtsh = "nexusrecon.tools.domain.crtsh_tool:CRTShTool"
+subfinder = "nexusrecon.tools.domain.subfinder_tool:SubfinderTool"
+amass = "nexusrecon.tools.domain.amass_tool:AmassTool"
+dns = "nexusrecon.tools.domain.dns_tool:DNSTool"
+whois = "nexusrecon.tools.domain.whois_tool:WHOISTool"
+asn_bgp = "nexusrecon.tools.domain.asn_bgp_tool:ASNBGPTool"
+azure = "nexusrecon.tools.cloud.azure_tool:AzureM365Tool"
+aws = "nexusrecon.tools.cloud.aws_tool:AWSReconTool"
+gcp = "nexusrecon.tools.cloud.gcp_tool:GCPReconTool"
+github = "nexusrecon.tools.code.github_tool:GitHubTool"
+gitleaks = "nexusrecon.tools.code.gitleaks_tool:GitleaksTool"
+trufflehog = "nexusrecon.tools.code.trufflehog_tool:TruffleHogTool"
+gitdorker = "nexusrecon.tools.code.gitdorker_tool:GitDorkerTool"
+postman = "nexusrecon.tools.code.postman_tool:PostmanTool"
+dockerhub = "nexusrecon.tools.code.dockerhub_tool:DockerHubTool"
+theharvester = "nexusrecon.tools.identity.theharvester_tool:TheHarvesterTool"
+hunter = "nexusrecon.tools.identity.hunter_tool:HunterTool"
+email_format = "nexusrecon.tools.identity.email_format_tool:EmailFormatTool"
+shodan = "nexusrecon.tools.intel.shodan_tool:ShodanTool"
+censys = "nexusrecon.tools.intel.censys_tool:CensysTool"
+virustotal = "nexusrecon.tools.intel.virustotal_tool:VirusTotalTool"
+greynoise = "nexusrecon.tools.intel.greynoise_tool:GreyNoiseTool"
+httpx = "nexusrecon.tools.web.httpx_tool:HTTPxTool"
+kev = "nexusrecon.tools.vuln.kev_tool:KEVTool"
+nvd = "nexusrecon.tools.vuln.nvd_tool:NVDTool"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["nexusrecon*"]
+
+[tool.setuptools.package-data]
+"nexusrecon" = ["reports/templates/*.j2", "py.typed"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = false
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+filterwarnings = ["ignore::DeprecationWarning"]
