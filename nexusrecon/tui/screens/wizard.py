@@ -195,8 +195,13 @@ class WizardScreen(Screen):
                 value=d["max_tier"], id="f-max_tier",
             ),
             Static("Stealth profile", classes="wizard-label"),
+            Static(
+                "paranoid 1 thread / long delays · high 3 threads / proxy · "
+                "normal 10 threads · loud no throttling",
+                classes="wizard-help",
+            ),
             Select.from_values(
-                ["low", "medium", "high"],
+                ["paranoid", "high", "normal", "loud"],
                 value=d["stealth"], id="f-stealth",
             ),
             Static("Max LLM cost (USD)", classes="wizard-label"),

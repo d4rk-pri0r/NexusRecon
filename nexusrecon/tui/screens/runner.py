@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Deque, Dict
 
+from rich.markup import escape as _rich_escape
 from textual import work
 from textual.app import ComposeResult
 from textual.containers import Vertical, VerticalScroll
@@ -56,7 +57,11 @@ class RunnerScreen(Screen):
         yield ProgressBar(total=_TOTAL_PHASES, show_eta=False, id="phase-bar")
         yield Static(id="runner-stats")
         yield Static("[bold]Recent activity[/bold]", classes="wizard-label")
-        yield VerticalScroll(Static(id="activity-log"), id="runner-activity")
+        # activity-log is fed by user/tool output that can contain anything
+        # (Pydantic ValidationError reprs include `[type=enum, input_value=...]`,
+        # tool errors can include URLs with brackets, etc). Disable Rich markup
+        # parsing entirely so log lines can never crash the screen.
+        yield VerticalScroll(Static(id="activity-log", markup=False), id="runner-activity")
         yield Footer()
 
     async def on_mount(self) -> None:
@@ -69,9 +74,14 @@ class RunnerScreen(Screen):
         try:
             await self._run()
         except Exception as exc:
-            self._log(f"FATAL: {exc}")
+            # Exception strings can contain Rich-markup-poisoning characters
+            # (e.g. Pydantic ValidationError's `[type=enum, input_value='...']`
+            # annotation parses as a malformed markup tag and crashes the
+            # screen renderer). Escape before splicing into a markup template.
+            safe = _rich_escape(str(exc))
+            self._log(f"FATAL: {safe}")
             self._complete = True
-            self._update_label(f"[bold #ff5555]Campaign failed: {exc}[/bold #ff5555]")
+            self._update_label(f"[bold #ff5555]Campaign failed: {safe}[/bold #ff5555]")
 
     async def _run(self) -> None:
         from nexusrecon.core.campaign import CampaignManager
@@ -180,11 +190,13 @@ class RunnerScreen(Screen):
             datetime.utcnow().strftime("%H:%M:%S")
         name = evt.get("name") or evt.get("phase") or ""
         if etype == "phase_start":
+            # _log() targets a markup=False Static, so name is safe there;
+            # _update_label() targets a markup=True widget, so we escape.
             self._log(f"{ts}  ▶  {name}")
             self._update_label(
                 f"[bold #00ff9c]Phase {min(self._phase_done + 1, _TOTAL_PHASES)}/"
-                f"{_TOTAL_PHASES} — {name}[/bold #00ff9c]"
-                f"  ·  Campaign [dim]{self.campaign_id}[/dim]"
+                f"{_TOTAL_PHASES} — {_rich_escape(name)}[/bold #00ff9c]"
+                f"  ·  Campaign [dim]{_rich_escape(self.campaign_id)}[/dim]"
             )
         elif etype == "phase_end":
             self._phase_done += 1
