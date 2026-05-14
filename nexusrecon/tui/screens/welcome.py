@@ -6,11 +6,15 @@ from pathlib import Path
 from typing import Any
 
 from textual.app import ComposeResult
-from textual.containers import Container, Vertical
+from textual.containers import Center, Container, Vertical
 from textual.screen import Screen
 from textual.widgets import Button, Footer, Header, Static
 
-from nexusrecon.tui.banner import render_banner, render_attribution
+from nexusrecon.tui.banner import (
+    render_banner,
+    render_version,
+    render_attribution,
+)
 
 
 def _quick_stats() -> str:
@@ -70,31 +74,44 @@ class WelcomeScreen(Screen):
         # its children both horizontally and vertically (via CSS align rule).
         # Without this wrapper the banner + menu pin to the top-left on
         # large displays, which looks unfinished.
+        # Every block below is wrapped in its own Center widget so each
+        # one centers within the full screen width independently. Without
+        # the per-block Center, children of a Vertical container left-align
+        # to the column where the widest sibling starts — which made the
+        # banner look "stuck to the left" relative to the menu box.
         with Container(id="welcome-content"):
             with Vertical(id="welcome-stack"):
-                yield Static(render_banner(), id="welcome-banner")
-                # Author attribution — rendered separately so it can be
-                # styled subtly (dim gray) rather than inheriting the
-                # bright accent of the banner. Empty on dumb terminals.
+                with Center():
+                    yield Static(render_banner(), id="welcome-banner")
+                version_text = render_version()
+                if version_text:
+                    with Center():
+                        yield Static(version_text, id="welcome-version")
                 attribution_text = render_attribution()
                 if attribution_text:
-                    yield Static(attribution_text, id="welcome-attribution")
-                yield Static(
-                    "Agentic OSINT Orchestration Framework",
-                    id="welcome-subtitle",
-                )
-                yield Static(_quick_stats(), id="welcome-stats")
-                yield Static(
-                    "[dim]↑/↓ navigate · Enter select · n/r/p/c/t quick · q quit[/dim]",
-                    id="welcome-hint",
-                )
-                with Vertical(id="welcome-menu"):
-                    yield Button("🎯  New Campaign  (n)", id="btn-new", classes="-primary")
-                    yield Button("🔄  Resume Campaign  (r)", id="btn-resume")
-                    yield Button("📊  View Past Campaigns  (p)", id="btn-past")
-                    yield Button("🔧  Configuration  (c)", id="btn-config")
-                    yield Button("🛠   Tools  (t)", id="btn-tools")
-                    yield Button("❌  Quit  (q)", id="btn-quit")
+                    with Center():
+                        yield Static(attribution_text, id="welcome-attribution")
+                with Center():
+                    yield Static(
+                        "Agentic OSINT Orchestration Framework",
+                        id="welcome-subtitle",
+                    )
+                with Center():
+                    yield Static(_quick_stats(), id="welcome-stats")
+                with Center():
+                    yield Static(
+                        "[dim]↑/↓ navigate · Enter select · "
+                        "n/r/p/c/t quick · q quit[/dim]",
+                        id="welcome-hint",
+                    )
+                with Center():
+                    with Vertical(id="welcome-menu"):
+                        yield Button("🎯  New Campaign  (n)", id="btn-new", classes="-primary")
+                        yield Button("🔄  Resume Campaign  (r)", id="btn-resume")
+                        yield Button("📊  View Past Campaigns  (p)", id="btn-past")
+                        yield Button("🔧  Configuration  (c)", id="btn-config")
+                        yield Button("🛠   Tools  (t)", id="btn-tools")
+                        yield Button("❌  Quit  (q)", id="btn-quit")
         yield Footer()
 
     def on_mount(self) -> None:

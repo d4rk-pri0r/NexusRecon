@@ -23,65 +23,73 @@ Footer {
    menu now sit in the middle of the viewport instead of pinning to the
    top-left corner. */
 
+/* Outer container fills the viewport between Header and Footer and
+   centers its single child (the stack) both axes. */
 #welcome-content {
     width: 100%;
     height: 1fr;
     align: center middle;
 }
 
+/* The stack is full-width inside the centered container so each Center
+   child below has a known width to center within. Without width: 100%
+   the stack collapses to its widest child and other rows left-align. */
 #welcome-stack {
-    width: auto;
+    width: 100%;
     height: auto;
-    max-width: 80;
+    max-width: 100;
 }
+
+/* Each Center container handles the horizontal alignment of its
+   single child. The Statics below just declare colors + spacing —
+   no width or text-align rules, which kept fighting the layout. */
 
 #welcome-banner {
     color: #00ff9c;
     text-style: bold;
-    text-align: center;
-    margin-bottom: 0;
-    padding: 1 2 0 2;
-    width: auto;
     height: auto;
 }
 
-/* Dim author attribution line — subtle by design, sits just below the
-   banner without competing for visual weight. */
+#welcome-version {
+    color: #00ff9c;
+    text-style: bold;
+    margin-bottom: 0;
+    height: auto;
+}
+
+/* Dim author attribution — subtle by design, sits just below the
+   version line without competing for visual weight. */
 #welcome-attribution {
     color: #4a5568;
     text-style: italic;
-    text-align: center;
+    margin-top: 0;
     margin-bottom: 1;
-    width: auto;
+    height: auto;
 }
 
 #welcome-subtitle {
     color: #c9d1d9;
-    text-align: center;
     margin-bottom: 1;
-    width: auto;
+    height: auto;
 }
 
 #welcome-stats {
     color: #7f8c8d;
-    text-align: center;
     margin-bottom: 1;
-    width: auto;
+    height: auto;
 }
 
 #welcome-hint {
     color: #4a5568;
-    text-align: center;
     margin-bottom: 2;
-    width: auto;
+    height: auto;
 }
 
 #welcome-menu {
     border: round #1f6feb;
     padding: 1 2;
     width: 60;
-    margin: 0 1;
-    align-horizontal: center;
+    height: auto;
 }
 
 #welcome-menu Button {
