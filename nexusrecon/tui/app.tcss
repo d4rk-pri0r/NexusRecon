@@ -40,13 +40,18 @@ Footer {
     max-width: 100;
 }
 
-/* Each Center container handles the horizontal alignment of its
-   single child. The Statics below just declare colors + spacing —
-   no width or text-align rules, which kept fighting the layout. */
+/* Each Center container only horizontally positions a widget that's
+   narrower than the Center itself. Textual's default widget width is
+   1fr (fills parent), so without an explicit `width: auto` each Static
+   below would expand to fill its Center container and the text would
+   left-align inside that full-width box — exactly the bug the previous
+   layout had. `width: auto` sizes each Static to its content, giving
+   the Center container a small widget to position at the middle. */
 
 #welcome-banner {
     color: #00ff9c;
     text-style: bold;
+    width: auto;
     height: auto;
 }
 
@@ -54,6 +59,7 @@ Footer {
     color: #00ff9c;
     text-style: bold;
     margin-bottom: 0;
+    width: auto;
     height: auto;
 }
 
@@ -64,24 +70,28 @@ Footer {
     text-style: italic;
     margin-top: 0;
     margin-bottom: 1;
+    width: auto;
     height: auto;
 }
 
 #welcome-subtitle {
     color: #c9d1d9;
     margin-bottom: 1;
+    width: auto;
     height: auto;
 }
 
 #welcome-stats {
     color: #7f8c8d;
     margin-bottom: 1;
+    width: auto;
     height: auto;
 }
 
 #welcome-hint {
     color: #4a5568;
     margin-bottom: 2;
+    width: auto;
     height: auto;
 }
 
