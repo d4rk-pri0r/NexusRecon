@@ -5,6 +5,7 @@ import asyncio
 from pathlib import Path
 from typing import Any
 
+from textual import work
 from textual.app import ComposeResult
 from textual.containers import Center, Container, Vertical
 from textual.screen import Screen
@@ -120,6 +121,38 @@ class WelcomeScreen(Screen):
         try:
             self.query_one("#btn-new", Button).focus()
         except Exception:
+            pass
+        # Pre-warm the heavy imports the campaign worker will need.
+        # CrewAI, LangGraph, LiteLLM, and the full tool registry together
+        # take ~30s on a cold start — without this, the operator would
+        # stare at "Initializing campaign…" for that whole stretch after
+        # pressing Save & Run. Doing it now in a background thread means
+        # the imports are already cached by the time they finish the
+        # wizard. ``sys.modules`` caches the result so the runner's own
+        # ``import`` statements become near-free lookups.
+        self._warm_imports()
+
+    @work(thread=True, exclusive=True, group="warmup")
+    def _warm_imports(self) -> None:
+        """Background warm-up of the heavy imports the runner needs.
+        Runs in a thread (not on the event loop) so it can't stall
+        the welcome screen's input handling."""
+        try:
+            # Pull in the agent / graph / tool subsystems. The order
+            # mirrors the runner's own imports so anything they
+            # transitively pull in (CrewAI, LangGraph, LiteLLM,
+            # structlog wrappers, etc.) lands in sys.modules now.
+            import nexusrecon.core.campaign  # noqa: F401
+            import nexusrecon.core.scope  # noqa: F401
+            import nexusrecon.core.campaign_runner  # noqa: F401
+            import nexusrecon.tools.registry  # noqa: F401
+            import nexusrecon.reports.engine  # noqa: F401
+            import nexusrecon.models.campaign  # noqa: F401
+            import nexusrecon.graph.workflow  # noqa: F401
+            import nexusrecon.graph.dynamic_dispatcher  # noqa: F401
+        except Exception:
+            # If warmup fails it's not user-visible — the runner
+            # will just hit the cold-import path itself.
             pass
 
     # ── Mouse-button dispatcher delegates to the same actions the keys use ──

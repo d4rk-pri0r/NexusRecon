@@ -179,26 +179,92 @@ Footer {
     height: 3;
 }
 
-/* Runner screen */
+/* Runner screen — four stacked panels:
+   1. runner-header        : phase label + chunky progress bar (auto)
+   2. runner-stats         : live counters grid (auto)
+   3. runner-activity-wrap : high-level activity log (1fr)
+   4. runner-detail-wrap   : structlog tail (1fr, toggleable via [d]) */
+
+#runner-header {
+    border: round #00ff9c;
+    padding: 1 2;
+    margin: 1 2 0 2;
+    height: auto;
+    background: #0a0e1a;
+}
+
+#runner-header > #runner-phase-label {
+    text-align: center;
+    width: 100%;
+    height: auto;
+    margin-bottom: 0;
+}
+
+#runner-header > #runner-phase-sub {
+    text-align: center;
+    width: 100%;
+    height: auto;
+    margin-bottom: 1;
+    color: #7f8c8d;
+}
+
+#runner-header > #runner-progress {
+    width: 100%;
+    height: 1;
+}
 
 #runner-stats {
     border: round #1f6feb;
-    padding: 1 2;
-    margin: 1 1;
+    padding: 0 2;
+    margin: 1 2 0 2;
     height: auto;
+    background: #0a0e1a;
 }
 
-#runner-progress-label {
-    color: #00ff9c;
-    text-style: bold;
-    margin-bottom: 1;
+#runner-stats > #runner-stats-body {
+    width: 100%;
+    height: auto;
+    padding: 1 0;
+}
+
+#runner-activity-wrap {
+    border: round #7f8c8d;
+    padding: 0 1;
+    margin: 1 2 0 2;
+    height: 1fr;
+    background: #0a0e1a;
 }
 
 #runner-activity {
-    border: round #7f8c8d;
+    width: 100%;
+    height: 1fr;
     padding: 0 1;
-    height: 12;
-    margin: 1 1;
+}
+
+#activity-log {
+    width: 100%;
+    height: auto;
+    color: #c9d1d9;
+}
+
+#runner-detail-wrap {
+    border: round #4a5568;
+    padding: 0 1;
+    margin: 1 2 1 2;
+    height: 1fr;
+    background: #07090f;
+}
+
+#runner-detail {
+    width: 100%;
+    height: 1fr;
+    padding: 0 1;
+}
+
+#detail-log {
+    width: 100%;
+    height: auto;
+    color: #7f8c8d;
 }
 
 .severity-critical { color: #ff3838; text-style: bold; }
