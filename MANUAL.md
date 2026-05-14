@@ -1,6 +1,15 @@
 # NexusRecon — Operator Manual
 
-This document covers installation, configuration, every CLI command, a full walkthrough of every module, and step-by-step manual testing procedures. Read it top to bottom on first use; use it as a reference later.
+This document is the **operator reference** for NexusRecon — every CLI flag,
+every config knob, every module, every scope-file field, every troubleshooting
+recipe. New to the project? Start at [`README.md`](README.md) for a one-screen
+overview and then come back here.
+
+> **Primary entry point is the TUI.** Run `nexusrecon` with no arguments to
+> open the interactive Textual UI — new-campaign wizard, masked `.env` editor,
+> past-campaign browser, tool catalogue. The CLI commands documented in §5 are
+> what the TUI orchestrates under the hood, and remain the right tool for
+> scripted / headless / CI use.
 
 ---
 
@@ -23,12 +32,9 @@ This document covers installation, configuration, every CLI command, a full walk
 
 ## 1. Prerequisites
 
-> **Python version:** 3.11, 3.12, or 3.13 (**NOT 3.14** — CrewAI does not
-> support 3.14 as of this writing). On macOS with Homebrew, the default
-> `python3` may now be 3.14; install Python 3.13 with
-> `brew install python@3.13` and override with `PYTHON=python3.13 ./install.sh`.
-
-### Required
+Python 3.11, 3.12, or 3.13 — **not 3.14** (CrewAI is not yet 3.14-compatible).
+On macOS with Homebrew the default `python3` may now be 3.14; install 3.13 via
+`brew install python@3.13` and pass `PYTHON=python3.13 ./install.sh`.
 
 | Requirement | Minimum Version | Check |
 |---|---|---|
@@ -56,24 +62,12 @@ None of these are required for your first test run. `crt.sh`, DNS, WHOIS, ASN/BG
 
 ## 2. Installation
 
+README §Quick Start covers the recommended path (`./install.sh` → `source venv/bin/activate`).
+This section is for non-default installs and operator reference.
+
 > **Why a venv?** PEP 668 prevents global `pip install` on most modern Python
 > distributions (Homebrew, Debian 12+, Ubuntu 23+, Fedora 38+). A virtual
 > environment is mandatory — `install.sh` creates one for you automatically.
-
-### Recommended path (automatic)
-
-```bash
-git clone <repo> && cd agentic-osint
-./install.sh          # creates ./venv, installs everything
-source venv/bin/activate
-nexusrecon --help
-```
-
-If your default `python3` is 3.14, override:
-
-```bash
-PYTHON=python3.13 ./install.sh
-```
 
 ### Manual path (bring your own venv)
 
@@ -99,6 +93,7 @@ pip install -e ".[dev]"
 source venv/bin/activate
 nexusrecon --help        # Typer help screen
 nexusrecon tools         # 89 tools listed
+nexusrecon               # Launches the TUI (TTY only)
 ```
 
 The `[dev]` extra installs pytest, black, ruff, and mypy. For PDF report generation add `[pdf]`:
@@ -111,13 +106,17 @@ pip3 install -e ".[dev,pdf]"
 
 ## 3. Configuration Reference
 
-Copy `.env.example` to `.env` and fill in whatever keys you have:
+Two paths to set keys and toggles:
 
-```bash
-cp .env.example .env
-```
+- **TUI (recommended):** `nexusrecon` → press `c` for the Configuration screen.
+  Every variable below is editable in a masked, atomic-write editor backed by
+  the same `.env` file. The file is `chmod 0o600`'d on save.
+- **Manual:** `cp .env.example .env` and edit in `$EDITOR`.
 
 The tool works with zero API keys configured — tools that need keys are automatically skipped, and the LLM synthesis step falls back to a deterministic `MockLLM` that produces keyword-based analysis summaries.
+
+For the full env-var → unlocked-tool reverse lookup see
+[`CONFIGURATION_GUIDE.md`](CONFIGURATION_GUIDE.md).
 
 ### LLM Settings
 
@@ -290,9 +289,13 @@ constraints:
 
 ## 5. CLI Reference
 
+The TUI (`nexusrecon` with no args) is the primary entry point for interactive
+use; the commands below are the headless / scripted interface and what the TUI
+calls internally. Every command also accepts `--help`.
+
 ### `nexusrecon run`
 
-Launch a new campaign. This is the primary command.
+Launch a new campaign.
 
 ```
 nexusrecon run [OPTIONS]
@@ -351,10 +354,11 @@ nexusrecon run --scope my-scope.yaml --validate-creds --generate-phishing
 
 # Dry run — validate scope, show plan, exit without running
 nexusrecon run --scope my-scope.yaml --seeds "acme.com" --dry-run
-
-# Use LangGraph for checkpointed state graph execution
-nexusrecon run --scope my-scope.yaml --use-graph
 ```
+
+> `--use-graph` switches to the LangGraph workflow engine (with SQLite
+> checkpointing) instead of the sequential phase runner. Experimental — only
+> use if you specifically need graph-state checkpointing for very long runs.
 
 ---
 
@@ -640,7 +644,7 @@ Each file defines an agent class inheriting from `BaseNexusAgent`. The class-lev
 
 ### `nexusrecon/reports/` — Report Engine
 
-**`engine.py`** — `ReportEngine.generate_all(state)` generates all 12 report types from the final campaign state dict. Reports are pure Python string templating (no Jinja2 used for the core reports). The PDF report requires `weasyprint` (optional dependency — prints a console hint if missing). Reports are written to `./campaigns/<client>/<engagement_id>/<campaign_id>/reports/`.
+**`engine.py`** — `ReportEngine.generate_all(state)` generates every report from the final campaign state dict (17 deliverables total — see [`nexusrecon/docs/REPORT_GUIDE.md`](nexusrecon/docs/REPORT_GUIDE.md) for the index). Reports are pure Python string templating (no Jinja2 used for the core reports). The PDF report requires `weasyprint` (optional dependency — prints a console hint if missing). Reports are written to `./campaigns/<client>/<engagement_id>/<campaign_id>/reports/`.
 
 ---
 
@@ -710,25 +714,20 @@ Tools requiring **binaries** (no API keys):
 
 ## 8. Campaign Modes and Tier System
 
-### Modes
+The full **tier definition table** (T0–T3, contact level, examples) lives in
+[`README.md`](README.md#tier-system). This section documents how `--mode` maps
+those tiers onto the phase runner.
 
-| Mode | Tier Limit | Phases Run | Typical Time |
+### Mode → tier-cap and phase coverage
+
+| Mode | Tier cap | Phases Run | Typical Time |
 |---|---|---|---|
 | `light` | T0 | 1–4, 7–9 | 5–15 min |
 | `medium` | T2 | 1–5, 7–9 | 30–90 min |
 | `deep` | T3 | All 9 | 2–6 hours |
-| `monitor` | T0 | 1–4, 7–9 | 5–15 min |
+| `monitor` | T0 | 1–4, 7–9 | 5–15 min (scheduled) |
 
-### Tier Definitions
-
-| Tier | Contact Level | Examples |
-|---|---|---|
-| T0 | Zero — public data only | crt.sh, Shodan (passive), WHOIS, breach DBs, GitHub public |
-| T1 | DNS resolution, semi-passive | DNS sweep, passive DNS, SecurityTrails |
-| T2 | Light active — HTTP probes | httpx fingerprinting, screenshot capture, favicon hashing |
-| T3 | Active — fuzzing, brute force | Content discovery, alt-port sweeping |
-
-**T2 and T3 phases only run if `max_tier` in the scope file allows it.** A scope with `max_tier: T1` will never execute Phase 5 (httpx) or Phase 6 (content discovery), regardless of the `--mode` flag.
+**T2 and T3 phases only run if `max_tier` in the scope file allows it.** A scope with `max_tier: T1` will never execute Phase 5 (httpx) or Phase 6 (content discovery), regardless of the `--mode` flag — the scope file is the legal boundary, `--mode` is just an upper envelope below that boundary.
 
 ---
 
@@ -822,7 +821,7 @@ pip3 show nexusrecon
 nexusrecon --help
 # Expected: Usage: nexusrecon [OPTIONS] COMMAND [ARGS]...
 
-# List tools — should show 35+ tools, most marked Available: False (no keys yet)
+# List tools — should show 89 tools, most marked Available: False (no keys yet)
 nexusrecon tools
 ```
 
@@ -919,9 +918,10 @@ ls ./campaigns/test_corp/TEST-001/
 # Should contain one directory named nr-YYYYMMDD-...
 
 ls ./campaigns/test_corp/TEST-001/nr-*/reports/
-# Should contain: executive_summary.md, full_report.md, asset_inventory.md,
-# phishing_package.md, cloud_posture.md, attack_surface.md, findings.json,
-# campaign_meta.json, and more.
+# Should contain: master_report.md, executive_summary.md, full_report.md,
+# top_threads.md, asset_inventory.md, phishing_package.md, cloud_posture.md,
+# attack_surface.md, vuln_correlation.md, findings.json, campaign_meta.json,
+# and more (17 deliverables total — see nexusrecon/docs/REPORT_GUIDE.md).
 
 cat ./campaigns/test_corp/TEST-001/nr-*/reports/executive_summary.md
 cat ./campaigns/test_corp/TEST-001/nr-*/reports/findings.json
@@ -1167,22 +1167,28 @@ campaigns/
             │   └── audit.jsonl         ← Hash-chained audit trail
             ├── artifacts/              ← Tool output artifacts (screenshots, etc.)
             └── reports/
+                ├── master_report.md            ← Single cohesive client deliverable
                 ├── executive_summary.md
                 ├── full_report.md
+                ├── top_threads.md              ← Top 10 ranked attack paths
                 ├── asset_inventory.md
                 ├── asset_inventory.json
                 ├── asset_inventory.csv
                 ├── phishing_package.md
                 ├── cloud_posture.md
                 ├── attack_surface.md
+                ├── vuln_correlation.md
+                ├── people_map.md
+                ├── vendor_supply_chain.md
+                ├── harvested_credentials.md    ← Only if creds were found (Secret)
                 ├── findings.json
                 ├── campaign_meta.json
                 ├── maltego_export.csv
-                ├── people_map.md
-                ├── vuln_correlation.md
-                ├── vendor_supply_chain.md
-                └── report.pdf          ← Only if weasyprint is installed
+                └── report.pdf                  ← Only if weasyprint is installed
 ```
+
+The canonical index with content schemas is
+[`nexusrecon/docs/REPORT_GUIDE.md`](nexusrecon/docs/REPORT_GUIDE.md).
 
 ### Key Files
 

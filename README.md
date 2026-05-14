@@ -1,351 +1,314 @@
-# NexusRecon
-
-**Agentic OSINT Orchestration Framework** — production-grade reconnaissance for professional red team engagements.
-
-> **Authorized use only.** Requires a signed scope file before any tool runs. Every tool invocation is validated against scope and logged to a tamper-evident audit chain.
-
----
-
-## What's New in v2
-
-- **89 OSINT tools** — 39 new tools across breach, mobile, social, vulnerability, and web categories
-- **Dynamic Dispatch Agent** — self-steering reconnaissance loop; an LLM agent proposes and executes targeted follow-up tool calls between phases (`--dispatch-mode lite|full|off`)
-- **Phase 7.5 — Credential Harvest** — extracts, masks, and hashes credentials found in exposed `.env` files, config files, and code repositories; optional read-only validation (`--validate-creds`)
-- **Phase 8 — Attack Surface Ranking** — scores every finding with `(cvss/10) × EPSS × KEV-boost × Metasploit-boost` and emits a ranked `top_threads.md`
-- **Phishing Package generation** — `--generate-phishing` enriches the phishing package with per-employee bundles and breach cross-references (authorized engagements only)
-- **Smoke test suite** — `nexusrecon smoke` / `./smoke_test.sh` runs 6 integration tests against synthetic data in ~2 seconds
-- **New state keys**: `breach_intel`, `mobile_intel`, `social_intel`, `dark_intel`, `ranked_threads`, `harvested_credentials`, `dynamic_dispatch_log`
-- **New reports**: `top_threads.md`, `harvested_credentials.md`
-
----
-
-## Architecture
-
-```mermaid
-graph TB
-    CLI["CLI (Typer)"] --> Scope[Scope Guard]
-    Scope --> Planner[Campaign Planner Agent]
-    Planner --> LG[LangGraph Workflow]
-
-    subgraph "CrewAI Agents"
-        P1[Passive Recon]
-        P2[Active Recon]
-        P3[Cloud & Identity]
-        P4[Pretext & HUMINT]
-        P5[Correlation]
-        P6[Risk Analyst]
-        P7[Vuln Correlator]
-        P8[Evidence Auditor]
-        P9[Reporter]
-    end
-
-    LG --> P1
-    LG --> P2
-    LG --> P3
-    LG --> P4
-    LG --> P5
-    LG --> P6
-    LG --> P7
-    LG --> P8
-    LG --> P9
-
-    subgraph "Tools (89)"
-        T1[crt.sh, Subfinder, Amass]
-        T2[WHOIS, DNS, Passive DNS]
-        T3[Azure/M365, AWS, GCP]
-        T4[Shodan, Censys, VT]
-        T5[GitHub, gitleaks, TruffleHog]
-        T6[Email, Breach, Hunter]
-        T7[httpx, gowitness (T2)]
-    end
-
-    P1 --> T1
-    P1 --> T2
-    P3 --> T3
-    P2 --> T7
-    P1 --> T4
-    P1 --> T5
-    P1 --> T6
-
-    LG --> EntityGraph[(Entity Graph)]
-    EntityGraph --> Reports[Report Engine]
-    Reports --> MD[Markdown + JSON]
-    Reports --> CSV[Maltego CSV]
-    Reports --> HTML[pyvis HTML]
-
-    LG --> SQLite[(SQLite State)]
-    SQLite -.->|resume| LG
-
-    subgraph "Guardrails"
-        SG[Scope Enforcement]
-        AL[Audit Chain]
-        CT[Cost Tracking]
-        RL[Rate Limiter]
-    end
-
-    Scope --> SG
-    SG --> AL
-    SG --> CT
-    SG --> RL
+```
+  ███╗   ██╗███████╗██╗  ██╗██╗   ██╗███████╗
+  ████╗  ██║██╔════╝╚██╗██╔╝██║   ██║██╔════╝
+  ██╔██╗ ██║█████╗   ╚███╔╝ ██║   ██║███████╗
+  ██║╚██╗██║██╔══╝   ██╔██╗ ██║   ██║╚════██║
+  ██║ ╚████║███████╗██╔╝ ██╗╚██████╔╝███████║
+  ╚═╝  ╚═══╝╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝
+           R E C O N   v 0 . 5 . 0
 ```
 
-## Quick Start
+# NexusRecon
+
+**Agentic OSINT orchestration framework for authorized red-team reconnaissance.**
+
+[![status](https://img.shields.io/badge/status-pre--beta-orange)](#status)
+[![version](https://img.shields.io/badge/version-0.5.0-blue)](nexusrecon/__init__.py)
+[![python](https://img.shields.io/badge/python-3.11--3.13-blue)](pyproject.toml)
+[![tools](https://img.shields.io/badge/tools-89-green)](MANUAL.md#7-tool-inventory)
+[![license](https://img.shields.io/badge/license-proprietary-red)](DISCLAIMER.md)
+
+NexusRecon plans, executes, and reports on a full passive-to-light-active OSINT
+campaign against a scope you authorize — running 89 reconnaissance tools across
+a 9-phase pipeline, steered between phases by an LLM dispatcher that proposes
+targeted follow-up queries based on what the previous phase actually found.
+
+> ⚠ **Authorized use only.** Every tool invocation is validated against a signed
+> scope file. Out-of-scope targets are silently dropped and logged. Use only
+> against systems you have explicit written permission to test. See
+> [DISCLAIMER.md](DISCLAIMER.md).
+
+---
+
+## What it does
+
+You hand NexusRecon a scope file and a seed domain. It hands you back:
+
+- A **ranked attack-thread report** (`top_threads.md`) — the 10 most actionable
+  paths into the target, scored by `CVSS × EPSS × KEV-boost × Metasploit-boost`.
+- A **master narrative report** (`master_report.md`) — one cohesive document
+  written by an LLM that walks a client through what was found and what it means.
+- An **asset inventory**, **phishing package**, **cloud posture report**, an
+  **attack-surface matrix**, **vuln correlation**, and a **Maltego CSV** export
+  — every artifact tagged with the scope hash and a hash-chained audit log.
+
+Between phases an LLM **dynamic dispatcher** inspects what's been collected and
+fires extra targeted tool runs to fill gaps the static pipeline missed — for
+example, if Phase 1 turns up an Android app, the dispatcher will queue the APK
+analyzer against that package before Phase 2 begins.
+
+---
+
+## How it works
+
+```
+   ┌──────────┐    ┌─────────────┐    ┌──────────────────┐
+   │  Scope   ├───►│  Campaign   ├───►│  9-phase pipeline │
+   │  YAML    │    │  Manager    │    │  + dispatcher    │
+   └──────────┘    └─────────────┘    └────────┬─────────┘
+                                               │
+       ┌───────────────────────────────────────┘
+       │
+       ▼
+  ┌─────────────────────────────────────────────────────────┐
+  │  Campaign state (subdomains · emails · cloud · code     │
+  │  · infra · vulns · breaches · creds · findings · ...)   │
+  └────────┬──────────────────┬────────────────────┬────────┘
+           │                  │                    │
+           ▼                  ▼                    ▼
+     ┌──────────┐       ┌──────────┐         ┌──────────────┐
+     │ 89 tools │       │ 8 LLM    │         │  Dynamic     │
+     │ T0–T3    │       │ phase    │         │  dispatcher  │
+     │ (passive │       │ agents   │         │  (between    │
+     │ → active)│       │          │         │   phases)    │
+     └──────────┘       └──────────┘         └──────────────┘
+           │                  │                    │
+           └────────────┬─────┴────────────────────┘
+                        │
+                        ▼
+              ┌───────────────────┐
+              │   Report engine    │
+              │   17 deliverables  │
+              │   MD · JSON · CSV  │
+              │   HTML · PDF       │
+              └───────────────────┘
+```
+
+For the full architecture — phase pipeline, agent personas, dispatcher loop,
+state-key conventions, scoring formula — see [`ARCHITECTURE.md`](ARCHITECTURE.md).
+
+---
+
+## Quick start
 
 ### 1. Install
 
-**Recommended path** (handles Python venv + system binaries automatically):
-
 ```bash
-git clone <repo> && cd agentic-osint
-./install.sh
+git clone https://github.com/d4rk-pri0r/NexusRecon.git
+cd NexusRecon
+./install.sh                  # creates venv, installs Python deps + system binaries
 source venv/bin/activate
 ```
 
-**Python 3.13 is required** (not 3.14 — CrewAI compatibility). If your
-default `python3` is 3.14, override:
+**Python 3.13 is recommended** (3.11–3.13 supported; **not 3.14** — CrewAI
+incompatibility). If `python3` points at 3.14:
 
 ```bash
 PYTHON=python3.13 ./install.sh
 ```
 
-**Manual install** (if you prefer to manage your own venv):
+### 2. Launch the TUI
 
 ```bash
-python3.13 -m venv venv
-source venv/bin/activate
-pip install -e ".[dev]"
-./install.sh --skip-python    # binaries only
+nexusrecon
 ```
 
-After install, you must `source venv/bin/activate` in every new shell
-session before running `nexusrecon`.
+Running with no arguments opens an interactive Textual UI:
 
-**Or use Docker:**
-
-```bash
-docker compose up -d
+```
+   ┌─ NexusRecon — Agentic OSINT Orchestration ─────────────────┐
+   │                                                            │
+   │              [ N E X U S R E C O N    v 0.5.0 ]            │
+   │                                                            │
+   │       89 tools registered · 0 campaigns · LLM: anthropic   │
+   │                                                            │
+   │       🎯  New Campaign      (n)                            │
+   │       🔄  Resume Campaign   (r)                            │
+   │       📊  Past Campaigns    (p)                            │
+   │       🔧  Configuration     (c)                            │
+   │       🛠   Tools             (t)                            │
+   │       ❌  Quit               (q)                            │
+   │                                                            │
+   │     ↑/↓ navigate · Enter select · letter shortcut quick    │
+   └────────────────────────────────────────────────────────────┘
 ```
 
-### 2. Configure
+From the TUI you can:
+
+- Walk a **new-campaign wizard** that builds the scope file for you
+- **Edit API keys** in `.env` via a masked editor (the Configuration screen)
+- **Browse the tool catalogue** and see which tools are unlocked by which keys
+- **Resume** or **diff** prior campaigns
+
+### 3. Or use the CLI directly
 
 ```bash
-cp .env.example .env
-# Edit .env with your API keys (SHODAN_API_KEY, ANTHROPIC_API_KEY, etc.)
-```
+# Validate a scope file
+nexusrecon validate examples/scopes/minimal_seed.yaml
 
-### 3. Create a Scope File
+# Dry-run (validate scope + show plan, no tools fired)
+nexusrecon run --scope examples/scopes/minimal_seed.yaml --dry-run
 
-Start from the minimal template — it only requires a single seed domain:
+# Light passive sweep (T0 only, ~5–10 min)
+nexusrecon run --scope my-scope.yaml --seeds acme.com --mode light
 
-```bash
-cp examples/scopes/minimal_seed.yaml my-scope.yaml
-# Edit: set client, engagement_id, authorized_by, dates, and your target domain
-```
+# Default run with the dispatcher running in lite mode (T0+T1, ~30–60 min)
+nexusrecon run --scope my-scope.yaml --seeds acme.com
 
-The minimal scope (`minimal_seed.yaml`) is the recommended starting point.
-Fully-populated examples (with IP ranges, cloud account IDs, etc.) are in
-`examples/scopes/*_completed_example.yaml` — they show what a mature engagement
-scope looks like, but you do **not** need all those fields to start a campaign.
-NexusRecon discovers assets from your single seed domain automatically.
-
-### 4. Validate and Run
-
-```bash
-# Validate scope
-nexusrecon validate my-scope.yaml
-
-# Dry run (no tool execution)
-nexusrecon run --scope my-scope.yaml --seeds "acme.com" --dry-run
-
-# Light mode (T0 only, ~5-10 min)
-nexusrecon run --scope my-scope.yaml --seeds "acme.com" --mode light
-
-# Medium mode (default, T0-T1, ~30-60 min)
-nexusrecon run --scope my-scope.yaml --seeds "acme.com" --mode medium
-
-# Full dynamic dispatch — LLM selects follow-up tools between every phase
-nexusrecon run --scope my-scope.yaml --seeds "acme.com" --dispatch-mode full
+# Full agentic dispatch — LLM picks follow-up tools between every phase
+nexusrecon run --scope my-scope.yaml --seeds acme.com --dispatch-mode full
 
 # Credential harvest + phishing drafts (authorized engagements only)
-nexusrecon run --scope my-scope.yaml --seeds "acme.com" --validate-creds --generate-phishing
+nexusrecon run --scope my-scope.yaml --seeds acme.com \
+  --validate-creds --generate-phishing
 
-# Deep mode (T0-T2, ~2-6 hrs)
-nexusrecon run --scope my-scope.yaml --seeds "acme.com" --mode deep
+# Resume from a checkpoint
+nexusrecon resume nr-20260514-120000-abc12345
 ```
 
-### 5. Resume a Campaign
-
-```bash
-nexusrecon resume nr-20260501-120000-abc12345
-```
-
-### 6. Diff Campaigns
-
-```bash
-nexusrecon diff ./campaigns/acme/run1 ./campaigns/acme/run2
-```
+`nexusrecon --help` lists every command. The full reference is in
+[`MANUAL.md`](MANUAL.md#5-cli-reference).
 
 ---
 
-## Commands
+## Capabilities
 
-| Command | Description |
-|---|---|
-| `nexusrecon run --scope <file>` | Launch a campaign |
-| `nexusrecon validate <file>` | Validate scope file |
-| `nexusrecon resume <id>` | Resume from checkpoint |
-| `nexusrecon diff <old> <new>` | Compare two campaigns |
-| `nexusrecon tools` | List registered tools |
-| `nexusrecon config` | Show current configuration |
-| `nexusrecon smoke` | Run the integration smoke test suite |
+| Phase | What it does | Sample tools |
+|-------|-------------|--------------|
+| **1. Passive footprint** | Subdomain harvest, cert transparency, WHOIS, DNS | crt.sh, Subfinder, Amass, SecurityTrails |
+| **2. Active surface** | HTTP probing, screenshotting, tech fingerprint | httpx, gowitness, WAF/CMS/TLS detection |
+| **3. Cloud & identity** | M365 federation, S3/GCS buckets, AWS account ID | Azure/M365 enumerator, bucket_enum, AWS recon |
+| **4. Correlation** | Cross-source asset linking, attribution scoring | (LLM agent, no tools) |
+| **5. People & pretext** | Org chart inference, breach lookup, HUMINT leads | Hunter, HIBP, EmailRep, news, SEC EDGAR |
+| **6. Threat intel** | Shodan, Censys, GreyNoise, VirusTotal, urlscan | (intel category, 12 sources) |
+| **7. Vuln correlation** | NVD + KEV + EPSS + ExploitDB + GH Advisory | CVE matcher, KEV lookup, EPSS scorer |
+| **7.5. Cred harvest** | Mask + hash creds in exposed `.env` / configs | gitleaks, TruffleHog, infra_probe |
+| **8. Attack surface rank** | `CVSS × EPSS × KEV × Metasploit` scoring | (scoring engine) |
+| **9. Reporting** | LLM-synthesized narrative + 17 deliverables | (master_reporter agent) |
+
+**89 tools across 17 categories** — see [`MANUAL.md`](MANUAL.md#7-tool-inventory)
+for the full catalogue.
 
 ---
 
-## Campaign Modes
+## Tier system
 
-| Mode | Tier | Depth | Time | Cost |
-|---|---|---|---|---|
-| `light` | T0 only | 1 | 5-10 min | $ |
-| `medium` | T0-T1 | 2 | 30-60 min | $$ |
-| `deep` | T0-T2/T3 | 4 | 2-6 hrs | $$$ |
-| `monitor` | Configurable | Configurable | Scheduled | $$ |
+| Tier | Name | Contact with target | Examples |
+|------|------|---------------------|----------|
+| T0 | Pure passive | None — public datasets only | crt.sh, Shodan, GitHub, breach DBs, WHOIS |
+| T1 | Semi-passive | DNS resolution, passive DNS | DNS sweep, SecurityTrails, urlscan |
+| T2 | Light active | HTTP probes, screenshots | httpx, gowitness, favicon hashing |
+| T3 | Active | Brute force, fuzzing | ffuf, gobuster, recursive amass |
+
+**Default ceiling is T1.** T2 and T3 require explicit scope authorization.
+Out-of-tier tools are dropped with an audit-log entry, not executed silently.
 
 ---
 
 ## Deliverables
 
-Every campaign automatically produces:
+Every campaign writes to `./campaigns/<client>/<engagement>/<campaign-id>/reports/`:
 
-1. `executive_summary.md` — 1-page red-team summary
-2. `full_report.md` — Complete findings with methodology
-3. `top_threads.md` — Top 10 ranked attack threads (KEV × EPSS × CVSS scored)
-4. `asset_inventory.md` + `.json` + `.csv` — All discovered assets
-5. `phishing_package.md` — Validated emails, pretext hooks, DMARC gaps
-6. `cloud_posture.md` — M365 federation, AWS account, public cloud assets
-7. `attack_surface.md` — Likelihood × impact matrix, PRE-ATT&CK mapped
-8. `vuln_correlation.md` — CVE/KEV findings matched to fingerprinted tech
-9. `harvested_credentials.md` — Masked + hashed exposed credentials (**Secret**)
-10. `findings.json` — Raw findings with full provenance and evidence hashes
-11. `campaign_meta.json` — Campaign metadata and scope hash
-12. `maltego_export.csv` — Maltego-compatible entity CSV
+- `master_report.md` — single cohesive narrative for the client
+- `executive_summary.md` — one-page exec-level brief
+- `top_threads.md` — top 10 ranked attack paths
+- `attack_surface.md` — likelihood × impact matrix, PRE-ATT&CK mapped
+- `phishing_package.md` — validated emails, pretext hooks, DMARC gaps
+- `cloud_posture.md` — M365 federation, AWS account, public buckets
+- `vuln_correlation.md` — CVE/KEV findings matched to fingerprinted tech
+- `harvested_credentials.md` — masked + hashed exposed creds (treat as **Secret**)
+- `asset_inventory.md` / `.json` / `.csv` — discovered assets
+- `findings.json` — every `Finding` with severity, confidence, MITRE, evidence
+- `maltego_export.csv` — Maltego-compatible entity import
+- `report.pdf` — full report as PDF (requires `weasyprint`)
 
-See `nexusrecon/docs/REPORT_GUIDE.md` for the full report file index.
-
-Output path: `./campaigns/<client>/<engagement_id>/<campaign_id>/reports/`
+Full index with content schemas: [`nexusrecon/docs/REPORT_GUIDE.md`](nexusrecon/docs/REPORT_GUIDE.md).
 
 ---
 
-## Tier System
+## Configuration
 
-| Tier | Name | Description | Examples |
-|---|---|---|---|
-| T0 | Pure Passive | Zero contact with target infrastructure | crt.sh, Shodan, GitHub, breach DBs, WHOIS |
-| T1 | Semi-Passive | DNS resolution, passive DNS, indirect probing | DNS sweep, SecurityTrails, urlscan |
-| T2 | Light Active | HTTP probes, screenshots, fingerprinting | httpx, gowitness, favicon hashing |
-| T3 | Active | Brute force, content fuzzing | ffuf, gobuster, recursive amass |
+NexusRecon reads secrets and toggles from a `.env` file in the project root.
 
-**Default is T1.** T2 and T3 require explicit scope authorization.
+The fastest path is the TUI: launch `nexusrecon`, press `c`, and the
+Configuration screen presents every editable variable in 11 categories
+(LLM provider, intel APIs, email/identity, vuln intel, OPSEC, cloud, storage,
+debug, vault, etc.). Values are masked, saved atomically, and the file is
+`chmod 0o600`'d on disk.
 
----
+Manual edit is also fine:
 
-## Stealth Profiles
-
-| Profile | Concurrency | Delay | Proxy | UA Rotation |
-|---|---|---|---|---|
-| `paranoid` | 1 thread | 3-10s | Tor | Every request |
-| `high` | 3 threads | 1-3s | Proxy | Every 5 requests |
-| `normal` | 10 threads | 0.2-0.8s | None | Every 10 requests |
-| `loud` | 20 threads | 0s | None | Disabled |
-
----
-
-## Adding a New Tool
-
-```python
-from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
-from nexusrecon.tools.registry import register_tool
-
-@register_tool
-class MyTool(OSINTTool):
-    name = "my_tool"
-    tier = Tier.T0
-    category = Category.DOMAIN
-    requires_keys = ["MY_API_KEY"]
-    description = "Does something useful"
-    target_types = ["domain"]
-
-    async def run(self, target: str, **kwargs) -> ToolResult:
-        # Your tool logic here
-        return ToolResult(success=True, source=self.name, data={})
+```bash
+cp .env.example .env
+$EDITOR .env
 ```
 
-See `plugins/example/my_tool.py` for a complete annotated example.
+Required for any meaningful run:
+
+- One LLM provider key — `ANTHROPIC_API_KEY` (recommended) or `OPENAI_API_KEY`,
+  or set `NEXUS_LLM_PROVIDER=ollama` for a local model.
+
+Recommended:
+
+- `SHODAN_API_KEY`, `SECURITYTRAILS_API_KEY`, `HUNTER_API_KEY`,
+  `HAVEIBEENPWNED_API_KEY`, `GITHUB_TOKEN`.
+
+Per-key tool-unlock matrix: [`CONFIGURATION_GUIDE.md`](CONFIGURATION_GUIDE.md).
 
 ---
 
-## LLM Providers
+## Documentation
 
-| Provider | Env Var | Notes |
-|---|---|---|
-| Anthropic | `ANTHROPIC_API_KEY` | Primary — best quality |
-| OpenAI | `OPENAI_API_KEY` | Alternative |
-| Ollama | `OLLAMA_BASE_URL` | Local, air-gapped friendly |
-| llama.cpp | Via Ollama | Local, resource-constrained |
-
-Set via `NEXUS_LLM_PROVIDER` and `NEXUS_LLM_MODEL` in `.env`.
-
----
-
-## Legal & Scope Enforcement
-
-- **Hard fail** on missing or unsigned scope
-- **Pre-flight validation** checks date range, SOW hash, shared infrastructure
-- **Every tool call** validated against scope before execution
-- **Out-of-scope targets** are dropped with audit log entry
-- **ROE banner** displayed at every campaign start
-- **Scope hash** embedded in every output artifact
-- **Tamper-evident audit log** (hash-chained JSONL)
+| Doc | Audience | What's in it |
+|-----|----------|--------------|
+| [`README.md`](README.md) (this) | First-time visitor | What is it, how to start |
+| [`MANUAL.md`](MANUAL.md) | Operator | Install, scope, CLI ref, tool inventory, troubleshooting |
+| [`ARCHITECTURE.md`](ARCHITECTURE.md) | Engineer / curious operator | Phase pipeline, agents, dispatcher, scoring, invariants |
+| [`CONFIGURATION_GUIDE.md`](CONFIGURATION_GUIDE.md) | Operator setting up keys | Every env var, which tools each unlocks |
+| [`BETA_TESTING_GUIDE.md`](BETA_TESTING_GUIDE.md) | Beta tester | First campaign walkthrough, what to file as bugs |
+| [`DISCLAIMER.md`](DISCLAIMER.md) | Everyone | Authorized-use policy, legal terms |
+| [`nexusrecon/docs/AGENT_LOOP.md`](nexusrecon/docs/AGENT_LOOP.md) | Engineer | Dynamic dispatcher internals |
+| [`nexusrecon/docs/REPORT_GUIDE.md`](nexusrecon/docs/REPORT_GUIDE.md) | Operator | Every output file and its schema |
 
 ---
 
-## Project Structure
+## Status
 
-```
-nexusrecon/
-├── cli/              # Typer CLI (run, validate, resume, diff, tools, smoke, ...)
-├── core/             # Scope, audit, cache, entity graph, cost tracker
-├── models/           # Pydantic data models
-├── opsec/            # Stealth profiles, rate limiter, UA pool, proxy
-├── tools/            # 89 OSINT tools organized by category
-│   ├── domain/       # WHOIS, DNS, crt.sh, subfinder, amass, etc.
-│   ├── cloud/        # Azure/M365, AWS, GCP, CDN, bucket_enum
-│   ├── identity/     # theHarvester, Hunter, email format, breach, holehe
-│   ├── breach/       # HaveIBeenPwned, HudsonRock, EmailRep, LeakCheck
-│   ├── code/         # GitHub, gitleaks, TruffleHog, gitdorker, Postman, DockerHub
-│   ├── intel/        # Shodan, Censys, VT, GreyNoise, BinaryEdge, Netlas, …
-│   ├── web/          # Wayback, httpx, gowitness, WAF/CMS/TLS detection, …
-│   ├── vuln/         # NVD, KEV, EPSS, ExploitDB, Vulners, GitHub Advisory
-│   ├── mobile/       # Play Store, APK Analyzer
-│   └── pretext/      # News, jobs, SEC EDGAR, GitHub org, LinkedIn dorks, …
-├── agents/           # LLM agent personas (passive recon, cloud, dispatch, …)
-├── graph/            # LangGraph workflow (nodes, workflow, dynamic_dispatcher)
-├── reports/          # Report engine
-├── docs/             # AGENT_LOOP.md, REPORT_GUIDE.md
-├── ui/               # Streamlit dashboard
-plugins/              # Example plugin
-configs/              # Defaults and per-client overlays
-examples/scopes/      # Sample scope files
-tests/
-├── unit/             # 180+ unit tests
-└── smoke/            # 6 end-to-end smoke tests (synthetic data)
-```
+**v0.5.0 — pre-beta.** Closed-beta testing in progress; APIs and report
+formats may shift before 1.0. We track open issues in
+[`ITERATION_BACKLOG.md`](ITERATION_BACKLOG.md).
+
+What's stable:
+
+- 9-phase pipeline + credential harvest
+- 89-tool registry with scope-gated execution
+- LLM dispatcher (lite / full / off)
+- Audit chain, cost tracking, rate limiter
+- Master report + 16 other deliverables
+
+What's still moving:
+
+- Plugin discovery API
+- Vault integration (`AGENT_LOOP.md` references a `VaultStore`; today secrets
+  live in `.env`)
+- Some niche tools are stubs awaiting API access
+
+If you want to help shape the 1.0, see [`BETA_TESTING_GUIDE.md`](BETA_TESTING_GUIDE.md).
 
 ---
 
-## License
+## Legal
 
-Proprietary — authorized use only. See DISCLAIMER.md.
+Proprietary software. **Authorized engagements only.** Full terms in
+[`DISCLAIMER.md`](DISCLAIMER.md).
+
+Scope enforcement is built into the framework — every tool invocation is
+checked against the signed scope before execution, tagged with the scope hash,
+and written to a hash-chained audit log. This is a backstop, not a substitute
+for operator judgment.
 
 ---
 
-*Built for defenders who test like attackers — with permission.*
+<sub>NexusRecon is built and maintained by **d4rk pri0r** ·
+[darkpriorlabs](https://github.com/d4rk-pri0r) · for defenders who test like
+attackers — with permission.</sub>
