@@ -113,8 +113,8 @@ At ~30,000 feet:
        │   Reads/writes from:                               │
        │  ┌─────────────┐  ┌─────────────┐  ┌────────────┐ │
        │  │  TOOLS      │  │  AGENTS     │  │ DISPATCHER │ │
-       │  │  (89        │  │  (8 LLM     │  │ (LLM-      │ │
-       │  │   sources)  │  │   personas) │  │  driven)   │ │
+       │  │  (OSINT     │  │  (8 LLM     │  │ (LLM-      │ │
+       │  │   registry) │  │   personas) │  │  driven)   │ │
        │  └─────────────┘  └─────────────┘  └────────────┘ │
        │                                                   │
        └─────────────────────────┬─────────────────────────┘
@@ -229,8 +229,14 @@ for downstream parsing rather than analysis-with-findings.
 
 ## 6. The tools
 
-The platform integrates **89 OSINT tools** across 17 categories. Each
-tool is a subclass of `OSINTTool` with a uniform interface:
+The platform integrates an **extensible OSINT tool registry** organised
+into category buckets — subdomain enumeration, DNS / certificate
+transparency, breach data, code-leakage scanners, cloud posture
+(AWS / Azure / GCP), threat intel (Shodan / Censys / VT / GreyNoise /
+urlscan), vuln intel (NVD / KEV / EPSS / ExploitDB / GH Advisory),
+mobile, and HUMINT / pretext. Tools are added and retired each
+release; run `nexusrecon tools` for the live catalogue. Every tool is
+a subclass of `OSINTTool` with a uniform interface:
 
 ```python
 class SomeTool(OSINTTool):
@@ -563,7 +569,7 @@ NexusRecon does the boring parts.
 | **State** | The shared dict object that accumulates everything across the campaign. Tools write to it; agents read from it; the dispatcher reads it to decide; the report engine renders from it. |
 | **Stem-match** | A weak attribution signal — e.g., the platform tested `<seed_stem>.onmicrosoft.com` and got a hit, but that tenant may belong to a completely unrelated party. Tagged `attribution_confidence: 0.2`. |
 | **Tier** | A tool's intrusiveness level. T0 passive (no target traffic), T1 fingerprinting (light touch), T2 active scanning (visible in logs), T3 intrusive (brute force, exploitation). Phases enforce tier ceilings per scope. |
-| **Tool** | A subclass of `OSINTTool` integrating one external data source. 89 total. Categories range from subdomain enumeration to mobile APK analysis. |
+| **Tool** | A subclass of `OSINTTool` integrating one external data source. Categories range from subdomain enumeration to mobile APK analysis. Run `nexusrecon tools` for the live registry. |
 
 ---
 
@@ -579,7 +585,7 @@ NexusRecon does the boring parts.
 - **`DISCLAIMER.md`** — legal framing, authorization requirements
 
 The codebase itself is organised so each component is in one place:
-- `nexusrecon/tools/` — the 89 tools, organised by category
+- `nexusrecon/tools/` — every tool in the registry, organised by category
 - `nexusrecon/agents/` — the 11 agent personas (roles, prompts, backstories)
 - `nexusrecon/graph/` — the phase pipeline, dispatcher, agent executor
 - `nexusrecon/core/` — campaign manager, scoring engine, credential harvester, audit log

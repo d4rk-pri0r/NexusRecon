@@ -87,7 +87,7 @@ needs `source venv/bin/activate` before running `nexusrecon`.**
 ```
 [+] nexusrecon package imports OK
 [+] nexusrecon CLI on PATH: /Users/.../agentic-osint/venv/bin/nexusrecon
-[+] Tool registry OK: 89 tools registered
+[+] Tool registry OK: <N> tools registered
 [*] External binary presence check:
   [+] subfinder
   [+] amass
@@ -128,7 +128,8 @@ which nexusrecon
 # Basic help screen
 nexusrecon --help
 
-# Tool inventory — should show ~89 tools
+# Tool inventory — should print the full registry (rows scale with
+# release: new tools are added and old ones retired each version).
 nexusrecon tools | wc -l
 ```
 
@@ -220,8 +221,9 @@ nexusrecon run --help
 
 **Pass condition:**
 - `exit_code=0`
-- Registered total = **89**
-- Available count is at least **40** (more if you populated more keys/binaries)
+- Registered total matches what the previous run produced (drift only
+  on intentional add / retire — flag any silent change)
+- Available count is at least 40 (more if you populated more keys / binaries)
 - `run --help` lists `--scope`, `--seeds`, `--mode`, `--dispatch-mode`,
   `--validate-creds`, `--generate-phishing`, `--dry-run`, `--use-graph`
 

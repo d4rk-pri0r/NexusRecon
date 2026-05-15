@@ -92,7 +92,7 @@ pip install -e ".[dev]"
 ```bash
 source venv/bin/activate
 nexusrecon --help        # Typer help screen
-nexusrecon tools         # 89 tools listed
+nexusrecon tools         # full tool catalogue
 nexusrecon               # Launches the TUI (TTY only)
 ```
 
@@ -821,7 +821,8 @@ pip3 show nexusrecon
 nexusrecon --help
 # Expected: Usage: nexusrecon [OPTIONS] COMMAND [ARGS]...
 
-# List tools — should show 89 tools, most marked Available: False (no keys yet)
+# List the full tool catalogue. Most rows will show Available: False
+# until you populate .env with API keys / install optional binaries.
 nexusrecon tools
 ```
 
@@ -1002,7 +1003,11 @@ for t in sorted(tools, key=lambda x: x['name']):
 "
 ```
 
-**Expected:** 89 tools listed across 17 categories. Without API keys or binaries, most show `---` for availability — that is correct.
+**Expected:** the full tool registry listed, grouped across the
+category buckets (subdomain enumeration, breach data, code-leakage,
+cloud posture, vuln intel, mobile, pretext, etc.). Without API keys or
+binaries configured, most rows will show `---` for availability — that
+is correct; the framework selects the keyed-up subset at runtime.
 
 ---
 
@@ -1300,4 +1305,4 @@ Add `source /path/to/agentic-osint/venv/bin/activate` to your shell's rc file
 
 ---
 
-*This manual covers NexusRecon v0.5.0 (pre-beta, 89 tools, dynamic dispatch, credential harvest, attack surface scoring, interactive TUI). Authorized use only — see DISCLAIMER.md.*
+*This manual covers NexusRecon v0.5.0 (pre-beta — extensible tool registry, dynamic dispatch, credential harvest, attack surface scoring, interactive TUI). Authorized use only — see DISCLAIMER.md.*

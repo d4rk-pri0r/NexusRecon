@@ -119,7 +119,7 @@ post-install verification step. Expected output near the end:
 ```
 [+] nexusrecon package imports OK
 [+] nexusrecon CLI on PATH: .../agentic-osint/venv/bin/nexusrecon
-[+] Tool registry OK: 89 tools registered
+[+] Tool registry OK: <N> tools registered
 [*] External binary presence check:
   [+] subfinder
   [+] amass
@@ -159,8 +159,8 @@ campaign still completes.
 ### 4.4 Verify install
 
 ```bash
-nexusrecon --help                # should list 10 commands
-nexusrecon tools | head          # should show ~89 tools registered
+nexusrecon --help                # should list every command
+nexusrecon tools | head          # first page of the live tool registry
 ```
 
 If `nexusrecon --help` exits cleanly and `nexusrecon tools` shows the

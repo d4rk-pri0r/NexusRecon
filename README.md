@@ -15,13 +15,14 @@
 [![status](https://img.shields.io/badge/status-pre--beta-orange)](#status)
 [![version](https://img.shields.io/badge/version-0.5.0-blue)](nexusrecon/__init__.py)
 [![python](https://img.shields.io/badge/python-3.11--3.13-blue)](pyproject.toml)
-[![tools](https://img.shields.io/badge/tools-89-green)](MANUAL.md#7-tool-inventory)
+[![engine](https://img.shields.io/badge/engine-agentic-purple)](#why-agentic-osint)
 [![license](https://img.shields.io/badge/license-proprietary-red)](DISCLAIMER.md)
 
-NexusRecon plans, executes, and reports on a full passive-to-light-active OSINT
-campaign against a scope you authorize — running 89 reconnaissance tools across
-a 9-phase pipeline, steered between phases by an LLM dispatcher that proposes
-targeted follow-up queries based on what the previous phase actually found.
+You hand it a scope file and a seed domain. ~30–60 minutes later it
+hands you back a ranked, prioritized, citation-backed attack-surface
+report — every finding traced to the tool that produced it, every tool
+invocation validated against the signed scope and written to a
+hash-chained audit log.
 
 > ⚠ **Authorized use only.** Every tool invocation is validated against a signed
 > scope file. Out-of-scope targets are silently dropped and logged. Use only
@@ -30,22 +31,75 @@ targeted follow-up queries based on what the previous phase actually found.
 
 ---
 
-## What it does
+## Why agentic OSINT?
 
-You hand NexusRecon a scope file and a seed domain. It hands you back:
+The hard part of an OSINT engagement isn't running the tools — it's
+deciding **which tool to run next, on what target, in response to what
+the previous tool just told you**.
 
-- A **ranked attack-thread report** (`top_threads.md`) — the 10 most actionable
-  paths into the target, scored by `CVSS × EPSS × KEV-boost × Metasploit-boost`.
-- A **master narrative report** (`master_report.md`) — one cohesive document
-  written by an LLM that walks a client through what was found and what it means.
-- An **asset inventory**, **phishing package**, **cloud posture report**, an
-  **attack-surface matrix**, **vuln correlation**, and a **Maltego CSV** export
-  — every artifact tagged with the scope hash and a hash-chained audit log.
+A subdomain harvester surfaces `vpn.acme.com` → that means you want to
+fingerprint its version with Shodan → that means you want to check
+NVD and KEV for known CVEs → that means you want to cross-reference
+breach data to see whether a known credential gives you a path in.
+A human operator does that swivel-chair manually across a dozen tools
+and as many output formats. NexusRecon does it automatically.
 
-Between phases an LLM **dynamic dispatcher** inspects what's been collected and
-fires extra targeted tool runs to fill gaps the static pipeline missed — for
-example, if Phase 1 turns up an Android app, the dispatcher will queue the APK
-analyzer against that package before Phase 2 begins.
+Between every two phases of a campaign, an **LLM dispatcher** inspects
+the collected state — what's been found, what's still missing — and
+queues targeted follow-up tool runs based on what the data warrants:
+
+- Phase 1 surfaces a Play Store Android app → dispatcher queues the
+  **APK analyzer** against that package before Phase 2 starts.
+- Phase 2 surfaces an M365 federation endpoint → dispatcher queues
+  **AWS / GCP enumeration** to see if the org is multi-cloud.
+- Phase 4 surfaces an executive's email + a 2023 breach hit →
+  dispatcher hands it to the **phishing drafter** to write a targeted
+  pretext referencing recent SEC filings.
+
+At the end of the run a **`master_reporter` agent** synthesises everything
+into a single cohesive narrative report that an operator can hand
+straight to the client's CISO — backed by:
+
+- a **ranked attack-thread list** scored by `CVSS × EPSS × KEV × Metasploit`,
+- a **hash-chained audit log** of every tool invocation and scope-gate decision,
+- a **citation graph** linking every finding back to its source tool.
+
+**The value vs. running tools by hand**: an OSINT analyst running the
+same source set manually against a single seed domain typically loses
+6–8 hours, doesn't get cross-tool correlation, doesn't get LLM-driven
+follow-up, doesn't produce a ranked threat list, and doesn't produce
+an audit trail their client's legal team will accept.
+
+---
+
+## A worked example
+
+Given seed `acme.com`, mode `medium`, dispatcher `lite`, on a single
+laptop with default API keys configured — typical 30–60 min run:
+
+| When | What happens |
+|------|-------------|
+| **Phase 1** · passive footprint | crt.sh + Subfinder + Amass + SecurityTrails surface 47 subdomains. One is `vpn.acme.com`. |
+| **Dispatcher fires** | Notices the VPN endpoint and an Android app discovered in the Play Store probe. Queues Shodan against `vpn.acme.com` and the APK analyzer against the Play Store package — both run before Phase 2 starts. |
+| **Phase 2** · active surface | httpx + gowitness fingerprint 12 live HTTP services; one is an unauthenticated admin console. |
+| **Phase 3** · cloud + identity | Azure/M365 enumerator finds the M365 federation; bucket_enum finds two public S3 buckets. |
+| **Phase 4** · correlation | LLM correlator stitches subdomains → IPs → cloud account, scores attribution confidence so we don't claim cloud assets we can't prove. |
+| **Dispatcher fires** | Sees the admin console + a GitHub org match. Queues a deeper GitHub scan and a urlscan submission. |
+| **Phase 5** · people + pretext | Hunter + HIBP harvest 9 employee emails; 3 have hits in known breach corpora. |
+| **Phase 7** · vuln correlation | NVD + KEV + EPSS match 4 CVEs to the fingerprinted tech. The Shodan-detected VPN version maps to a KEV-listed CVE with EPSS 0.87. |
+| **Dispatcher fires** | KEV-listed CVE → high-priority threat. Queues additional vuln intel + scopes a follow-up phishing draft against the 3 breached employees. |
+| **Phase 8** · attack-surface rank | Scores all findings; top thread is "KEV-listed VPN CVE on `vpn.acme.com` + 3 breached employees in scope for credential reuse". |
+| **Phase 9** · reports | `master_reporter` agent writes a cohesive narrative for the CISO; `phishing_drafter` produces 3 targeted templates. |
+
+**Output**: a `campaigns/acme/<engagement>/<id>/reports/` directory with
+17 deliverables — master report, ranked top threads, asset inventory,
+phishing package, attack-surface matrix, vuln correlation, hash-chained
+audit log, Maltego CSV export, the lot.
+
+Doing the same by hand: 6–8 hours of context switching across crt.sh,
+Subfinder, Amass, SecurityTrails, Shodan, Censys, urlscan, GitHub,
+Hunter, HIBP, NVD, KEV, EPSS, Maltego — with no automatic correlation,
+no LLM follow-up loop, no ranked threats, no audit chain.
 
 ---
 
@@ -67,10 +121,10 @@ analyzer against that package before Phase 2 begins.
            │                  │                    │
            ▼                  ▼                    ▼
      ┌──────────┐       ┌──────────┐         ┌──────────────┐
-     │ 89 tools │       │ 8 LLM    │         │  Dynamic     │
-     │ T0–T3    │       │ phase    │         │  dispatcher  │
-     │ (passive │       │ agents   │         │  (between    │
-     │ → active)│       │          │         │   phases)    │
+     │ OSINT    │       │ 8 LLM    │         │  Dynamic     │
+     │ tool     │       │ phase    │         │  dispatcher  │
+     │ registry │       │ agents   │         │  (between    │
+     │ (T0–T3)  │       │          │         │   phases)    │
      └──────────┘       └──────────┘         └──────────────┘
            │                  │                    │
            └────────────┬─────┴────────────────────┘
@@ -120,7 +174,7 @@ Running with no arguments opens an interactive Textual UI:
    │                                                            │
    │              [ N E X U S R E C O N    v 0.5.0 ]            │
    │                                                            │
-   │       89 tools registered · 0 campaigns · LLM: anthropic   │
+   │       N tools registered · 0 campaigns · LLM: anthropic    │
    │                                                            │
    │       🎯  New Campaign      (n)                            │
    │       🔄  Resume Campaign   (r)                            │
@@ -137,7 +191,7 @@ From the TUI you can:
 
 - Walk a **new-campaign wizard** that builds the scope file for you
 - **Edit API keys** in `.env` via a masked editor (the Configuration screen)
-- **Browse the tool catalogue** and see which tools are unlocked by which keys
+- **Browse the live tool catalogue** and see which tools are unlocked by which keys
 - **Resume** or **diff** prior campaigns
 
 ### 3. Or use the CLI directly
@@ -186,8 +240,13 @@ nexusrecon resume nr-20260514-120000-abc12345
 | **8. Attack surface rank** | `CVSS × EPSS × KEV × Metasploit` scoring | (scoring engine) |
 | **9. Reporting** | LLM-synthesized narrative + 17 deliverables | (master_reporter agent) |
 
-**89 tools across 17 categories** — see [`MANUAL.md`](MANUAL.md#7-tool-inventory)
-for the full catalogue.
+The tool registry spans subdomain enumeration, certificate transparency,
+DNS / passive DNS, breach data, email / identity, code-leakage scanners,
+cloud posture (AWS / Azure / GCP), threat intel (Shodan / Censys / VT /
+GreyNoise / urlscan), vuln intel (NVD / KEV / EPSS / ExploitDB / GH
+Advisory), mobile, and HUMINT / pretext sources. New tools land every
+release. Run `nexusrecon tools` for the live catalogue, or browse the
+**Tools** screen in the TUI.
 
 ---
 
@@ -281,7 +340,7 @@ formats may shift before 1.0. We track open issues in
 What's stable:
 
 - 9-phase pipeline + credential harvest
-- 89-tool registry with scope-gated execution
+- Extensible tool registry with scope-gated execution
 - LLM dispatcher (lite / full / off)
 - Audit chain, cost tracking, rate limiter
 - Master report + 16 other deliverables
