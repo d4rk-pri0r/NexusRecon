@@ -175,6 +175,16 @@ class TestGitHubReconTool:
         assert result.success is False
         assert result.error
 
+    @patch("nexusrecon.core.config.NexusConfig.get_secret", return_value=None)
+    async def test_missing_key(self, _secret) -> None:
+        """No GITHUB_TOKEN configured — tool refuses to run rather than
+        falling back to unauthenticated requests (capped at 60 req/hr,
+        which silently breaks the 20-dork scan)."""
+        tool = GitHubTool()
+        result = await tool.run("example.com")
+        assert result.success is False
+        assert "GITHUB_TOKEN" in result.error
+
 
 # ────────────────────────────────────────────────────────────────────────
 # github_actions_leaks — api.github.com (search/code + raw file fetch)

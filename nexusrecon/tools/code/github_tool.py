@@ -77,9 +77,8 @@ class GitHubTool(OSINTTool):
         super().__init__()
         self._http: Optional[httpx.AsyncClient] = None
 
-    async def _get_client(self) -> httpx.AsyncClient:
+    async def _get_client(self, token: str) -> httpx.AsyncClient:
         if self._http is None:
-            token = self.config.get_secret("github_token") or ""
             headers = {
                 "Authorization": f"token {token}",
                 "Accept": "application/vnd.github+json",
@@ -96,11 +95,27 @@ class GitHubTool(OSINTTool):
     async def _close(self) -> None:
         if self._http:
             await self._http.aclose()
+            self._http = None
 
     async def run(self, target: str, **kwargs: Any) -> ToolResult:
+        # The tool declares ``requires_keys = ["github_token"]`` but a
+        # previous revision wrote ``token = self.config.get_secret(...)
+        # or ""`` in ``_get_client``, falling back to an empty string
+        # token. GitHub treats an empty ``Authorization: token`` header
+        # as unauthenticated, which caps the rate at 60 req/hr — far
+        # too low for the 20-dork scan in ``_search_secrets``. The
+        # operator saw quiet rate-limit-driven empty results instead
+        # of a clear "set GITHUB_TOKEN" error.
+        token = self.config.get_secret("github_token")
+        if not token:
+            return ToolResult(
+                success=False, source=self.name,
+                error="GITHUB_TOKEN not set",
+            )
+
         results: Dict[str, Any] = {}
         try:
-            client = await self._get_client()
+            client = await self._get_client(token)
 
             # Determine target type
             target_type = kwargs.get("target_type", "domain")
