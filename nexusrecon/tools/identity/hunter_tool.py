@@ -22,12 +22,37 @@ class HunterTool(OSINTTool):
             return ToolResult(success=False, source=self.name, error="HUNTER_API_KEY not set")
 
         try:
-            client = httpx.AsyncClient(base_url="https://api.hunter.io/v2", timeout=15.0)
+            async with httpx.AsyncClient(
+                base_url="https://api.hunter.io/v2", timeout=15.0,
+            ) as client:
+                # Previous revision read ``if resp.status_code == 200``
+                # and silently fell through on auth/rate-limit/server
+                # errors, returning ``success=True`` with an empty
+                # ``emails`` list. That hid bad ``HUNTER_API_KEY``
+                # values from the operator. Hunter documents:
+                #   401 Unauthorized → invalid key
+                #   429 Rate limit   → free-tier quota (25 req/mo)
+                #                      or paid-tier burst limit
+                resp = await client.get(
+                    "/domain-search",
+                    params={"domain": target, "api_key": key},
+                )
+                if resp.status_code in (401, 403):
+                    return ToolResult(
+                        success=False, source=self.name,
+                        error=f"Hunter auth failure (HTTP {resp.status_code}) — check HUNTER_API_KEY",
+                    )
+                if resp.status_code == 429:
+                    return ToolResult(
+                        success=False, source=self.name,
+                        error="Hunter rate limit / monthly quota exceeded — upgrade plan or back off",
+                    )
+                if resp.status_code != 200:
+                    return ToolResult(
+                        success=False, source=self.name,
+                        error=f"Hunter domain-search returned HTTP {resp.status_code}",
+                    )
 
-            # Domain search
-            resp = await client.get("/domain-search", params={"domain": target, "api_key": key})
-            domain_data = {}
-            if resp.status_code == 200:
                 domain_data = resp.json()
 
             # Email pattern extraction
@@ -46,10 +71,8 @@ class HunterTool(OSINTTool):
 
             # Domain info
             domain_info = domain_data.get("data", {}).get("organization", {})
-            pattern_counts = domain_data.get("data", {}).get("email_pattern", "")
             pattern_type = domain_data.get("data", {}).get("pattern", "")
 
-            await client.aclose()
             return ToolResult(
                 success=True, source=self.name,
                 data={"emails": emails, "pattern": pattern_type, "domain_info": domain_info},

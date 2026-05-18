@@ -80,19 +80,37 @@ class TestHunterTool:
         assert result.result_count == 0
         assert result.data["emails"] == []
 
-    @patch("nexusrecon.core.config.NexusConfig.get_secret", return_value="fake-hunter-key")
+    @patch("nexusrecon.core.config.NexusConfig.get_secret", return_value="bad-hunter-key")
     async def test_unauthorized(self, _secret) -> None:
-        """Non-200 leaves ``domain_data`` empty — tool returns success
-        with zero emails. This matches the source's defensive behavior:
-        the API often returns 401/429 but the tool never tracebacks."""
+        """401 = invalid Hunter API key — surfaced as explicit failure
+        so the operator can rotate, not as a silent empty response."""
         tool = HunterTool()
         with respx.mock:
             respx.get(url__startswith=self.URL).mock(return_value=Response(401))
             result = await tool.run("example.com")
-        # No exception raised, no emails harvested
-        assert result.success is True
-        assert result.result_count == 0
-        assert result.data["emails"] == []
+        assert result.success is False
+        assert "auth" in result.error.lower() or "HUNTER_API_KEY" in result.error
+
+    @patch("nexusrecon.core.config.NexusConfig.get_secret", return_value="fake-hunter-key")
+    async def test_rate_limited(self, _secret) -> None:
+        """429 = Hunter rate limit or monthly quota exceeded (free tier
+        is 25 req/mo). Real failure, not a "no data" answer."""
+        tool = HunterTool()
+        with respx.mock:
+            respx.get(url__startswith=self.URL).mock(return_value=Response(429))
+            result = await tool.run("example.com")
+        assert result.success is False
+        assert "rate limit" in result.error.lower() or "quota" in result.error.lower()
+
+    @patch("nexusrecon.core.config.NexusConfig.get_secret", return_value="fake-hunter-key")
+    async def test_server_error(self, _secret) -> None:
+        """5xx is a Hunter outage."""
+        tool = HunterTool()
+        with respx.mock:
+            respx.get(url__startswith=self.URL).mock(return_value=Response(503))
+            result = await tool.run("example.com")
+        assert result.success is False
+        assert "503" in result.error
 
     @patch("nexusrecon.core.config.NexusConfig.get_secret", return_value="fake-hunter-key")
     async def test_malformed_json(self, _secret) -> None:
