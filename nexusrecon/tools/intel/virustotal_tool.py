@@ -23,29 +23,33 @@ class VirusTotalTool(OSINTTool):
             return ToolResult(success=False, source=self.name, error="VIRUSTOTAL_API_KEY not set")
 
         try:
-            client = httpx.AsyncClient(
+            async with httpx.AsyncClient(
                 base_url="https://www.virustotal.com/api/v3",
                 headers={"x-apikey": key},
                 timeout=15.0,
-            )
+            ) as client:
+                target_type = kwargs.get("target_type", "domain")
+                if target_type == "domain":
+                    endpoint = f"/domains/{target}"
+                elif target_type == "ip":
+                    endpoint = f"/ip_addresses/{target}"
+                elif target_type == "url":
+                    url_id = base64.urlsafe_b64encode(target.encode()).decode().strip("=")
+                    endpoint = f"/urls/{url_id}"
+                else:
+                    return ToolResult(success=False, source=self.name, error=f"Unknown type: {target_type}")
 
-            target_type = kwargs.get("target_type", "domain")
-            if target_type == "domain":
-                endpoint = f"/domains/{target}"
-            elif target_type == "ip":
-                endpoint = f"/ip_addresses/{target}"
-            elif target_type == "url":
-                url_id = base64.urlsafe_b64encode(target.encode()).decode().strip("=")
-                endpoint = f"/urls/{url_id}"
-            else:
-                return ToolResult(success=False, source=self.name, error=f"Unknown type: {target_type}")
+                # The status branches below replace a bare ``if resp.status_code == 200``
+                # gate that previously masked VT auth errors (401), rate limits (429),
+                # and 5xx outages as silent empty responses.
+                resp = await client.get(endpoint)
+                fail = self._classify_status(resp, endpoint)
+                if fail is not None:
+                    return fail
 
-            resp = await client.get(endpoint)
-            data = {}
-            if resp.status_code == 200:
                 r = resp.json()
                 attrs = r.get("data", {}).get("attributes", {})
-                data = {
+                data: Dict[str, Any] = {
                     "reputation": attrs.get("reputation"),
                     "categories": attrs.get("categories", {}),
                     "last_analysis_stats": attrs.get("last_analysis_stats", {}),
@@ -55,7 +59,10 @@ class VirusTotalTool(OSINTTool):
                     "creation_date": attrs.get("creation_date"),
                 }
 
-                # Subdomains for domain reports
+                # Subdomains for domain reports — auxiliary endpoint; we
+                # keep the soft-fail behaviour because the primary
+                # /domains/{target} response is already in hand and a
+                # subdomain-fetch failure shouldn't poison the call.
                 if target_type == "domain":
                     sub_resp = await client.get(f"/domains/{target}/subdomains", params={"limit": 20})
                     if sub_resp.status_code == 200:
@@ -63,10 +70,29 @@ class VirusTotalTool(OSINTTool):
                             d.get("id") for d in sub_resp.json().get("data", [])
                         ]
 
-            await client.aclose()
             return ToolResult(
                 success=True, source=self.name, data=data,
                 result_count=len(data.get("subdomains", [])),
             )
         except Exception as e:
             return ToolResult(success=False, source=self.name, error=str(e))
+
+    def _classify_status(self, resp: httpx.Response, endpoint: str) -> Optional[ToolResult]:
+        """Convert provider error codes into explicit failures.
+        Returns ``None`` on 2xx so the caller continues."""
+        if resp.status_code in (401, 403):
+            return ToolResult(
+                success=False, source=self.name,
+                error=f"VirusTotal auth failure on {endpoint} (HTTP {resp.status_code}) — check VIRUSTOTAL_API_KEY",
+            )
+        if resp.status_code == 429:
+            return ToolResult(
+                success=False, source=self.name,
+                error=f"VirusTotal rate limit on {endpoint} — back off and retry",
+            )
+        if resp.status_code != 200:
+            return ToolResult(
+                success=False, source=self.name,
+                error=f"VirusTotal {endpoint} returned HTTP {resp.status_code}",
+            )
+        return None

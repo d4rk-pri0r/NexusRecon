@@ -314,10 +314,37 @@ class TestVirusTotalTool:
         assert result.result_count == 0
         assert result.data["subdomains"] == []
 
+    @patch("nexusrecon.core.config.NexusConfig.get_secret", return_value="bad-key")
+    async def test_unauthorized(self, _secret) -> None:
+        """401 = bad VirusTotal key."""
+        tool = VirusTotalTool()
+        with respx.mock:
+            respx.get(url__startswith=self.URL).mock(return_value=Response(401))
+            result = await tool.run("example.com")
+        assert result.success is False
+        assert "auth" in result.error.lower() or "VIRUSTOTAL" in result.error
+
+    @patch("nexusrecon.core.config.NexusConfig.get_secret", return_value="fake-vt-key")
+    async def test_rate_limited(self, _secret) -> None:
+        tool = VirusTotalTool()
+        with respx.mock:
+            respx.get(url__startswith=self.URL).mock(return_value=Response(429))
+            result = await tool.run("example.com")
+        assert result.success is False
+        assert "rate limit" in result.error.lower()
+
+    @patch("nexusrecon.core.config.NexusConfig.get_secret", return_value="fake-vt-key")
+    async def test_server_error(self, _secret) -> None:
+        tool = VirusTotalTool()
+        with respx.mock:
+            respx.get(url__startswith=self.URL).mock(return_value=Response(503))
+            result = await tool.run("example.com")
+        assert result.success is False
+        assert "503" in result.error
+
     @patch("nexusrecon.core.config.NexusConfig.get_secret", return_value="fake-vt-key")
     async def test_error_path(self, _secret) -> None:
-        # VT only parses on 200; non-200 returns success=True with empty
-        # data. Drive an exception to exercise the failure branch.
+        """Network-level failure — outer except branch."""
         tool = VirusTotalTool()
         with respx.mock:
             respx.get(url__startswith=self.URL).mock(
