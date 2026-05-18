@@ -44,6 +44,18 @@ class HudsonRockTool(OSINTTool):
         except Exception as exc:
             return ToolResult(success=False, source=self.name, error=str(exc))
 
+        # ``_check_email`` and ``_check_domain`` signal upstream HTTP
+        # failures by returning ``{"error": "<message>"}``. Previously
+        # ``run()`` ignored that and reported ``success=True`` with the
+        # error stashed inside ``data["error"]`` — so a 5xx outage from
+        # Cavalier looked identical to "this email isn't compromised"
+        # to downstream consumers. Surface those as proper failures so
+        # ``ToolResult.error`` is meaningful.
+        if isinstance(data, dict) and data.get("error") and "compromised" not in data:
+            return ToolResult(
+                success=False, source=self.name, error=data["error"],
+            )
+
         compromised = data.get("compromised", False)
         return ToolResult(
             success=True,

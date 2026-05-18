@@ -179,16 +179,17 @@ class TestHudsonRockTool:
         assert "not found" in result.data["message"].lower()
 
     async def test_error_path(self) -> None:
-        """5xx is surfaced as an in-band error message inside ``data``
-        rather than re-raised; ``compromised`` is missing so
-        ``result_count`` falls back to 0 and ``success`` stays True."""
+        """5xx from Cavalier's community endpoint is now surfaced as a
+        proper ``success=False`` with the status code in ``error``.
+        Previously the failure was silently stashed inside
+        ``data["error"]`` while ``success`` stayed True — an outage
+        looked identical to "this email isn't compromised" downstream."""
         tool = HudsonRockTool()
         with respx.mock:
             respx.get(url__startswith=self.URL).mock(return_value=Response(503))
             result = await tool.run("user@example.com", target_type="email")
-        assert result.success is True
-        assert result.result_count == 0
-        assert "503" in result.data["error"]
+        assert result.success is False
+        assert "503" in result.error
 
     async def test_malformed_json(self) -> None:
         tool = HudsonRockTool()
