@@ -119,16 +119,12 @@ class TestHunterTool:
 # ────────────────────────────────────────────────────────────────────────
 #
 # This tool takes no API; it scores pattern frequencies across the
-# ``emails`` kwarg. Note: the source's KNOWN_PATTERNS regexes all end
-# in ``@`` but the tool matches them against the ``@``-stripped local
-# part — so today every pattern fails to match and ``most_likely_pattern``
-# always resolves to ``"unknown"``. We test the contract the tool
-# actually delivers (counts, parsed entries, recommendation string)
-# rather than what the docstring implies; a fix to the matching logic
-# would tighten these assertions, not invalidate them.
+# ``emails`` kwarg, matching each local part against the regexes in
+# ``KNOWN_PATTERNS``. Returns the dominant pattern, a confidence
+# score, and a human-readable recommendation.
 #
 # The four-test pattern maps to:
-#   happy: a homogeneous batch → output structure is fully populated
+#   happy: a homogeneous batch → ``first.last`` wins with high confidence
 #   empty: no samples → success with explanatory ``error`` field
 #   error: every sample malformed → no patterns matched, "unknown"
 #   malformed: bad types mixed in → tool skips bad entries gracefully
@@ -136,6 +132,7 @@ class TestHunterTool:
 class TestEmailFormatTool:
     async def test_happy_path(self) -> None:
         tool = EmailFormatTool()
+        # 5 × first.last + 1 × flast → first.last should dominate at 5/6 ≈ 0.833
         samples = [
             "alice.smith@example.com",
             "bob.jones@example.com",
@@ -153,9 +150,11 @@ class TestEmailFormatTool:
         # Lowercased preservation
         assert result.data["parsed_emails"][0]["email"] == "alice.smith@example.com"
         assert result.data["parsed_emails"][0]["local"] == "alice.smith"
-        # Recommendation string is always returned regardless of outcome
-        assert isinstance(result.data["recommendation"], str)
-        assert result.data["recommendation"]
+        # Pattern detection works: 5/6 inputs are first.last form
+        assert result.data["most_likely_pattern"] == "first.last"
+        assert result.data["most_likely_confidence"] > 0.8
+        # And the recommendation reflects that high confidence
+        assert "High confidence" in result.data["recommendation"]
 
     async def test_empty_response(self) -> None:
         tool = EmailFormatTool()
@@ -197,8 +196,13 @@ class TestEmailFormatTool:
         assert result.data["total_emails"] == 5
         # parsed_emails only includes the @-containing entries
         assert len(result.data["parsed_emails"]) == 3
-        # Tool gracefully handles malformed inputs without raising
-        assert isinstance(result.data["recommendation"], str)
+        # The valid inputs are all first.last so that wins, but only at
+        # 3/5 = 0.6 confidence — the 2 malformed entries dilute the score
+        # without crashing.
+        assert result.data["most_likely_pattern"] == "first.last"
+        assert result.data["most_likely_confidence"] == 0.6
+        # 0.6 is "Moderate confidence" per the tool's recommendation thresholds
+        assert "Moderate confidence" in result.data["recommendation"]
 
 
 # ────────────────────────────────────────────────────────────────────────

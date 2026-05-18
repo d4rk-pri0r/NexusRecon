@@ -6,17 +6,40 @@ from typing import Any, Dict, List, Optional
 from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
 
+# Patterns are matched against the ``@``-stripped local part of an
+# email (e.g. ``alice.smith`` from ``alice.smith@example.com``).
+# Order matters: the first regex to match wins, so more-specific
+# patterns are listed first to prevent the catch-all ``first`` pattern
+# from swallowing structured ones like ``first.last``.
+#
+# The trailing ``$`` anchor is essential — without it, ``^([a-z]+)``
+# would match the leading letters of every local part regardless of
+# what comes after, and every input would resolve to ``"first"``.
+#
+# Some patterns are textually ambiguous (``smith.j`` could be
+# ``last.f`` or ``first.last`` depending on cultural naming order;
+# ``jsmith`` could be ``flast`` or ``firstlast``). For ties the order
+# below favours the convention most common in US corporate email
+# directories. A ``last_first`` regex was present in earlier revisions
+# but was identical to ``first.last`` — dropped because it could
+# never win on text alone.
 KNOWN_PATTERNS = {
-    "flast": r'^([a-z])([a-z]+)@',
-    "first.last": r'^([a-z]+)\.([a-z]+)@',
-    "firstlast": r'^([a-z]+)([a-z]+)@',
-    "f.last": r'^([a-z])\.([a-z]+)@',
-    "first": r'^([a-z]+)@',
-    "first_l": r'^([a-z]+)_([a-z])@',
-    "f_last": r'^([a-z])_([a-z]+)@',
-    "first_middle_last": r'^([a-z]+)\.([a-z]+)\.([a-z]+)@',
-    "last_first": r'^([a-z]+)\.([a-z]+)@',
-    "last.f": r'^([a-z]+)\.([a-z])@',
+    # 3-token dot-separated — most specific, tried first
+    "first_middle_last": r'^([a-z]+)\.([a-z]+)\.([a-z]+)$',  # alice.b.smith
+    # 2-token forms with a single-letter component — must come before
+    # the generic ``first.last`` so e.g. ``j.smith`` matches ``f.last``
+    # instead of being eaten by ``first.last`` (which also matches).
+    "f.last":            r'^([a-z])\.([a-z]+)$',             # j.smith
+    "last.f":            r'^([a-z]+)\.([a-z])$',             # smith.j
+    "f_last":            r'^([a-z])_([a-z]+)$',              # j_smith
+    "first_l":           r'^([a-z]+)_([a-z])$',              # smith_j
+    # Generic 2-token dot form
+    "first.last":        r'^([a-z]+)\.([a-z]+)$',            # alice.smith
+    # Single-token forms — tried last because they match anything 1+
+    # lowercase letters and would otherwise eat the structured patterns.
+    "flast":             r'^([a-z])([a-z]+)$',               # jsmith (init + last)
+    "firstlast":         r'^([a-z]+)([a-z]+)$',              # alicesmith
+    "first":             r'^([a-z]+)$',                      # alice
 }
 
 
