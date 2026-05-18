@@ -358,9 +358,11 @@ class TestWHOISTool:
             return_value=_make_whois_obj(empty_fixture),
         ):
             result = await tool.run("does-not-exist-12345.invalid")
-        # Tool always reports success=True with result_count=1 if the
-        # library returns at all — the upstream null fields just propagate.
+        # Tool returns success=True (the library call succeeded) but
+        # ``result_count`` reflects "no useful data" — was previously
+        # always 1 even for fully empty responses.
         assert result.success is True
+        assert result.result_count == 0
         assert result.data["registrar"] is None
         assert result.data["nameservers"] == []
         assert result.data["status"] == []

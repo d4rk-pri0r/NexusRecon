@@ -31,6 +31,18 @@ class WHOISTool(OSINTTool):
                 "status": w.status if w.status else [],
                 "dnssec": w.dnssec,
             }
-            return ToolResult(success=True, source=self.name, data=data, result_count=1)
+            # ``result_count`` should reflect whether the lookup
+            # actually returned useful data. The python-whois library
+            # returns an object with every field set to ``None`` for
+            # unregistered TLDs, privacy-redacted domains, and
+            # registrars that don't expose WHOIS — previously the tool
+            # always returned ``result_count=1`` regardless, which
+            # made empty lookups indistinguishable from real ones
+            # in the campaign's aggregate metrics.
+            has_data = any(v not in (None, [], "", "None") for v in data.values())
+            return ToolResult(
+                success=True, source=self.name, data=data,
+                result_count=1 if has_data else 0,
+            )
         except Exception as e:
             return ToolResult(success=False, source=self.name, error=str(e))
