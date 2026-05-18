@@ -97,11 +97,42 @@ class TestShodanTool:
         assert result.data["search"]["hosts"] == []
         assert result.data["search"]["total"] == 0
 
+    @patch("nexusrecon.core.config.NexusConfig.get_secret", return_value="bad-key")
+    async def test_unauthorized(self, _secret) -> None:
+        """401 from Shodan = bad/expired key — surface clearly so the
+        operator can rotate, not silently empty."""
+        tool = ShodanTool()
+        with respx.mock:
+            respx.get(url__startswith=self.URL).mock(return_value=Response(401))
+            result = await tool.run("example.com")
+        assert result.success is False
+        assert "auth" in result.error.lower() or "SHODAN_API_KEY" in result.error
+
+    @patch("nexusrecon.core.config.NexusConfig.get_secret", return_value="fake-shodan-key")
+    async def test_rate_limited(self, _secret) -> None:
+        """429 is rate-limit; tool stops and reports failure rather than
+        masquerading the throttle as a zero-result answer."""
+        tool = ShodanTool()
+        with respx.mock:
+            respx.get(url__startswith=self.URL).mock(return_value=Response(429))
+            result = await tool.run("example.com")
+        assert result.success is False
+        assert "rate limit" in result.error.lower()
+
+    @patch("nexusrecon.core.config.NexusConfig.get_secret", return_value="fake-shodan-key")
+    async def test_server_error(self, _secret) -> None:
+        """5xx from Shodan is a provider outage."""
+        tool = ShodanTool()
+        with respx.mock:
+            respx.get(url__startswith=self.URL).mock(return_value=Response(503))
+            result = await tool.run("example.com")
+        assert result.success is False
+        assert "503" in result.error
+
     @patch("nexusrecon.core.config.NexusConfig.get_secret", return_value="fake-shodan-key")
     async def test_error_path(self, _secret) -> None:
-        # Shodan's parser only runs on 200; non-200 silently skips and
-        # returns success=True with empty data. To exercise the failure
-        # branch we drive an httpx-level exception.
+        """Network-level failure (DNS, refused, TLS) — caught by the
+        outer except and reported as failure."""
         tool = ShodanTool()
         with respx.mock:
             respx.get(url__startswith=self.URL).mock(
