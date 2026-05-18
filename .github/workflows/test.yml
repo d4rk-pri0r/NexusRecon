@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # CrewAI does not yet support 3.14 — see Prerequisites in MANUAL.md.
+        # CrewAI does not yet support 3.14, see Prerequisites in MANUAL.md.
         python-version: ["3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
@@ -34,7 +34,7 @@ jobs:
         # needs secrets the public CI can't provide).
         run: pytest tests/unit tests/integration tests/smoke -q --tb=short
 
-  # Lint runs once on the latest supported Python — same code under
+  # Lint runs once on the latest supported Python, same code under
   # every interpreter so no benefit from the full matrix.
   ruff:
     name: ruff lint

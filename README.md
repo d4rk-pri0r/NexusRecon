@@ -18,9 +18,9 @@
 [![engine](https://img.shields.io/badge/engine-agentic-purple)](#why-agentic-osint)
 [![license](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
-You hand it a scope file and a seed domain. ~30–60 minutes later it
+You hand it a scope file and a seed domain. ~30-60 minutes later it
 hands you back a ranked, prioritized, citation-backed attack-surface
-report — every finding traced to the tool that produced it, every tool
+report, every finding traced to the tool that produced it, every tool
 invocation validated against the signed scope and written to a
 hash-chained audit log.
 
@@ -33,7 +33,7 @@ hash-chained audit log.
 
 ## Why agentic OSINT?
 
-The hard part of an OSINT engagement isn't running the tools — it's
+The hard part of an OSINT engagement isn't running the tools, it's
 deciding **which tool to run next, on what target, in response to what
 the previous tool just told you**.
 
@@ -45,7 +45,7 @@ A human operator does that swivel-chair manually across a dozen tools
 and as many output formats. NexusRecon does it automatically.
 
 Between every two phases of a campaign, an **LLM dispatcher** inspects
-the collected state — what's been found, what's still missing — and
+the collected state, what's been found, what's still missing, and
 queues targeted follow-up tool runs based on what the data warrants:
 
 - Phase 1 surfaces a Play Store Android app → dispatcher queues the
@@ -58,7 +58,7 @@ queues targeted follow-up tool runs based on what the data warrants:
 
 At the end of the run a **`master_reporter` agent** synthesises everything
 into a single cohesive narrative report that an operator can hand
-straight to the client's CISO — backed by:
+straight to the client's CISO, backed by:
 
 - a **ranked attack-thread list** scored by `CVSS × EPSS × KEV × Metasploit`,
 - a **hash-chained audit log** of every tool invocation and scope-gate decision,
@@ -66,7 +66,7 @@ straight to the client's CISO — backed by:
 
 **The value vs. running tools by hand**: an OSINT analyst running the
 same source set manually against a single seed domain typically loses
-6–8 hours, doesn't get cross-tool correlation, doesn't get LLM-driven
+6-8 hours, doesn't get cross-tool correlation, doesn't get LLM-driven
 follow-up, doesn't produce a ranked threat list, and doesn't produce
 an audit trail their client's legal team will accept.
 
@@ -75,12 +75,12 @@ an audit trail their client's legal team will accept.
 ## A worked example
 
 Given seed `acme.com`, mode `medium`, dispatcher `lite`, on a single
-laptop with default API keys configured — typical 30–60 min run:
+laptop with default API keys configured, typical 30-60 min run:
 
 | When | What happens |
 |------|-------------|
 | **Phase 1** · passive footprint | crt.sh + Subfinder + Amass + SecurityTrails surface 47 subdomains. One is `vpn.acme.com`. |
-| **Dispatcher fires** | Notices the VPN endpoint and an Android app discovered in the Play Store probe. Queues Shodan against `vpn.acme.com` and the APK analyzer against the Play Store package — both run before Phase 2 starts. |
+| **Dispatcher fires** | Notices the VPN endpoint and an Android app discovered in the Play Store probe. Queues Shodan against `vpn.acme.com` and the APK analyzer against the Play Store package, both run before Phase 2 starts. |
 | **Phase 2** · active surface | httpx + gowitness fingerprint 12 live HTTP services; one is an unauthenticated admin console. |
 | **Phase 3** · cloud + identity | Azure/M365 enumerator finds the M365 federation; bucket_enum finds two public S3 buckets. |
 | **Phase 4** · correlation | LLM correlator stitches subdomains → IPs → cloud account, scores attribution confidence so we don't claim cloud assets we can't prove. |
@@ -92,13 +92,13 @@ laptop with default API keys configured — typical 30–60 min run:
 | **Phase 9** · reports | `master_reporter` agent writes a cohesive narrative for the CISO; `phishing_drafter` produces 3 targeted templates. |
 
 **Output**: a `campaigns/acme/<engagement>/<id>/reports/` directory with
-17 deliverables — master report, ranked top threads, asset inventory,
+17 deliverables, master report, ranked top threads, asset inventory,
 phishing package, attack-surface matrix, vuln correlation, hash-chained
 audit log, Maltego CSV export, the lot.
 
-Doing the same by hand: 6–8 hours of context switching across crt.sh,
+Doing the same by hand: 6-8 hours of context switching across crt.sh,
 Subfinder, Amass, SecurityTrails, Shodan, Censys, urlscan, GitHub,
-Hunter, HIBP, NVD, KEV, EPSS, Maltego — with no automatic correlation,
+Hunter, HIBP, NVD, KEV, EPSS, Maltego, with no automatic correlation,
 no LLM follow-up loop, no ranked threats, no audit chain.
 
 ---
@@ -124,7 +124,7 @@ no LLM follow-up loop, no ranked threats, no audit chain.
      │ OSINT    │       │ 8 LLM    │         │  Dynamic     │
      │ tool     │       │ phase    │         │  dispatcher  │
      │ registry │       │ agents   │         │  (between    │
-     │ (T0–T3)  │       │          │         │   phases)    │
+     │ (T0-T3)  │       │          │         │   phases)    │
      └──────────┘       └──────────┘         └──────────────┘
            │                  │                    │
            └────────────┬─────┴────────────────────┘
@@ -138,8 +138,8 @@ no LLM follow-up loop, no ranked threats, no audit chain.
               └───────────────────┘
 ```
 
-For the full architecture — phase pipeline, agent personas, dispatcher loop,
-state-key conventions, scoring formula — see [`ARCHITECTURE.md`](ARCHITECTURE.md).
+For the full architecture, phase pipeline, agent personas, dispatcher loop,
+state-key conventions, scoring formula, see [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 ---
 
@@ -154,7 +154,7 @@ cd NexusRecon
 source venv/bin/activate
 ```
 
-**Python 3.13 is recommended** (3.11–3.13 supported; **not 3.14** — CrewAI
+**Python 3.13 is recommended** (3.11-3.13 supported; **not 3.14**, CrewAI
 incompatibility). If `python3` points at 3.14:
 
 ```bash
@@ -170,7 +170,7 @@ nexusrecon
 Running with no arguments opens an interactive Textual UI:
 
 ```
-   ┌─ NexusRecon — Agentic OSINT Orchestration ─────────────────┐
+   ┌─ NexusRecon, Agentic OSINT Orchestration ─────────────────┐
    │                                                            │
    │              [ N E X U S R E C O N    v 0.5.0 ]            │
    │                                                            │
@@ -203,13 +203,13 @@ nexusrecon validate examples/scopes/minimal_seed.yaml
 # Dry-run (validate scope + show plan, no tools fired)
 nexusrecon run --scope examples/scopes/minimal_seed.yaml --dry-run
 
-# Light passive sweep (T0 only, ~5–10 min)
+# Light passive sweep (T0 only, ~5-10 min)
 nexusrecon run --scope my-scope.yaml --seeds acme.com --mode light
 
-# Default run with the dispatcher running in lite mode (T0+T1, ~30–60 min)
+# Default run with the dispatcher running in lite mode (T0+T1, ~30-60 min)
 nexusrecon run --scope my-scope.yaml --seeds acme.com
 
-# Full agentic dispatch — LLM picks follow-up tools between every phase
+# Full agentic dispatch, LLM picks follow-up tools between every phase
 nexusrecon run --scope my-scope.yaml --seeds acme.com --dispatch-mode full
 
 # Credential harvest + phishing drafts (authorized engagements only)
@@ -254,7 +254,7 @@ release. Run `nexusrecon tools` for the live catalogue, or browse the
 
 | Tier | Name | Contact with target | Examples |
 |------|------|---------------------|----------|
-| T0 | Pure passive | None — public datasets only | crt.sh, Shodan, GitHub, breach DBs, WHOIS |
+| T0 | Pure passive | None, public datasets only | crt.sh, Shodan, GitHub, breach DBs, WHOIS |
 | T1 | Semi-passive | DNS resolution, passive DNS | DNS sweep, SecurityTrails, urlscan |
 | T2 | Light active | HTTP probes, screenshots | httpx, gowitness, favicon hashing |
 | T3 | Active | Brute force, fuzzing | ffuf, gobuster, recursive amass |
@@ -268,18 +268,18 @@ Out-of-tier tools are dropped with an audit-log entry, not executed silently.
 
 Every campaign writes to `./campaigns/<client>/<engagement>/<campaign-id>/reports/`:
 
-- `master_report.md` — single cohesive narrative for the client
-- `executive_summary.md` — one-page exec-level brief
-- `top_threads.md` — top 10 ranked attack paths
-- `attack_surface.md` — likelihood × impact matrix, PRE-ATT&CK mapped
-- `phishing_package.md` — validated emails, pretext hooks, DMARC gaps
-- `cloud_posture.md` — M365 federation, AWS account, public buckets
-- `vuln_correlation.md` — CVE/KEV findings matched to fingerprinted tech
-- `harvested_credentials.md` — masked + hashed exposed creds (treat as **Secret**)
-- `asset_inventory.md` / `.json` / `.csv` — discovered assets
-- `findings.json` — every `Finding` with severity, confidence, MITRE, evidence
-- `maltego_export.csv` — Maltego-compatible entity import
-- `report.pdf` — full report as PDF (requires `weasyprint`)
+- `master_report.md`, single cohesive narrative for the client
+- `executive_summary.md`, one-page exec-level brief
+- `top_threads.md`, top 10 ranked attack paths
+- `attack_surface.md`, likelihood × impact matrix, PRE-ATT&CK mapped
+- `phishing_package.md`, validated emails, pretext hooks, DMARC gaps
+- `cloud_posture.md`, M365 federation, AWS account, public buckets
+- `vuln_correlation.md`, CVE/KEV findings matched to fingerprinted tech
+- `harvested_credentials.md`, masked + hashed exposed creds (treat as **Secret**)
+- `asset_inventory.md` / `.json` / `.csv`, discovered assets
+- `findings.json`, every `Finding` with severity, confidence, MITRE, evidence
+- `maltego_export.csv`, Maltego-compatible entity import
+- `report.pdf`, full report as PDF (requires `weasyprint`)
 
 Full index with content schemas: [`nexusrecon/docs/REPORT_GUIDE.md`](nexusrecon/docs/REPORT_GUIDE.md).
 
@@ -304,7 +304,7 @@ $EDITOR .env
 
 Required for any meaningful run:
 
-- One LLM provider key — `ANTHROPIC_API_KEY` (recommended) or `OPENAI_API_KEY`,
+- One LLM provider key, `ANTHROPIC_API_KEY` (recommended) or `OPENAI_API_KEY`,
   or set `NEXUS_LLM_PROVIDER=ollama` for a local model.
 
 Recommended:
@@ -333,7 +333,7 @@ Per-key tool-unlock matrix: [`CONFIGURATION_GUIDE.md`](CONFIGURATION_GUIDE.md).
 
 ## Status
 
-**v0.5.0 — pre-beta.** Closed-beta testing in progress; APIs and report
+**v0.5.0, pre-beta.** Closed-beta testing in progress; APIs and report
 formats may shift before 1.0. We track open issues in
 [`ITERATION_BACKLOG.md`](ITERATION_BACKLOG.md).
 
@@ -360,12 +360,12 @@ If you want to help shape the 1.0, see [`BETA_TESTING_GUIDE.md`](BETA_TESTING_GU
 
 Licensed under [Apache 2.0](LICENSE). The license grants you broad
 permission to use, modify, and redistribute. We ask one thing in
-return — **use it only against systems you have explicit written
+return, **use it only against systems you have explicit written
 permission to test.** Full responsible-use policy:
 [`DISCLAIMER.md`](DISCLAIMER.md). Third-party components and the
 authorized-use rider: [`NOTICE`](NOTICE).
 
-Scope enforcement is built into the framework — every tool invocation is
+Scope enforcement is built into the framework, every tool invocation is
 checked against the signed scope before execution, tagged with the scope hash,
 and written to a hash-chained audit log. This is a backstop, not a substitute
 for operator judgment.
@@ -374,4 +374,4 @@ for operator judgment.
 
 <sub>NexusRecon is built and maintained by **d4rk pri0r** ·
 [darkpriorlabs](https://github.com/d4rk-pri0r) · for defenders who test like
-attackers — with permission.</sub>
+attackers, with permission.</sub>

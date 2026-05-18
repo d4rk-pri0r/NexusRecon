@@ -2,7 +2,7 @@
 
 > **Read top-to-bottom in order.** Each phase is gated by the success of the
 > previous one. If something fails, capture the artifacts listed in the
-> "Report Back" template at the bottom and stop — don't try to push past
+> "Report Back" template at the bottom and stop, don't try to push past
 > failures, they compound.
 
 **Working directory throughout:** `/Users/waifumachine/agentic-osint`
@@ -16,25 +16,25 @@
 
 ---
 
-## Phase 0 — Pre-flight checks (5 min)
+## Phase 0: Pre-flight checks (5 min)
 
 ```bash
 cd /Users/waifumachine/agentic-osint
 
-# 0.1 — Python version: must be 3.11, 3.12, or 3.13 (NOT 3.14)
+# 0.1, Python version: must be 3.11, 3.12, or 3.13 (NOT 3.14)
 #       CrewAI does not yet support Python 3.14.
 python3 --version
 
-# 0.2 — Confirm an in-range Python is available somewhere
+# 0.2, Confirm an in-range Python is available somewhere
 #       If `python3 --version` shows 3.14, you need a 3.13 install too.
-python3.13 --version 2>/dev/null || echo "Python 3.13 not found — see remediation below"
+python3.13 --version 2>/dev/null || echo "Python 3.13 not found, see remediation below"
 
-# 0.3 — Confirm you're in the repo root
+# 0.3, Confirm you're in the repo root
 ls pyproject.toml README.md install.sh nexusrecon/ examples/scopes/
 ```
 
 **Pass condition:**
-- Some Python in range 3.11–3.13 is available (`python3` or `python3.13`)
+- Some Python in range 3.11-3.13 is available (`python3` or `python3.13`)
 - All files listed exist
 
 **If `python3 --version` reports 3.14 or higher (macOS Homebrew default since late 2025):**
@@ -49,11 +49,11 @@ brew install python@3.13
 sudo apt-get install python3.13 python3.13-venv
 ```
 
-**If `python3 --version` reports < 3.11:** upgrade Python — the install script will refuse to proceed otherwise.
+**If `python3 --version` reports < 3.11:** upgrade Python, the install script will refuse to proceed otherwise.
 
 ---
 
-## Phase 1 — Environment Setup (15–30 min)
+## Phase 1: Environment Setup (15-30 min)
 
 ### 1.1 Run the install script (recommended path)
 
@@ -82,7 +82,7 @@ source venv/bin/activate
 You'll see `(venv)` prepended to your prompt. **Every new terminal session
 needs `source venv/bin/activate` before running `nexusrecon`.**
 
-**Pass condition** — at the end of `./install.sh` you should see something like:
+**Pass condition**, at the end of `./install.sh` you should see something like:
 
 ```
 [+] nexusrecon package imports OK
@@ -97,7 +97,7 @@ needs `source venv/bin/activate` before running `nexusrecon`.**
 
 **If the install fails:** capture all stderr from `./install.sh` → see "Report Back" template. Common causes are covered by `MANUAL.md` §12 Troubleshooting (PEP 668, Python 3.14, missing venv).
 
-### 1.2 Alternative — phased install
+### 1.2 Alternative, phased install
 
 If you already have most binaries (e.g., from a prior session), skip the slow steps:
 
@@ -119,7 +119,7 @@ pip install -e ".[dev]"
 ### 1.4 Confirm CLI is wired correctly
 
 ```bash
-# Must show the venv's nexusrecon, NOT a system-level one
+# Must show the venv's nexusrecon: NOT a system-level one
 which nexusrecon
 # Expected: .../agentic-osint/venv/bin/nexusrecon
 # Wrong:    /Library/Frameworks/Python.framework/Versions/X.Y/bin/nexusrecon
@@ -128,7 +128,7 @@ which nexusrecon
 # Basic help screen
 nexusrecon --help
 
-# Tool inventory — should print the full registry (rows scale with
+# Tool inventory, should print the full registry (rows scale with
 # release: new tools are added and old ones retired each version).
 nexusrecon tools | wc -l
 ```
@@ -138,7 +138,7 @@ nexusrecon tools | wc -l
 - `nexusrecon --help` lists the `run` command
 - `nexusrecon tools` lists 80+ tools
 
-**If `which nexusrecon` shows a system Python path** — your venv isn't activated. Run `source venv/bin/activate` and re-check. If still wrong, run `hash -r` to clear the shell's command cache.
+**If `which nexusrecon` shows a system Python path**, your venv isn't activated. Run `source venv/bin/activate` and re-check. If still wrong, run `hash -r` to clear the shell's command cache.
 
 ### 1.5 Binary inventory (informational)
 
@@ -185,7 +185,7 @@ SHODAN_API_KEY=
 HUNTER_API_KEY=
 ```
 
-**Skip all other keys for now.** You can add them later — each missing key
+**Skip all other keys for now.** You can add them later, each missing key
 just means one tool stays gated.
 
 ### 1.7 Output directory
@@ -196,14 +196,14 @@ mkdir -p campaigns reports
 
 ---
 
-## Phase 2 — Sanity Checks (5 min)
+## Phase 2: Sanity Checks (5 min)
 
 ```bash
-# 2.1 — Everything compiles
+# 2.1, Everything compiles
 python3 -m py_compile $(find nexusrecon -name '*.py')
 echo "exit_code=$?"
 
-# 2.2 — Tool registry counts
+# 2.2, Tool registry counts
 python3 -c "
 import nexusrecon.tools.domain, nexusrecon.tools.pretext, nexusrecon.tools.cloud
 import nexusrecon.tools.intel, nexusrecon.tools.web, nexusrecon.tools.vuln
@@ -214,7 +214,7 @@ print(f'Registered total: {len(list(r._tools.values()))}')
 print(f'Available with current keys/binaries: {len(r.available_tools())}')
 "
 
-# 2.3 — CLI surface
+# 2.3, CLI surface
 nexusrecon --help
 nexusrecon run --help
 ```
@@ -222,7 +222,7 @@ nexusrecon run --help
 **Pass condition:**
 - `exit_code=0`
 - Registered total matches what the previous run produced (drift only
-  on intentional add / retire — flag any silent change)
+  on intentional add / retire, flag any silent change)
 - Available count is at least 40 (more if you populated more keys / binaries)
 - `run --help` lists `--scope`, `--seeds`, `--mode`, `--dispatch-mode`,
   `--validate-creds`, `--generate-phishing`, `--dry-run`, `--use-graph`
@@ -231,7 +231,7 @@ nexusrecon run --help
 
 ---
 
-## Phase 3 — Build a Test Scope (5 min)
+## Phase 3: Build a Test Scope (5 min)
 
 The CLI requires a scope YAML. **Choose a target you own.**
 
@@ -241,7 +241,7 @@ Start from the minimal template (fewest fields, easiest to fill in):
 cp examples/scopes/minimal_seed.yaml test_scope.yaml
 ```
 
-Then edit `test_scope.yaml` — only three things to change:
+Then edit `test_scope.yaml`, only three things to change:
 1. Set `engagement.client`, `engagement_id`, `authorized_by`, and `authorization_date`
 2. Replace `acme.com` in `scope.in_scope.domains` with your test domain
 3. Adjust `end_date` if needed
@@ -273,14 +273,14 @@ constraints:
 in decreasing order of preference:
 
 1. A domain you own (personal site, homelab)
-2. `testphp.vulnweb.com` (Acunetix's public test target — intentionally vulnerable)
+2. `testphp.vulnweb.com` (Acunetix's public test target, intentionally vulnerable)
 3. A bug bounty program with explicit OSINT authorization in their policy
 
 **Do NOT use a real company's domain you don't own.**
 
 ---
 
-## Phase 4 — Dry Run (1 min)
+## Phase 4: Dry Run (1 min)
 
 Validate the scope and the planner without running any tools:
 
@@ -288,7 +288,7 @@ Validate the scope and the planner without running any tools:
 nexusrecon run --scope test_scope.yaml --dry-run
 ```
 
-**Pass condition:** prints a `Dry run — scope is valid, campaign ready.`
+**Pass condition:** prints a `Dry run, scope is valid, campaign ready.`
 message plus a campaign ID. No errors, no tracebacks.
 
 **If fail:** save the full output → report back. Common causes:
@@ -298,7 +298,7 @@ message plus a campaign ID. No errors, no tracebacks.
 
 ---
 
-## Phase 5 — Minimal Live Campaign (10 min)
+## Phase 5: Minimal Live Campaign (10 min)
 
 Run a real campaign at the lowest tier with dispatch disabled. This
 exercises the core pipeline without surfacing dispatcher or LLM-cost issues.
@@ -312,7 +312,7 @@ nexusrecon run \
 
 **Expected behavior:**
 - ROE banner prints
-- Progress bar shows phases 1–9
+- Progress bar shows phases 1-9
 - Final output: "Reports saved to: campaigns/{id}/reports/"
 - No unhandled tracebacks
 
@@ -330,7 +330,7 @@ cat "${CAMP}reports/campaign_meta.json" | python3 -m json.tool
 
 **Look for in `campaign_meta.json`:**
 - `total_findings` is a number (even 0 is fine)
-- `phases_completed` lists at least phase1–phase4
+- `phases_completed` lists at least phase1-phase4
 - `report_paths` is populated
 
 **Look for in `reports/`:**
@@ -338,7 +338,7 @@ cat "${CAMP}reports/campaign_meta.json" | python3 -m json.tool
 - `top_threads.md`
 - `full_report.md`
 - `asset_inventory.md`
-- `harvested_credentials.md` (will be near-empty for a domain with no exposed creds — that's fine)
+- `harvested_credentials.md` (will be near-empty for a domain with no exposed creds, that's fine)
 
 **If fail:** report back with:
 - Campaign ID
@@ -348,7 +348,7 @@ cat "${CAMP}reports/campaign_meta.json" | python3 -m json.tool
 
 ---
 
-## Phase 6 — Light Campaign with LLM Synthesis (15 min)
+## Phase 6: Light Campaign with LLM Synthesis (15 min)
 
 Same target, but lite dispatch + LLM analysis enabled (default behavior):
 
@@ -369,16 +369,16 @@ has at least one "Thread" section if anything was found.
 
 **Watch for:**
 - `agent_messages` populated in campaign_meta with non-empty `analysis`
-  fields — confirms LLM is being called
-- `dynamic_dispatch_log` populated — confirms dispatcher fired
+  fields, confirms LLM is being called
+- `dynamic_dispatch_log` populated, confirms dispatcher fired
 
-**Cost expectation:** $0.05 – $0.50 for a small target. If it exceeds
-`max_llm_cost_usd` (5.0 in the scope), the campaign aborts mid-flight —
+**Cost expectation:** $0.05, $0.50 for a small target. If it exceeds
+`max_llm_cost_usd` (5.0 in the scope), the campaign aborts mid-flight.
 that's correct behavior.
 
 ---
 
-## Phase 7 — Feature Flag Probes (15 min each)
+## Phase 7: Feature Flag Probes (15 min each)
 
 These exercise the v2 features. Run each separately and inspect the
 specific report.
@@ -399,7 +399,7 @@ nexusrecon run \
 - Authorization banner at the top
 - If credentials were discovered: each one shows `validated: true|false` and
   a `value_redacted` like `AKIA****FAKE`
-- If no credentials: file says "No credentials harvested" — also fine
+- If no credentials: file says "No credentials harvested", also fine
 
 **Capture this:** if any `validated: true` entries appear, note them
 (redacted) so you can verify the validation actually called the right API.
@@ -441,7 +441,7 @@ length. Cost will be higher.
 
 ---
 
-## Phase 8 — T2 Active Scanning (20 min, optional)
+## Phase 8: T2 Active Scanning (20 min, optional)
 
 This exercises the active scanners (nuclei, katana, arjun, bucket_enum).
 **Only run if you own the target.**
@@ -457,26 +457,26 @@ nexusrecon run \
 **Watch for:**
 - Phase 5 and Phase 6 actually do something (HTTP probing, screenshots)
 - `vuln_intel.nuclei_scan` populated in campaign_meta if nuclei found anything
-- No crashes from missing binaries — if `nuclei` binary is missing, the
+- No crashes from missing binaries, if `nuclei` binary is missing, the
   campaign should still complete, just without nuclei findings
 
 ---
 
-## Phase 9 — Report Inspection (15 min)
+## Phase 9: Report Inspection (15 min)
 
 Open the full report suite in order. This is where you find issues that
 didn't surface as crashes:
 
 ```bash
 CAMP=$(ls -td campaigns/*/ | head -1)
-open "${CAMP}reports/top_threads.md"           # macOS — use xdg-open on Linux
+open "${CAMP}reports/top_threads.md"           # macOS, use xdg-open on Linux
 open "${CAMP}reports/executive_summary.md"
 open "${CAMP}reports/phishing_drafts.md"        # if you ran 7.2
 open "${CAMP}reports/harvested_credentials.md"
-open "${CAMP}reports/entity_graph.html"         # interactive — opens in browser
+open "${CAMP}reports/entity_graph.html"         # interactive, opens in browser
 ```
 
-**Checklist — every report should:**
+**Checklist, every report should:**
 - [ ] Open without rendering errors
 - [ ] Have a generation timestamp
 - [ ] List the campaign ID
@@ -493,7 +493,7 @@ open "${CAMP}reports/entity_graph.html"         # interactive — opens in brows
 
 ---
 
-## Phase 10 — Smoke at Specific Tools (optional, 10 min)
+## Phase 10: Smoke at Specific Tools (optional, 10 min)
 
 If something looked off in Phase 5/6, you can invoke specific tools
 directly via the registry to isolate:
@@ -542,7 +542,7 @@ Keys present (do NOT paste values, just names):
 
 ```
 Command: [exact CLI invocation, including scope file path]
-Phase reached: [e.g., "Phase 5 — Minimal Live Campaign"]
+Phase reached: [e.g., "Phase 5, Minimal Live Campaign"]
 Test target: [your test domain]
 ```
 
@@ -561,7 +561,7 @@ For crashes / tracebacks:
 
 For wrong-output bugs (report renders wrong, etc.):
 - Path to the offending file: `campaigns/{id}/reports/{file}`
-- Paste the offending section (5–20 lines around the bug)
+- Paste the offending section (5-20 lines around the bug)
 - Paste the corresponding section of `campaigns/{id}/reports/campaign_meta.json`
   so we can see what state Sonnet was working from
 
@@ -577,11 +577,11 @@ For cost overruns / runaway loops:
 
 ### E. Severity tag (your judgment)
 
-- **BLOCKER** — can't get past Phase 4 (dry run fails)
-- **CRITICAL** — campaign crashes mid-phase
-- **HIGH** — campaign completes but reports are broken / missing
-- **MEDIUM** — feature works but output is wrong/confusing
-- **LOW** — cosmetic, polish, doc gap
+- **BLOCKER**: can't get past Phase 4 (dry run fails)
+- **CRITICAL**: campaign crashes mid-phase
+- **HIGH**: campaign completes but reports are broken / missing
+- **MEDIUM**: feature works but output is wrong/confusing
+- **LOW**: cosmetic, polish, doc gap
 
 ### F. Reproducibility
 
@@ -596,13 +596,13 @@ For cost overruns / runaway loops:
 For your first end-to-end shakedown, run in this order with brief
 inspection between each:
 
-1. **Phase 0 → 4** — environment + dry run (~30 min total)
-2. **Phase 5** — minimal live campaign, no LLM cost (~10 min)
-3. **Phase 9** — inspect reports from Phase 5 (~10 min)
-4. **Phase 6** — same target with LLM enabled (~15 min)
-5. **Phase 9** — inspect again, compare deltas (~10 min)
-6. **Phase 7.1** + 7.2 + 7.3 — feature flags one at a time (~45 min total)
-7. **Phase 9** — final inspection of each flag's output
+1. **Phase 0 → 4**: environment + dry run (~30 min total)
+2. **Phase 5**: minimal live campaign, no LLM cost (~10 min)
+3. **Phase 9**: inspect reports from Phase 5 (~10 min)
+4. **Phase 6**: same target with LLM enabled (~15 min)
+5. **Phase 9**: inspect again, compare deltas (~10 min)
+6. **Phase 7.1** + 7.2 + 7.3, feature flags one at a time (~45 min total)
+7. **Phase 9**: final inspection of each flag's output
 
 If you get to the end of step 7 without BLOCKER or CRITICAL issues, the
 platform is shippable for personal use. Iterate on MEDIUM/LOW issues in
@@ -633,7 +633,7 @@ For each issue:
 4. Note the fix in your end-of-turn report
 
 Working rules from prior sessions still apply:
-- No git commits — operator commits manually after review
+- No git commits, operator commits manually after review
 - No system binary installs (PyPI fine)
 - Stop and ask on architectural ambiguity
 - Parallel tool calls for independent edits

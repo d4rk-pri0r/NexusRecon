@@ -1,7 +1,7 @@
 # NexusRecon Roadmap
 
 Where the project is, what's between us and 1.0, what comes after.
-This is a living document — pull requests welcome, but the
+This is a living document, pull requests welcome, but the
 prioritisation is set by the maintainer.
 
 ---
@@ -32,7 +32,7 @@ What's still pre-beta about it:
 
 ---
 
-## Path to `0.6.0` — beta launch
+## Path to `0.6.0`, beta launch
 
 These are the items that have to land before the project goes out to
 "thousands of well-trained eyes." Prioritised in execution order;
@@ -48,7 +48,7 @@ each is independently testable.
 - [ ] **OPSEC wire verification.** Integration tests that run the
       tool through `mitmproxy` / a capturing proxy and assert:
       - `paranoid` profile produces 1-thread sequential requests
-        with 3–10s jitter.
+        with 3-10s jitter.
       - `NEXUS_PROXY_URL` routes every outbound request.
       - User-Agent values actually rotate per request (or per
         session) as documented.
@@ -97,7 +97,7 @@ each is independently testable.
 
 ---
 
-## Path to `1.0.0` — production-ready
+## Path to `1.0.0`, production-ready
 
 Once the beta has run for a meaningful number of cycles and the
 beta-blocker work above has shaken out:
@@ -118,7 +118,7 @@ beta-blocker work above has shaken out:
 - [ ] **Memory profile for large scopes.** 1000+ subdomain
       campaigns shouldn't OOM the runner.
 - [ ] **Resume integrity test.** Pause / kill / restart a campaign
-      partway through phases 5–7 and verify the audit chain
+      partway through phases 5-7 and verify the audit chain
       survives, no findings are duplicated, partial reports are
       sensible.
 
@@ -145,7 +145,7 @@ beta-blocker work above has shaken out:
 
 ---
 
-## Post-`1.0` — ecosystem
+## Post-`1.0`, ecosystem
 
 - [ ] **Public LLM-prompt evaluation set.** Once enough campaigns
       have run, publish prompt + expected-output pairs for the 11
@@ -169,7 +169,7 @@ Things people sometimes ask for that we won't build:
 - **Automated exploitation.** This is recon tooling. Pivot to
   Metasploit / Sliver / Mythic for exploit phases.
 - **Stealth-claim-of-attribution evasion.** We don't help operators
-  hide that they're running NexusRecon — the tool's purpose is
+  hide that they're running NexusRecon, the tool's purpose is
   authorised testing, and authorised tests don't need to
   obfuscate the tooling.
 - **Anything that bypasses the scope guard.** Hard rule. See

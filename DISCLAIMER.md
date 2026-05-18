@@ -1,6 +1,6 @@
-# NexusRecon — Legal Disclaimer & Authorized Use Policy
+# NexusRecon: Legal Disclaimer & Authorized Use Policy
 
-## IMPORTANT — READ BEFORE USE
+## IMPORTANT: READ BEFORE USE
 
 NexusRecon is a professional OSINT and reconnaissance orchestration framework
 intended **exclusively** for use by authorized security professionals in the
@@ -39,7 +39,7 @@ This tool may **NOT** be used:
 NexusRecon enforces engagement scope at the framework level. Every tool
 invocation is validated against the signed scope file before execution.
 Out-of-scope targets are dropped with an audit log entry. This enforcement
-exists to protect both the operator and the client — it is not a substitute
+exists to protect both the operator and the client, it is not a substitute
 for operator judgment.
 
 ## No Warranty
@@ -64,4 +64,4 @@ Security professionals using this tool are responsible for:
 
 ---
 
-*NexusRecon is built for defenders who test like attackers — with permission.*
+*NexusRecon is built for defenders who test like attackers, with permission.*

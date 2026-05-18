@@ -1,4 +1,4 @@
-# NexusRecon — Configuration Guide
+# NexusRecon: Configuration Guide
 
 > **Audience:** operators preparing NexusRecon for first use.
 > **Companion to:** `.env.example` (the template), `MANUAL.md` §3 (reference),
@@ -18,22 +18,22 @@
    to use the platform.
 3. Work through the keys for that profile in the suggested order. Each
    entry below has the signup URL and an estimate of how long it takes.
-4. Verify after each key with: `nexusrecon tools | grep <toolname>` —
+4. Verify after each key with: `nexusrecon tools | grep <toolname>`.
    missing → ready.
 
 ---
 
-## Profiles — pick your starting point
+## Profiles, pick your starting point
 
 ### Minimum tester (5 keys, ~25 min)
 
 Sufficient to exercise every campaign phase against a controlled target.
 
 ```
-ANTHROPIC_API_KEY        (LLM — paid, you likely already have one)
+ANTHROPIC_API_KEY        (LLM, paid, you likely already have one)
 GITHUB_TOKEN             (free; unlocks 5 code/secret tools)
 VIRUSTOTAL_API_KEY       (free; 500/day)
-SHODAN_API_KEY           (free tier limited; $5–$59 one-time is worth it)
+SHODAN_API_KEY           (free tier limited; $5-$59 one-time is worth it)
 HUNTER_API_KEY           (free; 50 searches/month)
 ```
 
@@ -53,14 +53,14 @@ campaign quality.
 
 Adds paid breach/identity sources (DeHashed, IntelX, LeakCheck), Crunchbase
 for HUMINT, Bing for live LinkedIn search, and AWS recon credentials.
-Realistic monthly cost: $50–$200 depending on volume.
+Realistic monthly cost: $50-$200 depending on volume.
 
 ---
 
 # §1 LLM Providers (REQUIRED)
 
 NexusRecon needs at least ONE LLM provider configured. Without one, agent
-synthesis is replaced by `MockLLM` (keyword-counted summaries) — campaigns
+synthesis is replaced by `MockLLM` (keyword-counted summaries), campaigns
 still complete but lose the prose analysis layer.
 
 | Variable | Purpose | Cost | Notes |
@@ -68,10 +68,10 @@ still complete but lose the prose analysis layer.
 | `ANTHROPIC_API_KEY` | Primary LLM (Claude). Recommended. | Paid, ~$3 per campaign typical | https://console.anthropic.com/ |
 | `OPENAI_API_KEY` | Alternate LLM (GPT-4o etc.) | Paid, ~$4 per campaign typical | https://platform.openai.com/api-keys |
 | `OLLAMA_BASE_URL` | Local LLM endpoint | Free (your hardware) | Default `http://localhost:11434`; needs Ollama running |
-| `OLLAMA_MODEL` | Local model name | — | e.g. `llama3.1:8b`, `qwen2.5:14b`; must already be pulled in Ollama |
-| `NEXUS_LLM_PROVIDER` | Which provider to use | — | `anthropic` \| `openai` \| `ollama` |
-| `NEXUS_LLM_MODEL` | Specific model ID | — | e.g. `claude-opus-4-5`, `gpt-4o`, `llama3.1:8b` |
-| `NEXUS_LLM_TEMPERATURE` | Sampling temperature | — | `0.1` recommended (low for reproducible analysis) |
+| `OLLAMA_MODEL` | Local model name | | e.g. `llama3.1:8b`, `qwen2.5:14b`; must already be pulled in Ollama |
+| `NEXUS_LLM_PROVIDER` | Which provider to use | | `anthropic` \| `openai` \| `ollama` |
+| `NEXUS_LLM_MODEL` | Specific model ID | | e.g. `claude-opus-4-5`, `gpt-4o`, `llama3.1:8b` |
+| `NEXUS_LLM_TEMPERATURE` | Sampling temperature | | `0.1` recommended (low for reproducible analysis) |
 
 **Recommended default:** Anthropic with Claude Sonnet 4.5 or 4.6. Best
 reasoning per dollar for OSINT synthesis. Anthropic accounts also include
@@ -90,7 +90,7 @@ exposed-service discovery, IP reputation, certificate transparency.
 
 | Variable | Tool unlocked | Free tier | Cost | Signup URL | Time |
 |----------|---------------|-----------|------|------------|------|
-| `SHODAN_API_KEY` | `shodan` (host/port fingerprinting) | 1 query/sec, limited filters | Free tier OR one-time membership $5–$59 (recurring discounts on Black Friday) | https://account.shodan.io/register | 5 min |
+| `SHODAN_API_KEY` | `shodan` (host/port fingerprinting) | 1 query/sec, limited filters | Free tier OR one-time membership $5-$59 (recurring discounts on Black Friday) | https://account.shodan.io/register | 5 min |
 | `CENSYS_API_ID` + `CENSYS_API_SECRET` | `censys` (host search, cert search) | 250 queries/month | Paid tiers from $99/mo | https://search.censys.io/register | 5 min |
 | `VIRUSTOTAL_API_KEY` | `virustotal` (domain/IP reputation + passive DNS) | 500 queries/day, 4/min | Free public tier | https://www.virustotal.com/gui/join-us | 3 min |
 | `GREYNOISE_API_KEY` | `greynoise` (IP scanner background-noise classification) | Community tier free | Free with email | https://viz.greynoise.io/signup | 3 min |
@@ -142,7 +142,7 @@ enrichment source, and even its free tier is generous enough for testing.
 
 ---
 
-# §5 Passive Sources (optional keys — tools work without them)
+# §5 Passive Sources (optional keys, tools work without them)
 
 These services have public APIs that work key-free. Adding a key raises
 the rate limit, which matters during deep campaigns but is irrelevant
@@ -154,7 +154,7 @@ for testing.
 | `CERTSPOTTER_API_KEY` | `certspotter` | Rate-limited | Raised limits | https://sslmate.com/account/api_credentials | 5 min |
 | `CHAOS_API_KEY` | `chaos` (ProjectDiscovery subdomain intel) | Tool gated; key required | Free for community via Discord | https://chaos.projectdiscovery.io/ (Discord verification step) | 10 min |
 
-`CHAOS_API_KEY` is the only entry here that fully gates a tool — others
+`CHAOS_API_KEY` is the only entry here that fully gates a tool, others
 degrade gracefully. Discord verification is the unusual step; budget
 extra time.
 
@@ -164,13 +164,13 @@ extra time.
 
 | Variable | Tool affected | Free tier | Cost | Signup URL | Time |
 |----------|---------------|-----------|------|------------|------|
-| `CRUNCHBASE_API_KEY` | `crunchbase` (org/funding/leadership intel) | None | Expensive — Enterprise tier only as of writing | https://about.crunchbase.com/products/crunchbase-api/ | 30+ min (sales call) |
+| `CRUNCHBASE_API_KEY` | `crunchbase` (org/funding/leadership intel) | None | Expensive, Enterprise tier only as of writing | https://about.crunchbase.com/products/crunchbase-api/ | 30+ min (sales call) |
 | `BING_SEARCH_API_KEY` *(optional)* | `linkedin_dorks`, `public_collab` (live web search vs static dork list) | Without: dorks only, no execution. With: live results. | Free 1000/month tier on Azure | https://portal.azure.com/ → Cognitive Services → Bing Search | 15 min (Azure signup) |
 
 **Realistic recommendation:** skip Crunchbase for testing; it's locked
 behind sales. The keyless `wikipedia` and `sec_edgar` tools cover much of
 the same ground. Bing is worth the 15-min Azure signup if you intend to
-do real phishing prep — it materially improves `linkedin_dorks` and
+do real phishing prep, it materially improves `linkedin_dorks` and
 `public_collab`.
 
 ---
@@ -197,17 +197,17 @@ Do NOT grant write scopes. Tools only ever read.
 | Variable | Purpose | Cost | Notes |
 |----------|---------|------|-------|
 | `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` | `aws_recon` (account-level AWS recon if you own AWS accounts in scope) | Pennies per campaign | Use a least-privilege IAM user with `SecurityAudit` + `ReadOnlyAccess` policies only. NEVER use root creds. |
-| `AWS_DEFAULT_REGION` | Default region for AWS API calls | — | `us-east-1` is fine |
+| `AWS_DEFAULT_REGION` | Default region for AWS API calls | | `us-east-1` is fine |
 
 **Skip these unless you have your own AWS account to recon.** They're not
-needed for testing against external targets — those use the keyless
+needed for testing against external targets, those use the keyless
 `bucket_enum` tool which probes public S3 by name pattern.
 
 ---
 
 # §9 OPSEC / Network
 
-These don't require signup — they're operational hardening for advanced
+These don't require signup, they're operational hardening for advanced
 use.
 
 | Variable | Purpose | Default | When to change |
@@ -219,7 +219,7 @@ use.
 
 **Default safety note:** the proxy/Tor settings are commented `# SOCKS5
 proxy...` in `.env.example` but ACTIVE. If you don't have Tor running on
-9050, comment them out or set to empty before running campaigns —
+9050, comment them out or set to empty before running campaigns.
 otherwise every outbound request will hang on connection refused.
 
 ---
@@ -262,7 +262,7 @@ defaults.
 
 ---
 
-# Appendix A — Tools-unlocked-by-key reverse lookup
+# Appendix A: Tools-unlocked-by-key reverse lookup
 
 When deciding whether to procure a specific key, use this to gauge ROI:
 
@@ -296,20 +296,20 @@ When deciding whether to procure a specific key, use this to gauge ROI:
 
 ---
 
-# Appendix B — Sequential signup checklist
+# Appendix B: Sequential signup checklist
 
 Print, follow top-to-bottom. Realistic timing assumes captcha + email
 verification round-trips.
 
 ```
-TIER 1 — Minimum tester (~25 min total)
+TIER 1, Minimum tester (~25 min total)
 [ ] LLM provider (Anthropic recommended)           ~5 min
 [ ] GITHUB_TOKEN                                    ~5 min
 [ ] VIRUSTOTAL_API_KEY                              ~3 min
-[ ] SHODAN_API_KEY (free or $5–$59 one-time)        ~5 min
+[ ] SHODAN_API_KEY (free or $5-$59 one-time)        ~5 min
 [ ] HUNTER_API_KEY                                  ~5 min
 
-TIER 2 — Standard operator (~2 hours additional)
+TIER 2, Standard operator (~2 hours additional)
 [ ] ABUSEIPDB_API_KEY                               ~3 min
 [ ] GREYNOISE_API_KEY                               ~3 min
 [ ] URLSCAN_API_KEY                                 ~3 min
@@ -326,7 +326,7 @@ TIER 2 — Standard operator (~2 hours additional)
 [ ] ZOOMEYE_API_KEY                                 ~5 min
 [ ] SECURITYTRAILS_API_KEY                          ~5 min
 
-TIER 3 — Power user (~half day + recurring cost)
+TIER 3, Power user (~half day + recurring cost)
 [ ] HAVEIBEENPWNED_API_KEY ($3.50/mo)               ~5 min
 [ ] LEAKCHECK_API_KEY ($9/mo+)                      ~10 min
 [ ] INTELX_API_KEY (varies)                         ~15 min
@@ -336,12 +336,12 @@ TIER 3 — Power user (~half day + recurring cost)
 [ ] AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY       ~10 min (if you own an AWS account)
 ```
 
-After each key: verify with `nexusrecon tools` — the corresponding row
+After each key: verify with `nexusrecon tools`, the corresponding row
 should flip from `✗ missing` to `✓ ready`.
 
 ---
 
-# Appendix C — Notes for a future GUI configuration tool
+# Appendix C: Notes for a future GUI configuration tool
 
 Every entry in this guide is structured: variable name, signup URL, free
 tier limit, cost, time estimate, tool(s) unlocked, optional/required
@@ -353,11 +353,11 @@ status. A GUI builder could:
 4. Use the "Tools unlocked" column to show the operator what each key buys
 5. Open the signup URL in the user's browser on click
 6. Test the key live by invoking the corresponding tool (`nexusrecon
-   tools <name> --self-test` doesn't exist yet but should — file as an
+   tools <name> --self-test` doesn't exist yet but should, file as an
    enhancement in `ITERATION_BACKLOG.md`)
 
 The data model is stable. If you extract to JSON for the GUI, that JSON
-should derive from this Markdown — keep one source of truth, not two.
+should derive from this Markdown, keep one source of truth, not two.
 
 ---
 

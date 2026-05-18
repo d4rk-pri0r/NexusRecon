@@ -17,8 +17,8 @@ labels: enhancement
 
 ### How it might work
 
-If you have a design in mind — flags, scope fields, report file
-shapes, command surface — sketch it here. Otherwise leave blank and
+If you have a design in mind, flags, scope fields, report file
+shapes, command surface, sketch it here. Otherwise leave blank and
 we'll discuss.
 
 ### Alternatives you've considered
@@ -29,10 +29,10 @@ we'll discuss.
 
 ### Scope hygiene
 
-- [ ] This feature respects the **scope guard** — out-of-scope targets
+- [ ] This feature respects the **scope guard**, out-of-scope targets
       remain unreachable from the new code path.
 - [ ] This feature would not introduce telemetry / phone-home.
 - [ ] This feature would not weaken audit-log integrity.
 
-(If you can't tick a box, that's fine — flag it in the description
+(If you can't tick a box, that's fine, flag it in the description
 and we'll work through it.)

@@ -1,4 +1,4 @@
-# NexusRecon — Architecture & Goals
+# NexusRecon: Architecture & Goals
 
 A wiki-style explainer of what NexusRecon is, what its parts do, and why
 the design makes it materially different from running a stack of OSINT
@@ -8,8 +8,8 @@ tools in sequence.
 OSINT, LLMs, and red-team workflows. No prior knowledge of LangGraph,
 CrewAI, or any specific tool integration required.
 
-**If you're new here**, read sections 1–4 to understand the platform's
-purpose and shape. Sections 5–9 are deep-dives on specific components.
+**If you're new here**, read sections 1-4 to understand the platform's
+purpose and shape. Sections 5-9 are deep-dives on specific components.
 Section 10 is honest about what's automated vs. what still needs you.
 
 ---
@@ -17,9 +17,9 @@ Section 10 is honest about what's automated vs. what still needs you.
 ## 1. Why this exists
 
 A modern OSINT engagement against any non-trivial target requires running
-30–60 tools — subdomain enumerators, certificate-transparency searchers,
+30-60 tools, subdomain enumerators, certificate-transparency searchers,
 cloud-recon scripts, secret-scanners, breach-DB queries, vulnerability
-correlators, screenshot capturers, network mappers — then **synthesizing
+correlators, screenshot capturers, network mappers, then **synthesizing
 their output into something an operator can act on**.
 
 The synthesis step is where most operator time goes. The tools produce
@@ -33,10 +33,10 @@ NexusRecon's premise: **the synthesis step can be done by an LLM running a
 fixed set of analysis personas, given the right structured inputs and the
 right output gates.** The result is a platform where an operator enters a
 seed domain plus an authorization scope, walks away, and returns to a
-campaign-ready deliverable with a ranked attack surface — not a folder of
+campaign-ready deliverable with a ranked attack surface, not a folder of
 raw tool dumps.
 
-The platform also does the discovery part: it orchestrates the 30–60
+The platform also does the discovery part: it orchestrates the 30-60
 tools, manages their rate limits and credentials, and decides which to
 run when based on what's been found so far. The LLM-driven loop in the
 middle is the difference between "an automation framework" and "an
@@ -54,7 +54,7 @@ what's being discovered.
 
 NexusRecon is **state-shaped**. There's a shared mutable state object
 (the "campaign state") that every tool writes into and every agent reads
-from. Phases are checkpoints rather than steps — at each checkpoint, a
+from. Phases are checkpoints rather than steps, at each checkpoint, a
 dispatcher LLM looks at what's in state, decides if anything is missing,
 and runs additional tools to fill the gaps before the next phase.
 
@@ -134,12 +134,12 @@ At ~30,000 feet:
 
 Key invariants the architecture enforces:
 
-- **Tools never modify each other's output**, only the state.
-- **Agents never call tools directly**, only read state and produce
+- **Tools never modify each other's output**: only the state.
+- **Agents never call tools directly**: only read state and produce
   analysis (which gets parsed into findings + prose).
 - **Every tool invocation is audit-logged** with the scope hash and
   hash-chained for tamper evidence.
-- **Every tool invocation is scope-gated** — out-of-scope targets are
+- **Every tool invocation is scope-gated**: out-of-scope targets are
   silently dropped at the registry layer.
 - **Every LLM call's cost is tracked** against the scope's
   `max_llm_cost_usd` budget cap. Exceeded budget → campaign aborts.
@@ -149,25 +149,25 @@ Key invariants the architecture enforces:
 ## 4. The phase pipeline
 
 A campaign runs 9 numbered phases (plus a credential-harvest interlude).
-Phases aren't sequential dependencies — they're checkpoints where the
+Phases aren't sequential dependencies, they're checkpoints where the
 state accumulates layered intel. The dispatcher fires between certain
 phases to fill gaps.
 
 | Phase | Role | What it discovers |
 |-------|------|-------------------|
-| **1 — Passive Footprinting** | T0 broad sweep | Subdomains, DNS records, WHOIS, cert transparency, ASN/BGP, dark-web mentions |
-| **2 — Identity & Cloud** | T0–T1 identity & cloud recon | M365/Azure tenant, AWS recon, GCP recon, harvested emails, email patterns |
-| **3 — Code & Secret Leakage** | T0 code surface | GitHub repos, leaked secrets via gitleaks/trufflehog/gitdorker, Postman workspaces, Docker Hub images |
-| **4 — Correlation & Hypothesis** | T0 synthesis | Cross-source validation, lead generation, confirmed_leads vs. open_questions |
-| **5 — Light Active** | T2 fingerprinting | HTTP probing (httpx), screenshots (gowitness), tech fingerprinting, favicon hashing, CMS detect, WAF detect, TLS analysis |
-| **6 — Active (T3)** | T3 intrusive | Brute force, content fuzzing, exploit verification. **Skipped unless scope authorizes T3.** |
-| **7 — Vuln & Pretext Correlation** | T0 vuln intel | NVD lookups, KEV check, EPSS scoring, ExploitDB, nuclei templates, pretext mining (news, jobs, SEC, LinkedIn dorks) |
-| **7.5 — Credential Harvest** | T0 cred extraction | Parses exposed `.env`, `.git/config`, infostealer hits, GitHub Actions leaks into structured credential records; optionally validates them read-only |
-| **8 — Attack Surface Prioritization** | T0 scoring | Runs the scoring engine; produces `ranked_threads` (top 10 attack paths) |
-| **9 — Reporting** | T0 synthesis | Generates 17 deliverables across MD/JSON/CSV/HTML/PDF/PPTX formats |
+| **1, Passive Footprinting** | T0 broad sweep | Subdomains, DNS records, WHOIS, cert transparency, ASN/BGP, dark-web mentions |
+| **2, Identity & Cloud** | T0-T1 identity & cloud recon | M365/Azure tenant, AWS recon, GCP recon, harvested emails, email patterns |
+| **3, Code & Secret Leakage** | T0 code surface | GitHub repos, leaked secrets via gitleaks/trufflehog/gitdorker, Postman workspaces, Docker Hub images |
+| **4, Correlation & Hypothesis** | T0 synthesis | Cross-source validation, lead generation, confirmed_leads vs. open_questions |
+| **5, Light Active** | T2 fingerprinting | HTTP probing (httpx), screenshots (gowitness), tech fingerprinting, favicon hashing, CMS detect, WAF detect, TLS analysis |
+| **6, Active (T3)** | T3 intrusive | Brute force, content fuzzing, exploit verification. **Skipped unless scope authorizes T3.** |
+| **7, Vuln & Pretext Correlation** | T0 vuln intel | NVD lookups, KEV check, EPSS scoring, ExploitDB, nuclei templates, pretext mining (news, jobs, SEC, LinkedIn dorks) |
+| **7.5, Credential Harvest** | T0 cred extraction | Parses exposed `.env`, `.git/config`, infostealer hits, GitHub Actions leaks into structured credential records; optionally validates them read-only |
+| **8, Attack Surface Prioritization** | T0 scoring | Runs the scoring engine; produces `ranked_threads` (top 10 attack paths) |
+| **9, Reporting** | T0 synthesis | Generates 17 deliverables across MD/JSON/CSV/HTML/PDF/PPTX formats |
 
 Between phases, the **reflection node** runs. In default `lite` dispatch
-mode it invokes the dispatcher after phases 1, 4, and 7 — the three
+mode it invokes the dispatcher after phases 1, 4, and 7, the three
 points where new intel changes what's worth pursuing next. In `full`
 mode it dispatches after every phase. In `off` mode it never dispatches.
 
@@ -176,18 +176,18 @@ mode it dispatches after every phase. In `off` mode it never dispatches.
 ## 5. The agents
 
 Each agent is an LLM-driven persona with a fixed system prompt that
-defines its role, goal, and backstory. Agents don't call tools — they
+defines its role, goal, and backstory. Agents don't call tools, they
 read the accumulated campaign state and emit (a) free-form analysis
 prose and (b) structured findings via a `FINDINGS_JSON:[...]` block.
 
 | Agent | Phase | What it does | Why it matters |
 |-------|-------|--------------|----------------|
-| **passive_recon** | 1, 3 | Analyzes subdomain/DNS/WHOIS/cert data. Identifies high-value subdomains, DNS anomalies, registration patterns, ownership signals. | Translates raw tool dumps into operator-facing observations — *"these three subdomains pattern-match dev/staging environments and weren't found by certificate transparency, suggesting internal-only intent that leaked."* |
+| **passive_recon** | 1, 3 | Analyzes subdomain/DNS/WHOIS/cert data. Identifies high-value subdomains, DNS anomalies, registration patterns, ownership signals. | Translates raw tool dumps into operator-facing observations, *"these three subdomains pattern-match dev/staging environments and weren't found by certificate transparency, suggesting internal-only intent that leaked."* |
 | **cloud_identity** | 2 | Analyzes cloud and identity reconnaissance. Identifies federation type, M365 attack vectors, email format patterns, AWS/GCP exposure. | Cloud attack chains depend on federation type (managed vs. ADFS), tenant verification, and email format. This agent translates `openid_config` + `user_realm` raw fields into "password spray is viable here, with this caveat." |
-| **correlation** | 4 | Cross-references findings across all prior phases. Promotes hypotheses to confirmed_leads or moves them to open_questions. | Eliminates the human work of "looking at three findings that point to the same conclusion" — corroborates intel from independent sources. |
-| **active_recon** | 5 | Analyzes T2 active probing results — HTTP responses, tech fingerprints, screenshots, TLS posture, CMS/WAF identification. | Operator-relevant interpretation of probe results: *"this admin panel responds 200; this CMS version is end-of-life; this WAF appears to be misconfigured."* |
+| **correlation** | 4 | Cross-references findings across all prior phases. Promotes hypotheses to confirmed_leads or moves them to open_questions. | Eliminates the human work of "looking at three findings that point to the same conclusion", corroborates intel from independent sources. |
+| **active_recon** | 5 | Analyzes T2 active probing results, HTTP responses, tech fingerprints, screenshots, TLS posture, CMS/WAF identification. | Operator-relevant interpretation of probe results: *"this admin panel responds 200; this CMS version is end-of-life; this WAF appears to be misconfigured."* |
 | **vuln_correlator** | 7 | Maps fingerprinted technologies to CVEs via NVD, KEV, EPSS, ExploitDB, nuclei-templates. Prioritises by exploit availability. | Translates a generic tech inventory into a CVE list filtered by *what's actually exploitable* (not just "this is a high CVSS"). |
-| **pretext_humint** | 7 | Aggregates pretext intel (news, jobs, SEC filings, LinkedIn dorks, Crunchbase, Wikipedia) for social engineering preparation. | Crafts the "why would this employee fall for this lure" narrative — recent acquisitions, layoffs, executive changes, software migrations. |
+| **pretext_humint** | 7 | Aggregates pretext intel (news, jobs, SEC filings, LinkedIn dorks, Crunchbase, Wikipedia) for social engineering preparation. | Crafts the "why would this employee fall for this lure" narrative, recent acquisitions, layoffs, executive changes, software migrations. |
 | **risk_analyst** | 8 | Reviews scored findings, ranks them by exploitability × impact × asset exposure, maps to MITRE PRE-ATT&CK / ATT&CK techniques. | This is the "what should the operator do first" step. Produces the top 10 attack paths with rationale. |
 | **executive_reporter** | 9 | Synthesises everything into the executive summary's top findings + analyst assessment prose. | The deliverable a client sees; the agent that has to write *for* a non-OSINT audience. |
 
@@ -195,7 +195,7 @@ There are also three **utility agents** that don't fit a single phase:
 
 | Agent | Where it runs | What it does |
 |-------|---------------|--------------|
-| **dynamic_dispatcher** | Between phases (lite: after 1/4/7; full: after every phase) | Decides which 0–5 follow-up tools to run before the next phase. Capped at 30 total dispatches per campaign. |
+| **dynamic_dispatcher** | Between phases (lite: after 1/4/7; full: after every phase) | Decides which 0-5 follow-up tools to run before the next phase. Capped at 30 total dispatches per campaign. |
 | **phishing_drafter** | During phase 9 reporting (if `--generate-phishing` is set) | Generates per-target spearphishing draft emails with role-specific lures, sender-domain strategy based on DMARC posture, OSINT citations, and an authorization banner. One LLM call per target. |
 | **evidence_auditor** | During phase 9 | Validates every finding has required citation fields (source, timestamp, evidence_hash, confidence). Filters out malformed findings before they reach reports. |
 
@@ -230,7 +230,7 @@ for downstream parsing rather than analysis-with-findings.
 ## 6. The tools
 
 The platform integrates an **extensible OSINT tool registry** organised
-into category buckets — subdomain enumeration, DNS / certificate
+into category buckets, subdomain enumeration, DNS / certificate
 transparency, breach data, code-leakage scanners, cloud posture
 (AWS / Azure / GCP), threat intel (Shodan / Censys / VT / GreyNoise /
 urlscan), vuln intel (NVD / KEV / EPSS / ExploitDB / GH Advisory),
@@ -301,7 +301,7 @@ The registry layer wraps every `run()` call with:
 | `mobile` | playstore, apk_analyzer | Phase 2, dispatcher |
 
 Roughly half work without API keys (passive sources, public services).
-The other half are key-gated — tools whose API requires authentication.
+The other half are key-gated, tools whose API requires authentication.
 The platform degrades gracefully: missing keys mean specific tools are
 skipped, but the campaign still completes.
 
@@ -316,7 +316,7 @@ This is the component that makes the platform "agentic" rather than
 
 Imagine a campaign against a target where the subdomain-enumeration
 phase finds nothing. A fixed pipeline runs the next phase (identity
-recon) regardless — but identity recon depends on having subdomains
+recon) regardless, but identity recon depends on having subdomains
 to look at. Without them, phase 2 produces minimal output, phase 3 the
 same, and the campaign accumulates gaps.
 
@@ -331,11 +331,11 @@ called with:
 
 - Recent findings (so far)
 - The full tool catalog (each tool's description, category, tier,
-  required keys, and `dynamic_trigger_hints` — keywords that suggest
+  required keys, and `dynamic_trigger_hints`, keywords that suggest
   when the tool is relevant)
 - Recent agent_messages (analytical context from prior phases)
 
-It returns a JSON list of 0–5 tools to dispatch, each with a target and
+It returns a JSON list of 0-5 tools to dispatch, each with a target and
 a rationale. The dispatcher rationale is preserved in `dynamic_dispatch_log`
 so the operator can audit *why* each follow-up tool ran.
 
@@ -364,18 +364,18 @@ The dispatcher is bounded:
   hits, the reflection node logs and proceeds without dispatching.
 - **Cost protection:** every dispatch is a tool call, but the dispatcher
   LLM call itself is a single API request per cycle. Total dispatcher
-  cost in `lite` mode is typically $0.05–$0.15 per campaign.
+  cost in `lite` mode is typically $0.05-$0.15 per campaign.
 
 ### Where dispatched results land
 
 The dispatcher's selected tool runs through the normal registry path
 (scope guard, audit log, cache). Its result is then merged back into
-state at `state[<intel_key>][f"dynamic/{tool_name}/{target}"]` — the
+state at `state[<intel_key>][f"dynamic/{tool_name}/{target}"]`, the
 `dynamic/` prefix marks it as dispatcher-sourced so it's distinguishable
 from phase-sourced data.
 
 The category-to-intel-slot mapping (`CATEGORY_TO_STATE_KEY` in
-`dynamic_dispatcher.py`) ensures results land in the right slot —
+`dynamic_dispatcher.py`) ensures results land in the right slot.
 subdomain tools land in `subdomain_intel`, cloud tools in `cloud_intel`,
 and so on.
 
@@ -384,7 +384,7 @@ and so on.
 ## 8. From findings to ranked threats
 
 Producing a list of findings is the easy part. Producing a *ranked*
-list where the top 10 are actually the most consequential threats —
+list where the top 10 are actually the most consequential threats.
 that's the scoring engine's job.
 
 ### What "scoring" actually means here
@@ -395,20 +395,20 @@ by score descending. Each finding gets a score from 0.0 to 1.0,
 combining:
 
 - **CVSS / severity** of the underlying vulnerability or exposure
-- **EPSS** (Exploit Prediction Scoring System) — likelihood of
+- **EPSS** (Exploit Prediction Scoring System), likelihood of
   exploitation in 30 days
-- **CISA KEV** boost — multiplied if the CVE is in the Known Exploited
+- **CISA KEV** boost, multiplied if the CVE is in the Known Exploited
   Vulnerabilities catalogue
-- **Exploit availability boost** — Metasploit module > public PoC >
+- **Exploit availability boost**: Metasploit module > public PoC >
   nuclei template > no exploit
-- **Asset exposure boost** — public S3 buckets, exposed admin panels,
+- **Asset exposure boost**: public S3 buckets, exposed admin panels,
   identified-tenant cloud presence
-- **Breach addends** — `+0.1` per breached employee, capped at `0.3`
-- **Secret addends** — `+0.3` per leaked credential set
-- **Bucket addends** — `+0.2` per public cloud bucket
+- **Breach addends**: `+0.1` per breached employee, capped at `0.3`
+- **Secret addends**: `+0.3` per leaked credential set
+- **Bucket addends**: `+0.2` per public cloud bucket
 
 Findings sourced from agents (the FINDINGS_JSON output) are also
-included via `_score_agent_findings()` — so analyst observations like
+included via `_score_agent_findings()`, so analyst observations like
 "executive email cluster identified" or "no email security controls"
 are scored alongside tool-derived findings.
 
@@ -418,7 +418,7 @@ finding is always at 1.0 and downstream rankings are relative.
 ### The top-10 deliverable
 
 The top 10 ranked findings become `state["ranked_threads"]` and render
-into `top_threads.md` — the platform's headline operator-facing
+into `top_threads.md`, the platform's headline operator-facing
 deliverable. Each thread includes:
 
 - Priority score (% of max)
@@ -444,7 +444,7 @@ specific audience and purpose.
 
 | File | Purpose | When to use |
 |------|---------|-------------|
-| `top_threads.md` | Top 10 ranked attack paths with rationale + next steps | Daily-driver document — open this first |
+| `top_threads.md` | Top 10 ranked attack paths with rationale + next steps | Daily-driver document, open this first |
 | `top_threads.json` | Same data, structured for tooling | Pipeline integrations, dashboards |
 | `findings.json` | Full raw findings export with hashes | Programmatic consumption, evidence chain |
 | `attack_surface.md` | Severity × confidence × MITRE technique matrix | Mid-engagement triage; client meetings |
@@ -486,11 +486,11 @@ operator. Specifically:
 
 ### What is automated
 
-- **Tool orchestration.** Running 30–60 tools across 9 phases without
+- **Tool orchestration.** Running 30-60 tools across 9 phases without
   forgetting any or running them in the wrong order.
 - **Cross-tool synthesis.** Translating raw tool output into a unified
   state model the agents can analyse.
-- **Analysis prose.** LLM-driven interpretation of tool output —
+- **Analysis prose.** LLM-driven interpretation of tool output.
   *"this means X for an attacker; that means Y for a defender."*
 - **Finding extraction.** Structured findings (severity, title,
   description, affected assets, next steps, MITRE techniques) emitted
@@ -529,7 +529,7 @@ operator. Specifically:
 
 ### Where the operator adds value
 
-A skilled operator using this platform is roughly 5–10× more efficient
+A skilled operator using this platform is roughly 5-10× more efficient
 than running the same tools manually, *because* the synthesis step is
 done for them. But they still:
 
@@ -543,7 +543,7 @@ done for them. But they still:
   not infallible)
 
 If you're approaching this as "I want a button that does the recon for
-me so I can focus on the interesting parts" — that's exactly the goal.
+me so I can focus on the interesting parts", that's exactly the goal.
 The interesting parts are operator judgment, exploitation, and client
 communication. The boring parts are tool orchestration and synthesis.
 NexusRecon does the boring parts.
@@ -555,19 +555,19 @@ NexusRecon does the boring parts.
 | Term | Definition |
 |------|------------|
 | **Agentic** | Refers to systems where an LLM makes decisions about what to do next based on observed state, rather than following a fixed script. NexusRecon is agentic in the dispatcher layer; the rest is structured automation. |
-| **Attribution confidence** | A 0.0–1.0 score on cloud-recon findings indicating how strongly the data ties to the target (vs. a name-stem collision with an unrelated party). High confidence (≥ 0.5) feeds normal findings; low confidence triggers `[POSSIBLE]` downgrade. |
-| **Audit chain** | The hash-chained log of every tool invocation. Each entry's hash includes the previous entry's hash — tampering with any entry invalidates everything after it. |
+| **Attribution confidence** | A 0.0-1.0 score on cloud-recon findings indicating how strongly the data ties to the target (vs. a name-stem collision with an unrelated party). High confidence (≥ 0.5) feeds normal findings; low confidence triggers `[POSSIBLE]` downgrade. |
+| **Audit chain** | The hash-chained log of every tool invocation. Each entry's hash includes the previous entry's hash, tampering with any entry invalidates everything after it. |
 | **Campaign** | A single end-to-end run against a scope. Identified by a `campaign_id` (e.g. `nr-20260513-184341-d8ae58b2`). All artifacts land under `campaigns/<client_slug>/<engagement_id>/<campaign_id>/`. |
-| **Dispatcher** | The LLM-driven decision-maker that runs between phases and selects 0–5 follow-up tools based on what's missing from state. |
-| **EPSS** | Exploit Prediction Scoring System — FIRST.org's data feed estimating the probability a given CVE will be exploited in the next 30 days. |
+| **Dispatcher** | The LLM-driven decision-maker that runs between phases and selects 0-5 follow-up tools based on what's missing from state. |
+| **EPSS** | Exploit Prediction Scoring System, FIRST.org's data feed estimating the probability a given CVE will be exploited in the next 30 days. |
 | **Evidence hash** | A sha256 hash tying a finding to its source data (a tool output, an agent's response, or a synthetic deterministic hash for LLM-derived findings). Used by the evidence auditor. |
 | **Finding** | A structured record: `{severity, title, description, source, confidence, category, affected_assets, next_steps, mitre_techniques, recommendation, evidence_hash, phase, timestamp}`. Produced by agents (via FINDINGS_JSON) or by the scoring engine from tool data. |
-| **KEV** | CISA Known Exploited Vulnerabilities catalogue — CVEs confirmed exploited in the wild. |
+| **KEV** | CISA Known Exploited Vulnerabilities catalogue, CVEs confirmed exploited in the wild. |
 | **Phase** | A campaign checkpoint with a defined role (passive recon, identity & cloud, etc.). 9 numbered phases plus phase 7.5. |
 | **Ranked thread** | An entry in `ranked_threads`, sourced from the scoring engine's normalised + sorted findings. The top 10 form the operator's "where to start" list. |
 | **Scope** | The YAML file authorizing what the platform may scan. Contains the engagement metadata, in-scope/out-of-scope domains, IP ranges, cloud tenants, and constraints (max tier, stealth profile, budget cap). |
 | **State** | The shared dict object that accumulates everything across the campaign. Tools write to it; agents read from it; the dispatcher reads it to decide; the report engine renders from it. |
-| **Stem-match** | A weak attribution signal — e.g., the platform tested `<seed_stem>.onmicrosoft.com` and got a hit, but that tenant may belong to a completely unrelated party. Tagged `attribution_confidence: 0.2`. |
+| **Stem-match** | A weak attribution signal, e.g., the platform tested `<seed_stem>.onmicrosoft.com` and got a hit, but that tenant may belong to a completely unrelated party. Tagged `attribution_confidence: 0.2`. |
 | **Tier** | A tool's intrusiveness level. T0 passive (no target traffic), T1 fingerprinting (light touch), T2 active scanning (visible in logs), T3 intrusive (brute force, exploitation). Phases enforce tier ceilings per scope. |
 | **Tool** | A subclass of `OSINTTool` integrating one external data source. Categories range from subdomain enumeration to mobile APK analysis. Run `nexusrecon tools` for the live registry. |
 
@@ -575,19 +575,19 @@ NexusRecon does the boring parts.
 
 ## 12. Where to read next
 
-- **`README.md`** — quick-start: install, configure, run
-- **`MANUAL.md`** — comprehensive operator manual (1100+ lines)
-- **`BETA_TESTING_GUIDE.md`** — closed-beta tester onboarding
-- **`TESTING_RUNBOOK.md`** — end-to-end test procedure
-- **`CONFIGURATION_GUIDE.md`** — every env var, every API key, what each unlocks
-- **`nexusrecon/docs/AGENT_LOOP.md`** — dispatcher deep-dive
-- **`nexusrecon/docs/REPORT_GUIDE.md`** — which deliverable is for which audience
-- **`DISCLAIMER.md`** — legal framing, authorization requirements
+- **`README.md`**: quick-start: install, configure, run
+- **`MANUAL.md`**: comprehensive operator manual (1100+ lines)
+- **`BETA_TESTING_GUIDE.md`**: closed-beta tester onboarding
+- **`TESTING_RUNBOOK.md`**: end-to-end test procedure
+- **`CONFIGURATION_GUIDE.md`**: every env var, every API key, what each unlocks
+- **`nexusrecon/docs/AGENT_LOOP.md`**: dispatcher deep-dive
+- **`nexusrecon/docs/REPORT_GUIDE.md`**: which deliverable is for which audience
+- **`DISCLAIMER.md`**: legal framing, authorization requirements
 
 The codebase itself is organised so each component is in one place:
-- `nexusrecon/tools/` — every tool in the registry, organised by category
-- `nexusrecon/agents/` — the 11 agent personas (roles, prompts, backstories)
-- `nexusrecon/graph/` — the phase pipeline, dispatcher, agent executor
-- `nexusrecon/core/` — campaign manager, scoring engine, credential harvester, audit log
-- `nexusrecon/reports/` — the report engine + phishing draft generator
-- `nexusrecon/models/` — pydantic data models for scope, findings, entities
+- `nexusrecon/tools/`, every tool in the registry, organised by category
+- `nexusrecon/agents/`, the 11 agent personas (roles, prompts, backstories)
+- `nexusrecon/graph/`, the phase pipeline, dispatcher, agent executor
+- `nexusrecon/core/`, campaign manager, scoring engine, credential harvester, audit log
+- `nexusrecon/reports/`, the report engine + phishing draft generator
+- `nexusrecon/models/`, pydantic data models for scope, findings, entities

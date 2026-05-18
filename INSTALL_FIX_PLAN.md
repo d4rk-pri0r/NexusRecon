@@ -1,11 +1,11 @@
-# NexusRecon — Install Pipeline Fix Plan
+# NexusRecon: Install Pipeline Fix Plan
 
 > **Audience:** Sonnet 4.6 with extended thinking, working autonomously.
 > **Goal:** Make the install path bulletproof for first-time users (and beta
 > testers) on macOS + Debian/Ubuntu/Kali. A fresh `git clone` → `./install.sh`
 > → working `nexusrecon` should "just work" without manual workarounds.
 > **Working directory:** `/Users/waifumachine/agentic-osint`
-> **Reference spec:** Section 0 of `EXECUTION_PLAN_V2_GOLD_STANDARD.md` —
+> **Reference spec:** Section 0 of `EXECUTION_PLAN_V2_GOLD_STANDARD.md`.
 > codebase conventions still apply (no new abstractions, no compat shims,
 > surgical edits).
 
@@ -16,12 +16,12 @@
 The operator hit a chain of install failures on macOS with Homebrew Python:
 
 1. `install.sh` defaulted to Homebrew's **Python 3.14** (just released, no
-   CrewAI support yet — CrewAI requires `<3.14`).
+   CrewAI support yet, CrewAI requires `<3.14`).
 2. `install.sh` ran `pip install -e ".[dev]"` outside a venv, triggering
    **PEP 668** (`externally-managed-environment`) on the Homebrew Python.
 3. The brew package list contains entries that aren't brew formulae
    (`waybackurls`, possibly `naabu`/`dnstwist`).
-4. `pyproject.toml` has `requires-python = ">=3.11"` — no upper bound.
+4. `pyproject.toml` has `requires-python = ">=3.11"`, no upper bound.
    Pip happily attempts dependency resolution against Python 3.14 and
    spends 30+ minutes spelunking the version index before failing.
 
@@ -37,24 +37,24 @@ follow-up) produces a working install on any supported platform.
 
 ## Issue Inventory
 
-Each issue below has a fix specified later. Reference by ID (I1–I9) when
+Each issue below has a fix specified later. Reference by ID (I1-I9) when
 asking clarifying questions.
 
 | ID | Severity | File | Issue |
 |----|----------|------|-------|
 | I1 | CRITICAL | `pyproject.toml:11` | `requires-python = ">=3.11"` lacks upper bound. Should be `">=3.11,<3.14"` to match CrewAI's window and fail fast. |
-| I2 | CRITICAL | `install.sh:208–224` | `install_python_packages()` runs `pip install -e ".[dev]"` directly. No venv detection. Fails on PEP-668-enabled Pythons (Homebrew, recent Debian/Ubuntu, Fedora). |
-| I3 | CRITICAL | `install.sh:43–52` | Python version gate only checks lower bound (`>=3.11`). Does not reject `>=3.14`, so script proceeds before CrewAI inevitably fails. |
-| I4 | HIGH | `install.sh:65–76` | `BREW_PKGS` list contains non-formula names: `waybackurls` (must be `go install`), `naabu` (formula is `projectdiscovery/naabu`), `dnstwist` (PyPI only). The user's run showed `waybackurls` failing. |
-| I5 | HIGH | `install.sh:163–168` | `$PIP install dnstwist` runs outside a venv — PEP 668 same as I2. |
+| I2 | CRITICAL | `install.sh:208-224` | `install_python_packages()` runs `pip install -e ".[dev]"` directly. No venv detection. Fails on PEP-668-enabled Pythons (Homebrew, recent Debian/Ubuntu, Fedora). |
+| I3 | CRITICAL | `install.sh:43-52` | Python version gate only checks lower bound (`>=3.11`). Does not reject `>=3.14`, so script proceeds before CrewAI inevitably fails. |
+| I4 | HIGH | `install.sh:65-76` | `BREW_PKGS` list contains non-formula names: `waybackurls` (must be `go install`), `naabu` (formula is `projectdiscovery/naabu`), `dnstwist` (PyPI only). The user's run showed `waybackurls` failing. |
+| I5 | HIGH | `install.sh:163-168` | `$PIP install dnstwist` runs outside a venv, PEP 668 same as I2. |
 | I6 | MEDIUM | `install.sh` | No end-of-install verification. Script exits successfully even if `nexusrecon --help` would fail. |
 | I7 | MEDIUM | `install.sh` | No phased operation. User cannot skip system packages, cannot do Python-only, cannot run unattended. |
-| I8 | MEDIUM | `README.md:99`, `MANUAL.md:55–69` | Install instructions say `pip3 install -e ".[dev]"` with no mention of a venv. Will fail on any modern macOS/Linux. |
-| I9 | LOW | `nexusrecon/cli/main.py` | No first-run sanity check inside the CLI itself. If a user somehow has a broken install, the error surface is whatever traceback Python emits — not actionable. |
+| I8 | MEDIUM | `README.md:99`, `MANUAL.md:55-69` | Install instructions say `pip3 install -e ".[dev]"` with no mention of a venv. Will fail on any modern macOS/Linux. |
+| I9 | LOW | `nexusrecon/cli/main.py` | No first-run sanity check inside the CLI itself. If a user somehow has a broken install, the error surface is whatever traceback Python emits, not actionable. |
 
 ---
 
-## Fix 1 (I1) — Tighten `pyproject.toml` Python bound
+## Fix 1 (I1): Tighten `pyproject.toml` Python bound
 
 **File:** `pyproject.toml` line 11
 
@@ -82,7 +82,7 @@ dependency: `# Upper bound tracks crewai's requires-python constraint.`
 
 ---
 
-## Fix 2 (I2, I5) — Venv strategy in `install.sh`
+## Fix 2 (I2: I5), Venv strategy in `install.sh`
 
 The script must work whether the user has activated a venv or not. Use
 this strategy:
@@ -132,7 +132,7 @@ PYTHON="python"
 ```
 
 so all subsequent calls use the venv's interpreter. Drop the `--quiet`
-flag from the `pip install` call — install errors should be visible.
+flag from the `pip install` call, install errors should be visible.
 
 **Acceptance:**
 - Fresh clone, no venv → `./install.sh` creates `./venv/` and installs into
@@ -144,13 +144,13 @@ flag from the `pip install` call — install errors should be visible.
 
 **Pitfall:** `set -euo pipefail` is on. If `source ./venv/bin/activate`
 fails (corrupted venv), the script will abort. Add a `|| { err "venv
-activation failed — delete ./venv and retry"; exit 1; }` guard.
+activation failed, delete ./venv and retry"; exit 1; }` guard.
 
 ---
 
-## Fix 3 (I3) — Python upper-bound gate
+## Fix 3 (I3): Python upper-bound gate
 
-**File:** `install.sh:43–52`
+**File:** `install.sh:43-52`
 
 Replace the current version check with:
 
@@ -168,7 +168,7 @@ fi
 
 # Upper bound: <3.14 (tracks crewai)
 if [[ $PY_MAJOR -gt 3 ]] || { [[ $PY_MAJOR -eq 3 ]] && [[ $PY_MINOR -ge 14 ]]; }; then
-    err "Python $PYTHON_VERSION is too new — crewai requires <3.14"
+    err "Python $PYTHON_VERSION is too new, crewai requires <3.14"
     err ""
     err "Detected Python is: $($PYTHON -c 'import sys; print(sys.executable)')"
     err ""
@@ -191,9 +191,9 @@ log "Python $PYTHON_VERSION OK"
 
 ---
 
-## Fix 4 (I4) — Clean up `BREW_PKGS`
+## Fix 4 (I4): Clean up `BREW_PKGS`
 
-**File:** `install.sh:65–76`
+**File:** `install.sh:65-76`
 
 Current list contains items that aren't brew formulae. Replace `BREW_PKGS`
 with **only** real Homebrew formulae:
@@ -210,9 +210,9 @@ BREW_PKGS=(
 )
 ```
 
-Remove: `naabu` (formula is `projectdiscovery/projectdiscovery/naabu` —
+Remove: `naabu` (formula is `projectdiscovery/projectdiscovery/naabu`.
 non-standard tap, not worth the friction; nuclei + httpx covers it),
-`waybackurls` (go install only), `gau` (go install only — though brew
+`waybackurls` (go install only), `gau` (go install only, though brew
 may have it now; if so leave it, but the script's `go install` call covers
 the fallback), `dnstwist` (PyPI only).
 
@@ -232,7 +232,7 @@ python -m pip install dnstwist
 - `./install.sh` on macOS produces zero `[!] Failed to install <pkg> (optional)`
   lines for tools the project actually needs (`subfinder`, `amass`,
   `httpx`, `dnsx`, `gau`, `waybackurls`, `gowitness`).
-- Optional binaries (`nuclei`, `katana`, `arjun`) — note in the runbook
+- Optional binaries (`nuclei`, `katana`, `arjun`), note in the runbook
   whether to add them to `install_go_tools()`. Decision: **yes, add them**.
   `nuclei` and `katana` are go installs from projectdiscovery, `arjun` is
   `pip install arjun` (add to Python step).
@@ -254,7 +254,7 @@ GO_TOOLS=(
 
 ---
 
-## Fix 5 (I7) — Phased operation flags
+## Fix 5 (I7): Phased operation flags
 
 The current script is all-or-nothing. Add three flags:
 
@@ -302,7 +302,7 @@ Wire them into the existing flow:
 
 ---
 
-## Fix 6 (I6) — End-of-install verification
+## Fix 6 (I6): End-of-install verification
 
 After all install steps, run a smoke check:
 
@@ -345,14 +345,14 @@ print(len(list(get_registry()._tools.values())))
         if command -v "$b" >/dev/null 2>&1; then
             echo "  [+] $b"
         else
-            echo "  [ ] $b — gated tool will be unavailable"
+            echo "  [ ] $b, gated tool will be unavailable"
         fi
     done
 }
 ```
 
 Call `verify_install` at the end of `main()` before the "Installation
-complete!" banner. If it returns non-zero, exit 1 — don't pretend
+complete!" banner. If it returns non-zero, exit 1, don't pretend
 everything's fine.
 
 **Acceptance:**
@@ -366,7 +366,7 @@ everything's fine.
 
 ---
 
-## Fix 7 (I8) — Refresh user-facing install docs
+## Fix 7 (I8): Refresh user-facing install docs
 
 ### `README.md`
 
@@ -384,7 +384,7 @@ git clone <repo> && cd agentic-osint
 source venv/bin/activate
 \`\`\`
 
-**Python 3.13 is required** (not 3.14 — CrewAI compatibility). If your
+**Python 3.13 is required** (not 3.14, CrewAI compatibility). If your
 default `python3` is 3.14, override:
 
 \`\`\`bash
@@ -406,16 +406,16 @@ session before running `nexusrecon`.
 
 ### `MANUAL.md`
 
-Section 1 ("Prerequisites") line 24–30: add a callout:
+Section 1 ("Prerequisites") line 24-30: add a callout:
 
 ```markdown
-> **Python version:** 3.11, 3.12, or 3.13 (NOT 3.14 — CrewAI does not
+> **Python version:** 3.11, 3.12, or 3.13 (NOT 3.14, CrewAI does not
 > support 3.14 as of this writing). On macOS with Homebrew, the default
 > `python3` may now be 3.14; install Python 3.13 with
 > `brew install python@3.13` and override with `PYTHON=python3.13`.
 ```
 
-Section 2 ("Installation") line 52–70: rewrite to put the venv step
+Section 2 ("Installation") line 52-70: rewrite to put the venv step
 first, mirroring the README. Add a sub-section: "Why a venv? PEP 668
 prevents global pip installs on most modern Python distributions
 (Homebrew, recent Debian/Ubuntu, Fedora). A venv is mandatory."
@@ -456,7 +456,7 @@ which nexusrecon  # should show .../venv/bin/nexusrecon
 
 ---
 
-## Fix 8 (I9) — CLI first-run sanity check (OPTIONAL)
+## Fix 8 (I9): CLI first-run sanity check (OPTIONAL)
 
 If you have time after the above, add to `nexusrecon/cli/main.py` a
 top-of-module check that runs before any subcommand:
@@ -467,7 +467,7 @@ def _check_runtime_env() -> None:
     import sys
     if sys.version_info < (3, 11) or sys.version_info >= (3, 14):
         sys.stderr.write(
-            f"\n[ERROR] NexusRecon requires Python 3.11–3.13. "
+            f"\n[ERROR] NexusRecon requires Python 3.11-3.13. "
             f"Detected: {sys.version_info.major}.{sys.version_info.minor}.\n"
             f"Install 3.13 and re-run inside its venv.\n\n"
         )
@@ -550,7 +550,7 @@ behavior, that's a regression to fix before declaring done.
    `python3 -m py_compile $(find nexusrecon -name '*.py')` for the
    Python side.
 3. Do NOT create git commits. Operator commits manually after review.
-4. Do NOT install system binaries while testing — the operator already
+4. Do NOT install system binaries while testing, the operator already
    has them. Test by reading the bash logic and simulating.
 5. If any fix uncovers an architectural decision that's not specified
    here, stop and ask before guessing.
@@ -563,7 +563,7 @@ behavior, that's a regression to fix before declaring done.
 
 - Don't rewrite `install.sh` from scratch. Edit in place.
 - Don't introduce a `Makefile`, `justfile`, or other build runner.
-- Don't move to `uv`, `poetry`, or `pdm` — `pip` + `venv` is the contract.
+- Don't move to `uv`, `poetry`, or `pdm`, `pip` + `venv` is the contract.
 - Don't add Docker handling here (it's covered separately in
   `docker-compose.yml`).
 - Don't refactor the package layout. The `pip install -e .` path stays

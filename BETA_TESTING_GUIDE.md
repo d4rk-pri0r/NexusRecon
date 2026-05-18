@@ -1,6 +1,6 @@
-# NexusRecon — Closed Beta Tester Onboarding
+# NexusRecon: Closed Beta Tester Onboarding
 
-Welcome. You're getting early access to NexusRecon — an agentic OSINT
+Welcome. You're getting early access to NexusRecon, an agentic OSINT
 orchestration platform for authorized red team and threat intelligence work.
 This guide gets you from clone to working campaign in roughly an hour.
 
@@ -32,7 +32,7 @@ and produces:
 - PDF + PPTX executive deliverables
 
 The agentic loop fires a "dispatcher" LLM between phases 1/4/7 that
-chooses follow-up tools based on gaps in the campaign state — e.g., if
+chooses follow-up tools based on gaps in the campaign state, e.g., if
 no subdomains were found after phase 1, it dispatches `subfinder`,
 `crtsh`, `theharvester`, and friends without operator intervention.
 
@@ -42,7 +42,7 @@ and logged for audit.
 
 ---
 
-## 2. Authorization — non-negotiable
+## 2. Authorization, non-negotiable
 
 Before you run a campaign against anything:
 
@@ -65,9 +65,9 @@ Before you run a campaign against anything:
 - A domain you own (your homelab, personal site, your employer with
   written permission)
 - A public scanner-test target like `testphp.vulnweb.com` (deliberately
-  vulnerable, explicitly for testing scanners — thin but safe)
+  vulnerable, explicitly for testing scanners, thin but safe)
 - A public bug bounty program where the OSINT scope is explicit in the
-  policy (verify their policy yourself — programs vary)
+  policy (verify their policy yourself, programs vary)
 
 **Do NOT** point this at a random company "just to see what it finds."
 The audit log will show you scanned them; that's not a defense.
@@ -86,11 +86,11 @@ The audit log will show you scanned them; that's not a defense.
 
 **Optional but high-leverage keys (configure if you have them):**
 
-- `GITHUB_TOKEN` — unlocks 5 code/secret discovery tools
-- `HUNTER_API_KEY` — email pattern + harvesting (free tier: 50/month)
-- `VIRUSTOTAL_API_KEY` — domain reputation + passive DNS (free: 500/day)
-- `SHODAN_API_KEY` — host/service fingerprinting (free tier or ~$5 one-time)
-- `URLSCAN_API_KEY`, `ABUSEIPDB_API_KEY`, `IPINFO_API_KEY` — all free
+- `GITHUB_TOKEN`, unlocks 5 code/secret discovery tools
+- `HUNTER_API_KEY`, email pattern + harvesting (free tier: 50/month)
+- `VIRUSTOTAL_API_KEY`, domain reputation + passive DNS (free: 500/day)
+- `SHODAN_API_KEY`, host/service fingerprinting (free tier or ~$5 one-time)
+- `URLSCAN_API_KEY`, `ABUSEIPDB_API_KEY`, `IPINFO_API_KEY`, all free
 
 See `CONFIGURATION_GUIDE.md` for the full key inventory with signup
 URLs and what each one unlocks.
@@ -153,7 +153,7 @@ NEXUS_LLM_MODEL=claude-sonnet-4-6
 ```
 
 Add as many of the optional keys as you have. The platform degrades
-gracefully — missing keys mean specific tools are skipped, but the
+gracefully, missing keys mean specific tools are skipped, but the
 campaign still completes.
 
 ### 4.4 Verify install
@@ -182,16 +182,16 @@ $EDITOR my_scope.yaml
 
 Required edits:
 
-- `engagement.client` — short org name
-- `engagement.engagement_id` — your tracker ID, free text
-- `engagement.authorized_by` — your name + the authorizing party
-- `engagement.authorization_date` — today's date in `YYYY-MM-DD`
-- `scope.in_scope.domains: ["YOUR-TARGET-DOMAIN"]` — just one seed; the
+- `engagement.client`, short org name
+- `engagement.engagement_id`, your tracker ID, free text
+- `engagement.authorized_by`, your name + the authorizing party
+- `engagement.authorization_date`, today's date in `YYYY-MM-DD`
+- `scope.in_scope.domains: ["YOUR-TARGET-DOMAIN"]`, just one seed; the
   platform expands from there
 
 Optional:
 
-- `constraints.max_llm_cost_usd: 5.0` — hard budget cap. Campaign aborts
+- `constraints.max_llm_cost_usd: 5.0`, hard budget cap. Campaign aborts
   if this is hit mid-flight.
 
 ### 5.2 Validate the scope
@@ -210,7 +210,7 @@ nexusrecon run --scope my_scope.yaml --dry-run
 ```
 
 Confirms the campaign would initialize without actually running tools or
-making LLM calls. Should print "Dry run — scope is valid, campaign ready."
+making LLM calls. Should print "Dry run, scope is valid, campaign ready."
 
 ### 5.4 First real campaign (light mode, no agentic dispatch)
 
@@ -222,12 +222,12 @@ nexusrecon run \
 ```
 
 This is the cheapest, fastest path to a working campaign. Light mode
-runs phases 1–5 + 7–9 with no agentic dispatcher. Expected:
+runs phases 1-5 + 7-9 with no agentic dispatcher. Expected:
 
-- 5–10 min runtime
-- ~$1–$2 in Anthropic API spend on a real target (a few cents on a thin
+- 5-10 min runtime
+- ~$1-$2 in Anthropic API spend on a real target (a few cents on a thin
   target like `testphp.vulnweb.com`)
-- 30–50 findings depending on target richness
+- 30-50 findings depending on target richness
 
 ### 5.5 Full campaign with all features
 
@@ -248,7 +248,7 @@ config files; opt-in because validation calls touch cloud-provider APIs).
 `--generate-phishing` produces per-target email drafts when emails are
 harvested.
 
-Expected: ~10–15 min runtime, ~$2–$3 spend on a real target.
+Expected: ~10-15 min runtime, ~$2-$3 spend on a real target.
 
 ### 5.6 Where the reports live
 
@@ -258,13 +258,13 @@ ls campaigns/<client_slug>/<engagement_id>/<campaign_id>/reports/
 
 Open these in order:
 
-1. **`top_threads.md`** — operator's starting point; ranked attack paths
-2. **`executive_summary.md`** — client-deliverable summary
-3. **`phishing_drafts.md`** — index of per-target drafts (one `.md` per email)
-4. **`harvested_credentials.md`** — exposed credentials with redaction
-5. **`full_report.md`** — comprehensive findings detail
-6. **`entity_graph.html`** — interactive entity graph (open in browser)
-7. **`jira_tracker.csv`** — Jira-importable findings list
+1. **`top_threads.md`**: operator's starting point; ranked attack paths
+2. **`executive_summary.md`**: client-deliverable summary
+3. **`phishing_drafts.md`**: index of per-target drafts (one `.md` per email)
+4. **`harvested_credentials.md`**: exposed credentials with redaction
+5. **`full_report.md`**: comprehensive findings detail
+6. **`entity_graph.html`**: interactive entity graph (open in browser)
+7. **`jira_tracker.csv`**: Jira-importable findings list
 
 See `nexusrecon/docs/REPORT_GUIDE.md` for the per-file rationale.
 
@@ -273,7 +273,7 @@ See `nexusrecon/docs/REPORT_GUIDE.md` for the per-file rationale.
 ## 6. Known issues and workarounds
 
 These are open bugs we know about. If you hit one of these, it's not new
-— just confirming the workaround works for you is useful feedback.
+,  just confirming the workaround works for you is useful feedback.
 
 ### Empty shell env var defeats `.env` value
 
@@ -283,7 +283,7 @@ Campaigns fall back to MockLLM (cost $0, no real analysis).
 
 **Symptom:** `state.llm_cost_usd: 0.0` after a campaign that should have
 cost something. The startup also prints a yellow `[WARN]` about empty env
-keys — easy to miss in the registration noise.
+keys, easy to miss in the registration noise.
 
 **Workaround:**
 
@@ -305,7 +305,7 @@ env -u ANTHROPIC_API_KEY nexusrecon run ...
 The platform's per-phase agents (passive_recon, cloud_identity, correlation,
 risk_analyst, executive_reporter) sometimes independently emit findings
 about the same underlying observation. On a real target, you'll see
-4–5 entries about "M365 Password Spray Viable" with slightly different
+4-5 entries about "M365 Password Spray Viable" with slightly different
 wording.
 
 **Why it happens:** each phase has its own LLM call against shared
@@ -325,13 +325,13 @@ multiple-phase corroboration of the same finding, not N independent leads.
 Several tools require specific configurations and will fail cleanly when
 they can't:
 
-- `crtsh` — fails on transient crt.sh service outages (502 responses).
+- `crtsh`, fails on transient crt.sh service outages (502 responses).
   Retry the campaign.
-- `theHarvester` — requires the binary (case-sensitive, `theHarvester`).
+- `theHarvester`, requires the binary (case-sensitive, `theHarvester`).
   If missing: `pipx install theHarvester`.
-- `asn_bgp` — requires DNS resolution; fails gracefully on hosts that
+- `asn_bgp`, requires DNS resolution; fails gracefully on hosts that
   can't resolve (e.g., synthetic test domains).
-- `sslyze` — requires the target to actually have HTTPS on port 443.
+- `sslyze`, requires the target to actually have HTTPS on port 443.
 
 These failures are visible in `logs/audit.jsonl` with `tool_error` event
 type and a clear message in the `error` field.
@@ -358,11 +358,11 @@ Then file the bug with this template:
 TITLE: [one-line summary]
 
 SEVERITY:
-  [ ] BLOCKER — couldn't get past install / dry-run
-  [ ] CRITICAL — campaign crashes mid-run
-  [ ] HIGH — campaign completes but core feature broken
-  [ ] MEDIUM — feature works but output is wrong or confusing
-  [ ] LOW — cosmetic, polish, doc gap
+  [ ] BLOCKER, couldn't get past install / dry-run
+  [ ] CRITICAL, campaign crashes mid-run
+  [ ] HIGH, campaign completes but core feature broken
+  [ ] MEDIUM, feature works but output is wrong or confusing
+  [ ] LOW, cosmetic, polish, doc gap
 
 ENVIRONMENT:
   OS: [macOS X.Y / Ubuntu X.Y / Kali]
@@ -386,16 +386,16 @@ ARTIFACTS:
   Stderr output: [paste relevant portion]
 
 REPRODUCIBILITY:
-  [ ] One-shot — happened once
-  [ ] Intermittent — N of M runs
-  [ ] Reliable — every run
+  [ ] One-shot, happened once
+  [ ] Intermittent, N of M runs
+  [ ] Reliable, every run
 
 CONTEXT:
-  Anything else worth knowing — target characteristics, scale, what
+  Anything else worth knowing, target characteristics, scale, what
   you expected the platform to do.
 ```
 
-**Send bug reports to:** [TBD — operator to fill in: GitHub issues URL,
+**Send bug reports to:** [TBD, operator to fill in: GitHub issues URL,
 email, Discord channel, whatever you set up for the beta cohort].
 
 ---
@@ -404,28 +404,28 @@ email, Discord channel, whatever you set up for the beta cohort].
 
 Not all feedback is equally useful at this stage. In rough priority order:
 
-1. **Crashes on real targets** — your target's data shape may trigger
+1. **Crashes on real targets**: your target's data shape may trigger
    bugs that solo testing didn't.
-2. **Wrong findings** — false attribution, hallucinated tenant IDs,
+2. **Wrong findings**: false attribution, hallucinated tenant IDs,
    confident claims about infrastructure the target doesn't actually own.
    We have an attribution gate (B26/B29) that's been heavily tested,
    but new edge cases will surface.
-3. **Phishing draft quality** — are the per-target drafts realistic
+3. **Phishing draft quality**: are the per-target drafts realistic
    enough for actual use? Tone, technique, OSINT citations, sender
    strategy. Real operator judgment matters here.
-4. **Cost surprises** — campaigns going over the `max_llm_cost_usd` cap
+4. **Cost surprises**: campaigns going over the `max_llm_cost_usd` cap
    without warning, or wildly different costs than what we documented.
-5. **Report ergonomics** — is the report set you get actually what
+5. **Report ergonomics**: is the report set you get actually what
    you'd use in your workflow? What's missing? What's noise?
-6. **Tool gaps** — what OSINT source do you reach for that we don't
+6. **Tool gaps**: what OSINT source do you reach for that we don't
    integrate?
 
 Less useful at this stage:
 
 - Cosmetic polish (we know about most of it)
-- "It would be cool if it could..." feature requests — file these
+- "It would be cool if it could..." feature requests, file these
   separately; they don't belong in the bug stream
-- Issues you didn't reproduce — we need state to debug
+- Issues you didn't reproduce, we need state to debug
 
 ---
 
@@ -435,7 +435,7 @@ Some things to remember:
 
 - **You're an operator, not the platform.** Findings are starting points
   for your judgment, not conclusions. The platform produces an
-  Identity Intelligence Gap finding if it can't harvest emails — that's
+  Identity Intelligence Gap finding if it can't harvest emails, that's
   signal, not an attack vector.
 - **Phishing drafts are drafts.** They require operator review before any
   send. The drafts include explicit `⚠ AUTHORIZATION REQUIRED ⚠`
@@ -507,18 +507,18 @@ By end of week one, you should have a clear opinion on:
 
 ## 11. References
 
-- **`MANUAL.md`** — comprehensive operator manual (1100+ lines). Use as
+- **`MANUAL.md`**: comprehensive operator manual (1100+ lines). Use as
   reference once you hit specific questions.
-- **`README.md`** — quick-start at the project root.
-- **`CONFIGURATION_GUIDE.md`** — wiki-grade reference for every env var
+- **`README.md`**: quick-start at the project root.
+- **`CONFIGURATION_GUIDE.md`**: wiki-grade reference for every env var
   and what each API key unlocks.
-- **`TESTING_RUNBOOK.md`** — detailed end-to-end test procedure. Useful
+- **`TESTING_RUNBOOK.md`**: detailed end-to-end test procedure. Useful
   when something breaks and you need to isolate where.
-- **`ITERATION_BACKLOG.md`** — open and resolved bugs. Check here before
+- **`ITERATION_BACKLOG.md`**: open and resolved bugs. Check here before
   filing a new bug to avoid duplicates.
-- **`nexusrecon/docs/AGENT_LOOP.md`** — dispatcher deep-dive (how the
+- **`nexusrecon/docs/AGENT_LOOP.md`**: dispatcher deep-dive (how the
   agentic loop works and when it fires).
-- **`nexusrecon/docs/REPORT_GUIDE.md`** — which report file is for which
+- **`nexusrecon/docs/REPORT_GUIDE.md`**: which report file is for which
   audience.
 
 ---

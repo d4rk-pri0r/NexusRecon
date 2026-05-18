@@ -1,7 +1,7 @@
 # Security Policy
 
 NexusRecon is reconnaissance tooling. The framework itself can have
-security bugs — bad scope-guard logic, secret leakage into logs,
+security bugs, bad scope-guard logic, secret leakage into logs,
 audit-chain integrity issues, parser bugs that crash on hostile
 input. We treat those seriously.
 
@@ -38,7 +38,7 @@ from that profile.
 Include in your report:
 
 - A description of the vulnerability and its impact.
-- Reproduction steps — ideally a minimal scope file + command line
+- Reproduction steps, ideally a minimal scope file + command line
   that triggers the issue.
 - The git commit you tested against (``git rev-parse HEAD``).
 - Your environment (Python version, OS, install path).
@@ -46,7 +46,7 @@ Include in your report:
 
 We aim to acknowledge within **3 business days** and ship a fix
 within **30 days** for high-severity issues. Coordinated disclosure
-timeline is negotiable on the report — say what works for you.
+timeline is negotiable on the report, say what works for you.
 
 ---
 
@@ -54,10 +54,10 @@ timeline is negotiable on the report — say what works for you.
 
 The kind of bugs we want to hear about:
 
-- **Scope-guard bypass** — any input that lets a tool fire against a
+- **Scope-guard bypass**: any input that lets a tool fire against a
   target not authorised in the loaded scope file. This is the most
   important property of the framework.
-- **Credential leakage** — anything that causes secrets (API keys,
+- **Credential leakage**: anything that causes secrets (API keys,
   harvested credentials, scope-file contents, LLM API keys) to land
   in:
   - Stdout / stderr / TUI display
@@ -66,15 +66,15 @@ The kind of bugs we want to hear about:
   - Crash tracebacks
   - LLM prompt context (where the operator didn't opt in to that
     data being sent to the LLM provider)
-- **Audit-chain integrity** — any way to forge, delete, or reorder
+- **Audit-chain integrity**: any way to forge, delete, or reorder
   audit log entries without detection.
-- **Configuration / TUI exploits** — code execution via crafted
+- **Configuration / TUI exploits**: code execution via crafted
   scope YAML, malicious LLM outputs that get executed as code,
   injection via tool result parsing.
-- **Subprocess command injection** — anywhere a tool builds a
+- **Subprocess command injection**: anywhere a tool builds a
   subprocess argv from user input without proper escaping
   (`subfinder -d`, `gitleaks --source`, etc.).
-- **Denial of service** — anything that lets a single tool exhaust
+- **Denial of service**: anything that lets a single tool exhaust
   memory / CPU / disk on the operator's machine in a way the rate
   limiter / timeout machinery doesn't catch.
 
@@ -84,20 +84,20 @@ The kind of bugs we want to hear about:
 
 The following aren't security bugs in NexusRecon:
 
-- **Vulnerabilities in upstream tools or APIs** — report those to
+- **Vulnerabilities in upstream tools or APIs**: report those to
   the respective project (subfinder, amass, Shodan, etc.).
-- **Vulnerabilities in scanned targets** — that's the *point* of the
+- **Vulnerabilities in scanned targets**: that's the *point* of the
   tool. If you find a real vuln in a target you're authorised to
   test, report it through the target's coordinated disclosure
   channel.
-- **Operators using the tool against unauthorised targets** — that's
+- **Operators using the tool against unauthorised targets**: that's
   a legal and ethical issue, not a software bug. See
   [DISCLAIMER.md](DISCLAIMER.md).
-- **LLM behaviour** — if Anthropic / OpenAI / Ollama emit unexpected
+- **LLM behaviour**: if Anthropic / OpenAI / Ollama emit unexpected
   output, report that to the LLM provider. We treat their outputs
   as untrusted and parse defensively (see B26 attribution-gating in
   the agent executor).
-- **Theoretical findings without a demonstrable exploit** — e.g.
+- **Theoretical findings without a demonstrable exploit**: e.g.
   "this regex is technically a ReDoS candidate but only fires on a
   300MB pasted-in URL." Demonstrate the impact.
 
@@ -123,6 +123,6 @@ bug-free; we promise we'll respond seriously when you find one.
 Operators are responsible for using the framework within the bounds
 of their engagement authorisation (see [DISCLAIMER.md](DISCLAIMER.md)).
 A security bug in NexusRecon does not transfer your authorisation to
-us — if you discover a vuln by running NexusRecon outside an
+us, if you discover a vuln by running NexusRecon outside an
 authorised engagement, you still ran it outside an authorised
 engagement.

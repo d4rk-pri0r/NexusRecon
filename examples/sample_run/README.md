@@ -1,14 +1,14 @@
 # Sample Campaign Walkthrough
 
-> **⚠️ Walkthrough only — actual report files aren't checked in yet.**
+> **⚠️ Walkthrough only, actual report files aren't checked in yet.**
 > This document narrates what a realistic campaign run *would* produce.
 > A real end-to-end run against a known-vulnerable public target (with
 > the actual `master_report.md`, `findings.json`, `audit.jsonl`, etc.
-> committed alongside) is the v0.6.0 milestone — see [ROADMAP.md](../../ROADMAP.md).
+> committed alongside) is the v0.6.0 milestone, see [ROADMAP.md](../../ROADMAP.md).
 
 This directory is annotated output from a realistic campaign run.
 
-## Scenario: Bug Bounty — Example Corp (example.com)
+## Scenario: Bug Bounty: Example Corp (example.com)
 
 ### Scope File
 
@@ -74,7 +74,7 @@ nexusrecon run --scope examples/scopes/m365_enterprise.yaml --seeds "example.com
   [+] Shodan: 8 hosts indexed
   [+] Tech fingerprint: WordPress, Nginx, CloudFront
 
-[*] Phase 6: Active (T3) — SKIPPED (max tier: T1)
+[*] Phase 6: Active (T3), SKIPPED (max tier: T1)
 
 [*] Phase 7: Vulnerability Correlation
   [+] 3 CVEs mapped to fingerprinted technologies
@@ -97,7 +97,7 @@ Campaign Complete
 
 1. **[CRITICAL]** Public S3 bucket `example-prod-data` contains customer PII
 2. **[HIGH]** GitHub repo `example-api` contains hardcoded AWS credentials (active)
-3. **[HIGH]** DMARC policy set to `p=none` — sender spoofing possible
+3. **[HIGH]** DMARC policy set to `p=none`, sender spoofing possible
 4. **[HIGH]** M365 federation type: Managed (password hash sync)
 5. **[MEDIUM]** 12 subdomains with outdated TLS configurations
 6. **[MEDIUM]** Azure DevOps org `example-dev` publicly visible
@@ -105,12 +105,12 @@ Campaign Complete
 
 ### Reports Generated
 
-- `executive_summary.md` — 1-page summary
-- `full_report.md` — Complete engagement report
-- `asset_inventory.md` + `.json` + `.csv` — 52 subdomains, 28 emails, 3 cloud assets
-- `phishing_package.md` — 28 emails, first.last pattern (82%), DMARC p=none
-- `cloud_posture.md` — M365 Managed federation, 3 public S3 buckets
-- `attack_surface.md` — 17 findings ranked by severity
-- `findings.json` — Full findings with evidence hashes
-- `campaign_meta.json` — Campaign metadata with scope hash
-- `maltego_export.csv` — 127 entities for Maltego import
+- `executive_summary.md`, 1-page summary
+- `full_report.md`, Complete engagement report
+- `asset_inventory.md` + `.json` + `.csv`, 52 subdomains, 28 emails, 3 cloud assets
+- `phishing_package.md`, 28 emails, first.last pattern (82%), DMARC p=none
+- `cloud_posture.md`, M365 Managed federation, 3 public S3 buckets
+- `attack_surface.md`, 17 findings ranked by severity
+- `findings.json`, Full findings with evidence hashes
+- `campaign_meta.json`, Campaign metadata with scope hash
+- `maltego_export.csv`, 127 entities for Maltego import

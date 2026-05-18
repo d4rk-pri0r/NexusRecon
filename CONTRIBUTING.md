@@ -1,7 +1,7 @@
 # Contributing to NexusRecon
 
 Thank you for considering a contribution. This document covers the
-practical things — how to set up a dev environment, where things live,
+practical things, how to set up a dev environment, where things live,
 and what we expect from a pull request.
 
 For the *what we won't accept* side (anything that weakens scope
@@ -21,7 +21,7 @@ source venv/bin/activate
 pytest tests/integration tests/unit tests/smoke
 ```
 
-Python 3.11–3.13 (**not 3.14** — CrewAI compatibility). If your default
+Python 3.11-3.13 (**not 3.14**, CrewAI compatibility). If your default
 ``python3`` is 3.14, run ``PYTHON=python3.13 ./install.sh``.
 
 Confirm you can boot the TUI before opening a PR:
@@ -63,7 +63,7 @@ and is wired into the registry with ``@register_tool``.
 A minimal tool:
 
 ```python
-"""Example HTTP-API tool — describe what the upstream does."""
+"""Example HTTP-API tool, describe what the upstream does."""
 from __future__ import annotations
 from typing import Any, Dict
 import httpx
@@ -77,7 +77,7 @@ class ExampleTool(OSINTTool):
     name = "example"
     tier = Tier.T0              # T0 passive | T1 semi-passive | T2 light active | T3 active
     category = Category.DOMAIN  # see Category enum in base.py
-    requires_keys = ["example_api_key"]  # env var names — framework checks via is_available()
+    requires_keys = ["example_api_key"]  # env var names, framework checks via is_available()
     description = "One-sentence description visible in `nexusrecon tools`"
     target_types = ["domain"]            # what kinds of input the tool accepts
     dynamic_trigger_hints = [            # phrases that prompt the LLM dispatcher to queue this
@@ -101,12 +101,12 @@ class ExampleTool(OSINTTool):
                 if resp.status_code in (401, 403):
                     return ToolResult(
                         success=False, source=self.name,
-                        error="Example API auth failure — check EXAMPLE_API_KEY",
+                        error="Example API auth failure, check EXAMPLE_API_KEY",
                     )
                 if resp.status_code == 429:
                     return ToolResult(
                         success=False, source=self.name,
-                        error="Example API rate limit — back off and retry",
+                        error="Example API rate limit, back off and retry",
                     )
                 if resp.status_code != 200:
                     return ToolResult(
@@ -172,7 +172,7 @@ class TestExampleTool:
         assert "EXAMPLE_API_KEY" in result.error
 ```
 
-Place fixture responses under ``tests/fixtures/example/`` — JSON
+Place fixture responses under ``tests/fixtures/example/``, JSON
 files copied from the provider's public API documentation.
 
 ---
@@ -205,7 +205,7 @@ Some changes won't be accepted even if they pass tests:
   scope-gated. PRs that add escape hatches (``--ignore-scope``,
   silent fallback paths around the guard, etc.) will be declined.
 - **Hiding errors from operators.** See "no swallowed exceptions"
-  above — that's the policy, not a guideline.
+  above, that's the policy, not a guideline.
 - **License-incompatible dependencies.** Apache 2.0 is the ceiling;
   GPL/AGPL dependencies aren't compatible and won't merge.
 
@@ -228,5 +228,5 @@ otherwise get flagged in review.
 
 ---
 
-Thanks for contributing. The maintainers read every PR — turnaround
+Thanks for contributing. The maintainers read every PR, turnaround
 depends on free time around day-job engagements, but you'll hear back.

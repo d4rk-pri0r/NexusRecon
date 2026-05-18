@@ -1,4 +1,4 @@
-# NexusRecon v3 — UX Polish Execution Plan
+# NexusRecon v3: UX Polish Execution Plan
 
 > **Audience:** Sonnet 4.6 with extended thinking.
 > **Goal:** Two UX features that emerged from demo feedback.
@@ -7,9 +7,9 @@
 >     flags. Keyboard-driven, modern aesthetic, themed banner.
 >   - **Move 2 (Master Report):** a single cohesive narrative deliverable
 >     that rolls up the campaign's intel into a polished document. Only
->     populated sections appear — no blank stubs.
+>     populated sections appear, no blank stubs.
 > **Working directory:** `/Users/waifumachine/agentic-osint`
-> **Reference spec:** Section 0 of `EXECUTION_PLAN_V2_GOLD_STANDARD.md` —
+> **Reference spec:** Section 0 of `EXECUTION_PLAN_V2_GOLD_STANDARD.md`.
 > codebase conventions are binding (no new abstractions, surgical edits,
 > follow existing tool/agent patterns).
 
@@ -17,20 +17,20 @@
 
 ## 0. Required reading before touching code
 
-1. `ARCHITECTURE.md` — the platform-explainer doc. Familiarize with the
+1. `ARCHITECTURE.md`, the platform-explainer doc. Familiarize with the
    state model, phase pipeline, agent personas, and report engine. This
    plan assumes you know how the campaign state flows.
-2. `EXECUTION_PLAN_V2_GOLD_STANDARD.md` Section 0 — codebase conventions.
-3. `nexusrecon/cli/main.py` — the existing CLI surface. The TUI WRAPS
+2. `EXECUTION_PLAN_V2_GOLD_STANDARD.md` Section 0, codebase conventions.
+3. `nexusrecon/cli/main.py`, the existing CLI surface. The TUI WRAPS
    this; it does not replace it.
-4. `nexusrecon/reports/engine.py` — `ReportEngine.generate_all()` orchestrates
+4. `nexusrecon/reports/engine.py`, `ReportEngine.generate_all()` orchestrates
    all current reports. The master report becomes a new method on this class.
-5. `nexusrecon/graph/agent_executor.py` — agent invocation pattern. The
+5. `nexusrecon/graph/agent_executor.py`, agent invocation pattern. The
    master report uses a new agent persona following the same pattern.
 
 ---
 
-## Move 1 — Interactive TUI
+## Move 1: Interactive TUI
 
 ### Why
 
@@ -45,7 +45,7 @@ Goal: a polished, keyboard-driven TUI that:
 - Validates inputs as they're entered (don't surface errors at run time)
 - Displays live campaign progress with a status panel
 - Offers post-campaign navigation to reports
-- **Does not replace** the existing CLI — both paths must continue to work.
+- **Does not replace** the existing CLI, both paths must continue to work.
 
 The existing CLI is operationally critical (CI integration, scripts,
 remote runs). The TUI is for interactive humans.
@@ -56,14 +56,14 @@ Use **Textual** (`textual>=0.50.0` from `pip install textual`). Rationale:
 
 - Python-native; consistent with the rest of the platform.
 - Shares the `rich` library NexusRecon already depends on.
-- Async-friendly — integrates cleanly with `asyncio.run` campaign loop.
+- Async-friendly, integrates cleanly with `asyncio.run` campaign loop.
 - Mature widget set (Input, Select, Button, Header, Footer, DataTable,
   Static, Markdown, ProgressBar).
-- CSS-like styling — supports the "hacker-like" theme cleanly.
+- CSS-like styling, supports the "hacker-like" theme cleanly.
 - Multi-screen wizards via `push_screen` / `pop_screen`.
 
 **Do NOT** use:
-- Bubble Tea (Go-only — would require subprocess wrapping)
+- Bubble Tea (Go-only, would require subprocess wrapping)
 - Curses directly (too low-level)
 - prompt_toolkit (single-screen, no widget composition)
 - A custom web UI (out of scope for "TUI")
@@ -75,39 +75,39 @@ in the working venv.
 
 New files:
 - `nexusrecon/tui/__init__.py`
-- `nexusrecon/tui/app.py` — the `NexusReconApp(textual.app.App)` entry point
-- `nexusrecon/tui/screens/welcome.py` — splash + main menu
-- `nexusrecon/tui/screens/wizard.py` — multi-step new-campaign wizard
-- `nexusrecon/tui/screens/runner.py` — live campaign progress view
-- `nexusrecon/tui/screens/results.py` — post-campaign summary + report links
-- `nexusrecon/tui/screens/campaigns.py` — list/resume past campaigns
-- `nexusrecon/tui/screens/config.py` — show configured API keys (status only, NEVER values)
-- `nexusrecon/tui/banner.py` — the themed ASCII banner
-- `nexusrecon/tui/app.tcss` — Textual CSS for the theme (colors, borders, animations)
+- `nexusrecon/tui/app.py`, the `NexusReconApp(textual.app.App)` entry point
+- `nexusrecon/tui/screens/welcome.py`, splash + main menu
+- `nexusrecon/tui/screens/wizard.py`, multi-step new-campaign wizard
+- `nexusrecon/tui/screens/runner.py`, live campaign progress view
+- `nexusrecon/tui/screens/results.py`, post-campaign summary + report links
+- `nexusrecon/tui/screens/campaigns.py`, list/resume past campaigns
+- `nexusrecon/tui/screens/config.py`, show configured API keys (status only, NEVER values)
+- `nexusrecon/tui/banner.py`, the themed ASCII banner
+- `nexusrecon/tui/app.tcss`, Textual CSS for the theme (colors, borders, animations)
 
 Modify:
-- `nexusrecon/cli/main.py` — add `tui` subcommand + default to TUI when
+- `nexusrecon/cli/main.py`, add `tui` subcommand + default to TUI when
   no subcommand provided. Existing `run`, `validate`, `tools`, etc.
   unchanged.
-- `pyproject.toml` — add `textual>=0.50.0` to dependencies.
+- `pyproject.toml`, add `textual>=0.50.0` to dependencies.
 
 ### Screens (detailed spec)
 
 #### Welcome screen
 
 - Animated ASCII banner (the existing 6-line `NEXUS` block from
-  `install.sh` lines 24–32). Place it in `nexusrecon/tui/banner.py` as a
+  `install.sh` lines 24-32). Place it in `nexusrecon/tui/banner.py` as a
   module-level constant `BANNER`.
 - Below the banner: subtitle "Agentic OSINT Orchestration Framework"
   and version string.
-- Below that: a status line with quick stats — "89 tools registered ·
-  X campaigns on disk · LLM provider: anthropic" — computed at startup.
+- Below that: a status line with quick stats, "89 tools registered ·
+  X campaigns on disk · LLM provider: anthropic", computed at startup.
 - Menu options (vertical list, Enter to select):
-  - 🎯 **New Campaign** — launches the wizard
-  - 🔄 **Resume Campaign** — lists campaigns with `current_phase != phase9` for resume
-  - 📊 **View Past Campaigns** — list all campaigns with cost, findings, date
-  - 🔧 **Configuration** — show keys configured (names only, NEVER values)
-  - 🛠 **Tools** — browse the 89 tools by category, see availability
+  - 🎯 **New Campaign**, launches the wizard
+  - 🔄 **Resume Campaign**, lists campaigns with `current_phase != phase9` for resume
+  - 📊 **View Past Campaigns**, list all campaigns with cost, findings, date
+  - 🔧 **Configuration**, show keys configured (names only, NEVER values)
+  - 🛠 **Tools**, browse the 89 tools by category, see availability
   - ❌ **Quit** (Ctrl-Q)
 
 - Footer bar with keyboard shortcuts visible: `↑/↓ navigate · Enter
@@ -118,7 +118,7 @@ Modify:
 Multi-step form. Each step validates before allowing "Next". User can
 "Back" to revise. State persists across steps until "Run" or "Cancel."
 
-**Step 1 — Engagement metadata**
+**Step 1, Engagement metadata**
 
 Fields (all required unless noted):
 - Client name (free text)
@@ -131,7 +131,7 @@ Fields (all required unless noted):
   accepts `placeholder` literal for testing). If user types
   `placeholder`, fill in 64 zeros automatically.
 
-**Step 2 — Target & scope**
+**Step 2, Target & scope**
 
 - Seed domain (free text, single value initially). Validate it's a
   plausible domain (regex: `^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$`).
@@ -140,11 +140,11 @@ Fields (all required unless noted):
   wildcards (`*.aws.amazon.com`, `*.cloudfront.net`, `*.azure.com`,
   `*.cloudflare.com`, `*.fastly.net`, `*.akamai.net`, `*.azurewebsites.net`).
   Allow user to add or remove.
-- Cloud tenant IDs (optional, advanced — collapsed by default):
+- Cloud tenant IDs (optional, advanced, collapsed by default):
   - AWS account IDs
   - GCP project IDs
 
-**Step 3 — Constraints**
+**Step 3, Constraints**
 
 - Max tier (Select: T0, T1, T2, T3). Default T2. Description shown
   below: "T0 passive only · T1 light fingerprinting · T2 active
@@ -154,7 +154,7 @@ Fields (all required unless noted):
 - Allow breach DB lookup (toggle, default on).
 - Allow paid APIs (toggle, default on).
 
-**Step 4 — Run options**
+**Step 4, Run options**
 
 - Mode (Select: light, medium, deep, monitor). Default medium.
   Description: "light=fast/cheap · medium=balanced · deep=thorough+slow · monitor=watch over time."
@@ -168,17 +168,17 @@ Fields (all required unless noted):
   "Generates per-target spearphishing email drafts. Requires
   harvested emails. Authorized engagements only."
 
-**Step 5 — Review**
+**Step 5, Review**
 
 Show a summary table of all selected values. Highlight any unusual
 choices (e.g., T3 selected, or no LLM key configured). Buttons:
-- **[Save Scope & Run]** — writes the scope YAML to a tempfile, validates
+- **[Save Scope & Run]**: writes the scope YAML to a tempfile, validates
   it via `ScopeModel.from_yaml`, then launches the campaign and
   transitions to the runner screen.
-- **[Save Scope Only]** — writes the scope YAML to a user-specified path
+- **[Save Scope Only]**: writes the scope YAML to a user-specified path
   (with a path-input modal) without running.
-- **[Back]** — return to step 4.
-- **[Cancel]** — discard wizard state, return to main menu.
+- **[Back]**: return to step 4.
+- **[Cancel]**: discard wizard state, return to main menu.
 
 #### Runner screen
 
@@ -187,7 +187,7 @@ Live campaign progress. Layout:
 ```
 ┌─ NEXUS RECON · Campaign nr-20260513-... ─────────────────────┐
 │                                                                │
-│  Phase: 4/9 — Correlation & Hypothesis                        │
+│  Phase: 4/9, Correlation & Hypothesis                        │
 │  ████████████░░░░░░░░░░░░  44%                                │
 │                                                                │
 │  Findings:        23     Ranked threats:   pending             │
@@ -211,10 +211,10 @@ Live campaign progress. Layout:
   from the campaign's audit log.
 - A small spinner indicates active work.
 - Keyboard shortcuts:
-  - `q` — abort campaign (with confirm modal)
-  - `p` — pause (not in scope for v1; show "Pause not yet implemented")
-  - `r` — once the campaign completes, transition to results screen
-  - `Esc` — return to main menu (only after completion)
+  - `q`, abort campaign (with confirm modal)
+  - `p`, pause (not in scope for v1; show "Pause not yet implemented")
+  - `r`, once the campaign completes, transition to results screen
+  - `Esc`, return to main menu (only after completion)
 
 The campaign runs in a `asyncio.Task` started by the runner screen. The
 TUI subscribes to a `state_update` channel that the campaign emits on
@@ -315,7 +315,7 @@ aesthetic:
   for inner panels.
 - **Banner:** monospace, accent green. Optional CSS animation: a subtle
   "scanline" effect using textual's CSS animation API. Don't go
-  overboard — animation should be subtle, not distracting.
+  overboard, animation should be subtle, not distracting.
 - **Severity colors:** critical `#ff3838`, high `#ff8c00`, medium
   `#f1c40f`, low `#5dade2`, info `#7f8c8d`.
 
@@ -378,7 +378,7 @@ Event payloads:
    the banner (gracefully degrade to a one-line title).
 9. Running in a non-TTY environment (`echo "" | nexusrecon`) detects
    the environment and falls back to the CLI with a clear message:
-   `[info] No TTY detected — falling back to CLI. Use 'nexusrecon run --help' for options.`
+   `[info] No TTY detected, falling back to CLI. Use 'nexusrecon run --help' for options.`
 
 ### Pitfalls
 
@@ -386,7 +386,7 @@ Event payloads:
   asyncio.run() in the wrong place will deadlock. Use Textual's
   `App.run_async()` and have the campaign run as a Task on the same loop.
 - **Dependency injection for testing:** avoid hardcoding `subprocess`,
-  config paths, or asyncio creation inside the TUI screens — pass them
+  config paths, or asyncio creation inside the TUI screens, pass them
   via constructor args or context so the screens are unit-testable.
 - **Tempfile scope:** the wizard's "Save Scope & Run" path writes the
   YAML to a temp file. If the campaign launches successfully, write a
@@ -395,13 +395,13 @@ Event payloads:
 - **Banner ASCII can break on non-UTF-8 terminals.** Detect terminal
   capabilities via `os.environ.get("TERM")` and fall back to a plain
   text banner if needed.
-- **Don't import textual at the module level of `cli/main.py`** — only
+- **Don't import textual at the module level of `cli/main.py`**: only
   import inside the `tui` subcommand handler. This keeps the existing
   CLI fast and lets users skip textual if they only use CLI flags.
 
 ---
 
-## Move 2 — Master Report
+## Move 2: Master Report
 
 ### Why
 
@@ -410,7 +410,7 @@ disconnected. Executive summary is one-page; full_report.md is
 comprehensive but mechanical. The operator delivering this to a client
 must mentally stitch the documents together.
 
-Goal: a single cohesive narrative document — `master_report.md` — that
+Goal: a single cohesive narrative document, `master_report.md`, that
 reads top-down as a story, deeper than the executive summary but
 cleaner than the file sprawl. Only sections with content appear (no
 "Section X: No data found" stubs).
@@ -421,12 +421,12 @@ that explains everything that was found and what it means.
 ### Architecture
 
 New agent persona:
-- `nexusrecon/agents/master_reporter.py` — class `MasterReporterAgent` with
+- `nexusrecon/agents/master_reporter.py`, class `MasterReporterAgent` with
   `agent_name = "master_reporter"`, role/goal/backstory crafted for
   cohesive narrative synthesis.
 
 New report-engine method:
-- `nexusrecon/reports/engine.py` — add `_master_report(state)` method
+- `nexusrecon/reports/engine.py`, add `_master_report(state)` method
   invoked from `generate_all()` as the LAST report (so it can reference
   paths of all earlier reports). Returns the path to the generated
   `master_report.md`.
@@ -435,7 +435,7 @@ The method:
 1. Gathers all relevant state slices.
 2. Determines which sections have content (skip-empty logic).
 3. Calls the `master_reporter` agent once per major section (or once
-   total — see "Synthesis approach" below).
+   total, see "Synthesis approach" below).
 4. Assembles the final markdown with the operator-facing structure
    below.
 
@@ -450,19 +450,19 @@ The method:
    - Authorization banner (1 line: "Authorized engagement under SOW
      <hash>. Audit log: <path>.")
 
-2. **Executive Brief** (narrative prose, 200–400 words, LLM-synthesized)
+2. **Executive Brief** (narrative prose, 200-400 words, LLM-synthesized)
    - One paragraph: what was discovered (intent, scope, scale)
    - One paragraph: what it means in operational terms
-   - 3–5 bullet "key risks" or "principal findings"
+   - 3-5 bullet "key risks" or "principal findings"
    - Single LLM call from `master_reporter` agent with all state context
 
 3. **Top Threads to Pull**
-   - Embedded full content from `top_threads.md` (not linked — this IS
+   - Embedded full content from `top_threads.md` (not linked, this IS
      the action list)
 
 **Conditional (appear only if content exists):**
 
-4. **Attack Surface at a Glance** — only if any of these have content:
+4. **Attack Surface at a Glance**: only if any of these have content:
    - **Identity**: emails harvested, M365 / Azure tenant status, breach
      posture. Skip individually if empty.
    - **Cloud**: providers detected with attribution_confidence ≥ 0.5.
@@ -472,25 +472,25 @@ The method:
    - **Network**: subdomains count, exposed services, TLS posture, WAF
      status. Skip if no infra_intel.
 
-5. **Identified Personas** — only if emails harvested:
+5. **Identified Personas**: only if emails harvested:
    - Executive cluster (high-value targets) with role/department
    - Department breakdown (count by dept)
    - Phishing draft availability ("10 per-target drafts generated; see
      `phishing_drafts.md`")
 
-6. **Vulnerability Correlation** — only if `vuln_intel.enriched_cves`
+6. **Vulnerability Correlation**: only if `vuln_intel.enriched_cves`
    is non-empty:
    - Live CVE list with exploit availability
    - KEV-listed CVEs called out separately
    - Tech-version evidence
 
-7. **Harvested Credentials** — only if `harvested_credentials` is
+7. **Harvested Credentials**: only if `harvested_credentials` is
    non-empty:
    - Summary count by type, validation status
-   - Redacted samples (never raw values — use the existing redaction
+   - Redacted samples (never raw values, use the existing redaction
      format from `harvested_credentials.md`)
 
-8. **Pretext & HUMINT** — only if `pretext_intel` is non-empty:
+8. **Pretext & HUMINT**: only if `pretext_intel` is non-empty:
    - Recent news/jobs/SEC filings relevant for social engineering
    - LinkedIn dork list (or live search results if BING_SEARCH_API_KEY)
 
@@ -500,7 +500,7 @@ The method:
    - Cost ledger: LLM cost, tool cost (if tracked)
 
 10. **Recommendations** (always present, LLM-synthesized prose)
-    - 5–10 prioritized actions
+    - 5-10 prioritized actions
     - Each cites specific finding IDs by short reference
     - References tools the operator should run next (with `--mode deep`
       hints, exploit paths, etc.)
@@ -543,13 +543,13 @@ The narrative prose sections (Executive Brief, Recommendations, and the
 intro paragraphs of Attack Surface subsections) come from the
 `master_reporter` agent. Two implementation options:
 
-**Option A — Single large LLM call (recommended).** The agent receives
+**Option A, Single large LLM call (recommended).** The agent receives
 all state plus a structured prompt that says "produce a markdown
 document with these sections; skip sections X, Y, Z because they're
-empty." The agent returns the full document text. Cost: $0.30–$0.60 per
+empty." The agent returns the full document text. Cost: $0.30-$0.60 per
 campaign depending on state size. Simplest to implement.
 
-**Option B — Multiple smaller LLM calls.** The agent is called once per
+**Option B, Multiple smaller LLM calls.** The agent is called once per
 narrative subsection. Cost: similar total, but more API requests. More
 control over individual section quality. Slightly more complex.
 
@@ -560,27 +560,27 @@ Option B for the truncating section.
 ### Files to create / modify
 
 Create:
-- `nexusrecon/agents/master_reporter.py` — agent class with role/goal/
+- `nexusrecon/agents/master_reporter.py`, agent class with role/goal/
   backstory and the system prompt for cohesive synthesis.
 
 Modify:
-- `nexusrecon/reports/engine.py` — add `_master_report(state)` method;
+- `nexusrecon/reports/engine.py`, add `_master_report(state)` method;
   call from `generate_all()` LAST (so all other reports exist for
   appendix linking). Add `"master_report"` to the `self.report_paths`
   dict.
-- `nexusrecon/graph/agent_executor.py` — add `"master_reporter":
+- `nexusrecon/graph/agent_executor.py`, add `"master_reporter":
   MasterReporterAgent` to the `_AGENT_ROLES` registry table so the
   agent can be invoked via `executor.run_agent("master_reporter", ...)`.
   Add `"master_reporter"` to `_SKIP_FINDINGS_JSON_AGENTS` (it's a
   report-writer, not a findings-emitter).
-- `nexusrecon/docs/REPORT_GUIDE.md` — add an entry for the master
+- `nexusrecon/docs/REPORT_GUIDE.md`, add an entry for the master
   report explaining when to use it vs. the other reports.
 
 ### MasterReporterAgent system prompt (use this verbatim as the agent's role)
 
 ```
 You are the chief synthesist for a NexusRecon OSINT campaign. Your job
-is to produce a single cohesive narrative report — one document an
+is to produce a single cohesive narrative report, one document an
 operator can hand to a client.
 
 Your voice:
@@ -591,7 +591,7 @@ Your voice:
 
 You ALWAYS:
 - Include section headings exactly as specified in the structure prompt
-- SKIP any conditional section the operator marks as empty — do not
+- SKIP any conditional section the operator marks as empty, do not
   write "No data" placeholders
 - Quote specific values (subdomain count, tenant ID, etc.) from the
   state, never invent numbers
@@ -609,10 +609,10 @@ You NEVER:
 ### Acceptance criteria for Move 2
 
 1. A campaign on a thin target (`testphp.vulnweb.com`) produces a
-   `master_report.md` with sections 1, 2, 3, 9, 10, 11 only —
-   conditional sections 4–8 are absent (no headings appear).
+   `master_report.md` with sections 1, 2, 3, 9, 10, 11 only.
+   conditional sections 4-8 are absent (no headings appear).
 2. A campaign on a rich target (your own authorized test domain)
-   produces a master report with most or all of sections 4–8 populated,
+   produces a master report with most or all of sections 4-8 populated,
    each with the underlying-state numbers correctly cited.
 3. The master report's Executive Brief and Recommendations sections
    contain real LLM-synthesized prose (not boilerplate), with specific
@@ -636,7 +636,7 @@ You NEVER:
   TRIMMED context object containing only the slices the agent needs:
   ranked_threads (full), email_intel.emails (first 20), cloud_intel
   (key fields), top 10 agent_messages by length, vuln_intel.enriched_cves
-  (first 10), state.findings (titles + severity only — full descriptions
+  (first 10), state.findings (titles + severity only, full descriptions
   are in linked reports).
 - **Skip-empty bugs.** Test specifically with a campaign that has email
   intel but no cloud, vs. cloud but no email. Don't just test rich + thin.
@@ -656,7 +656,7 @@ You NEVER:
 **Recommended order:** Move 2 (Master Report) first, then Move 1 (TUI).
 
 Rationale:
-- Move 2 is more self-contained — touches `reports/`, `agents/`,
+- Move 2 is more self-contained, touches `reports/`, `agents/`,
   `graph/agent_executor.py`, and adds one new agent. Doesn't require
   changing the CLI surface.
 - Move 1 (TUI) benefits from Move 2 because the TUI's results screen
@@ -706,7 +706,7 @@ Rationale:
    - Intermediate log lines are NOT acceptance evidence. State file or
      output file inspection is.
 
-9. **Mark fixes complete in `ITERATION_BACKLOG.md`** — these features
+9. **Mark fixes complete in `ITERATION_BACKLOG.md`**: these features
    don't have bug IDs (they're features, not bugs). Append a section
    `## Features Shipped` at the bottom of the backlog with one-line
    entries.
@@ -725,7 +725,7 @@ cd /Users/waifumachine/agentic-osint
 # Compile check
 python3 -m py_compile $(find nexusrecon -name '*.py')
 
-# Move 2 — thin-target campaign
+# Move 2, thin-target campaign
 env -u ANTHROPIC_API_KEY /Users/waifumachine/agentic-osint/venv/bin/nexusrecon run \
   --scope examples/scopes/minimal_seed.yaml \
   --mode light --dispatch-mode off
@@ -738,7 +738,7 @@ ls "${CAMP}/reports/master_report.md"   # exists
 #   - No "No data" or boilerplate placeholders
 #   - Top threads section has real content
 
-# Move 1 — TUI launch (interactive — operator must verify)
+# Move 1, TUI launch (interactive, operator must verify)
 nexusrecon       # should launch the TUI
 nexusrecon tui   # equivalent
 # Walk through wizard, launch campaign, check progress, open reports
@@ -753,7 +753,7 @@ nexusrecon validate examples/scopes/minimal_seed.yaml
 
 ## Out of scope (do NOT do)
 
-- Don't rewrite the existing reports — they coexist with the master
+- Don't rewrite the existing reports, they coexist with the master
   report.
 - Don't add a web UI / Streamlit dashboard.
 - Don't refactor the agent_executor's prompt building (it's working).
@@ -802,9 +802,9 @@ touching code. Then implement Move 2 (Master Report) FIRST, then Move 1
 (TUI), per the sequencing rationale in the v3 plan.
 
 Working rules (also listed in the plan):
-1. No git commits — operator commits manually
+1. No git commits, operator commits manually
 2. No system binary installs (PyPI fine)
-3. Surgical edits — don't refactor adjacent code
+3. Surgical edits, don't refactor adjacent code
 4. Stop and ask on architectural ambiguity (don't guess)
 5. Parallel tool calls for independent edits
 6. End-of-turn report under 25 lines per move

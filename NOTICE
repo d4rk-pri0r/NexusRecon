@@ -1,4 +1,4 @@
-NexusRecon — Agentic OSINT Orchestration Framework
+NexusRecon, Agentic OSINT Orchestration Framework
 Copyright 2026 d4rk pri0r / darkpriorlabs
 
 This product is licensed under the Apache License, Version 2.0
@@ -16,7 +16,7 @@ and redistribute this software. We ask one thing in return:
 
 NexusRecon is reconnaissance tooling for authorized red-team and
 penetration-testing engagements. It enforces engagement scope at the
-framework level — every tool invocation is validated against a signed
+framework level, every tool invocation is validated against a signed
 scope file before execution. Operators using this software outside
 that intended use are exposing themselves to civil and criminal
 liability under computer-fraud statutes in nearly every jurisdiction

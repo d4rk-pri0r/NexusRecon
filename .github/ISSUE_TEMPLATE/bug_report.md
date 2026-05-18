@@ -7,7 +7,7 @@ labels: bug
 
 > **⚠️ Don't file security vulnerabilities here.** Use
 > [Security Advisories](https://github.com/d4rk-pri0r/NexusRecon/security/advisories/new)
-> instead — see `SECURITY.md` for the policy.
+> instead, see `SECURITY.md` for the policy.
 
 ### What happened
 

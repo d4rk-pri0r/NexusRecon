@@ -44,7 +44,7 @@ run_dynamic_dispatch()
 | Mode | Behaviour | When to use |
 |------|-----------|-------------|
 | `off` | Dispatcher never runs | Air-gapped, budget-sensitive, or CI runs |
-| `lite` | Runs only after phases 1, 4, and 7 | Default — good balance of depth vs. cost |
+| `lite` | Runs only after phases 1, 4, and 7 | Default, good balance of depth vs. cost |
 | `full` | Runs after every phase | Maximum coverage; higher LLM cost |
 
 Set via `--dispatch-mode` on the CLI or `dispatch_mode` in the campaign state dict.
@@ -84,13 +84,13 @@ The dispatcher prompt includes:
 
 1. **Current phase** and `completed_phases`
 2. **Seeds** (initial targets)
-3. A **summary of populated state keys** — which intel dicts are non-empty
+3. A **summary of populated state keys**, which intel dicts are non-empty
 4. A **findings snippet** (first 10 finding titles)
 5. **Already-dispatched pairs** `(tool, target)` to prevent re-runs
 6. A JSON schema for the required output format
 
 The LLM must respond with a JSON array only (no markdown, no prose). Non-JSON
-output is treated as an empty plan — no tools are dispatched.
+output is treated as an empty plan, no tools are dispatched.
 
 ### Required LLM output format
 
@@ -117,9 +117,9 @@ output is treated as an empty plan — no tools are dispatched.
 
 After parsing, each proposed dispatch item is checked:
 
-1. **Tool exists** — `tool` must be a key in `get_registry()`
-2. **Target type matches** — `target_type` must be in `tool.target_types`
-3. **No duplicate pairs** — `(tool, target)` must not already appear in `dynamic_dispatch_log`
+1. **Tool exists**: `tool` must be a key in `get_registry()`
+2. **Target type matches**: `target_type` must be in `tool.target_types`
+3. **No duplicate pairs**: `(tool, target)` must not already appear in `dynamic_dispatch_log`
 
 Items that fail any check are silently dropped. An item that passes all three is
 added to the validated plan.
