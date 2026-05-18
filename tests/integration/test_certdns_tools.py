@@ -27,7 +27,8 @@ library function directly rather than going through respx.
 """
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import respx
@@ -431,90 +432,169 @@ class TestRDAPTool:
 
 
 # ────────────────────────────────────────────────────────────────────────
-# dnstwist — typosquat generation. Pure-library tool (no HTTP from us).
-# We mock ``dnstwist.FuzzDomain`` (which is what the tool calls today)
-# to return a deterministic list of permutations.
+# dnstwist — typosquat generation + DNS resolution.
 #
-# NOTE: At time of writing the upstream ``dnstwist`` package (Jan 2025)
-# does NOT expose a ``FuzzDomain`` class — the tool's import-time
-# ``dnstwist.FuzzDomain(target)`` raises ``AttributeError`` which is
-# caught by the broad ``except Exception`` and surfaces as
-# ``ToolResult(success=False)``. The fallback ``_basic_permutations``
-# branch is therefore unreachable in production. See findings.
-# These tests mock ``FuzzDomain`` to exercise the parsing logic that
-# IS exercised when the library version eventually matches the call
-# shape — and document the current broken behaviour.
+# The tool wraps ``dnstwist.Fuzzer`` (NOT ``dnstwist.FuzzDomain`` — that
+# class never existed; an earlier revision of the tool spelled it wrong
+# and silently failed every live call). After generation it runs an
+# async DNS sweep against each candidate to keep only the ones that
+# actually resolve. We therefore mock TWO entry points:
+#
+#   1. ``dnstwist.Fuzzer`` — returns an object whose ``.domains``
+#      attribute is a set of dicts with ``domain`` and ``fuzzer`` keys
+#      (matching ``dnstwist.Permutation``'s shape).
+#   2. ``dns.asyncresolver.Resolver.resolve`` — answers per (name, rtype)
+#      with mock rdata for the candidates we want to mark as registered.
 # ────────────────────────────────────────────────────────────────────────
 
 
+def _build_fake_fuzzer(permutations):
+    """Build a fake ``dnstwist.Fuzzer`` instance whose ``.generate()``
+    populates ``.domains`` with the given list of ``{fuzzer, domain}``
+    dicts. The ``*original`` filler that the real Fuzzer adds is included
+    so we exercise the tool's skip-original logic."""
+    fake = MagicMock()
+    fake.domains = set()  # populated by generate()
+
+    def _generate():
+        fake.domains = {tuple(sorted(p.items())) for p in permutations}
+        # The real Permutation is a dict subclass; emulate via plain dicts
+        # in a list since sets need hashables. The tool only iterates and
+        # calls .get() on each, so a list works just as well.
+        fake.domains = permutations  # noqa: F841
+    fake.generate.side_effect = _generate
+    return fake
+
+
+class _FakeRdata:
+    """Stand-in for ``dns.rdata.Rdata`` — the tool only calls ``str(r)``
+    on each answer, so a class with a real ``__str__`` method is enough.
+    A ``SimpleNamespace`` with ``__str__`` as an attribute doesn't work
+    because Python looks up ``__str__`` on the type, not the instance."""
+    def __init__(self, value: str) -> None:
+        self._value = value
+    def __str__(self) -> str:
+        return self._value
+
+
+def _make_dns_responder(registered: dict):
+    """Return an ``AsyncMock`` side_effect that answers A/MX lookups
+    based on ``registered`` (a mapping of domain → {a: [...], mx: [...]})
+    and raises NXDOMAIN-equivalent for anything else."""
+    async def _resolve(name, rtype):
+        info = registered.get(name)
+        if not info:
+            raise Exception(f"NXDOMAIN: {name}")
+        if rtype == "A":
+            if not info.get("a"):
+                raise Exception(f"NoAnswer: {name} A")
+            return [_FakeRdata(v) for v in info["a"]]
+        if rtype == "MX":
+            if not info.get("mx"):
+                raise Exception(f"NoAnswer: {name} MX")
+            # MX rdata stringifies as "10 mail.example.com." in real life;
+            # the tool's parser does ``str(r).split()[-1].rstrip(".")``.
+            return [_FakeRdata(f"10 {v}.") for v in info["mx"]]
+        raise Exception(f"unsupported rtype {rtype}")
+    return AsyncMock(side_effect=_resolve)
+
+
 class TestDNSTwistTool:
-    @patch("dnstwist.FuzzDomain", create=True)
-    async def test_happy_path(self, mock_fuzz) -> None:
+    async def test_happy_path(self) -> None:
+        """Fuzzer yields several permutations; DNS resolution marks three
+        of them as registered. The tool returns only the registered ones
+        with their A/MX records populated."""
         tool = DNSTwistTool()
-        fixture = load_fixture("dnstwist/typosquats.json")
-        instance = MagicMock()
-        instance.get.return_value = fixture
-        mock_fuzz.return_value = instance
-        result = await tool.run("example.com")
+        permutations = [
+            {"fuzzer": "*original", "domain": "example.com"},  # always skipped
+            {"fuzzer": "replacement", "domain": "examp1e.com"},
+            {"fuzzer": "homoglyph", "domain": "exarnple.com"},
+            {"fuzzer": "omission", "domain": "exampie.com"},
+            {"fuzzer": "vowel-swap", "domain": "exemple.com"},
+            {"fuzzer": "addition", "domain": "examplee.com"},
+        ]
+        registered = {
+            "examp1e.com": {"a": ["198.51.100.10"], "mx": ["mail.examp1e.com"]},
+            "exarnple.com": {"a": ["198.51.100.11"], "mx": []},
+            "exampie.com": {"a": ["198.51.100.12"], "mx": ["mx.exampie.com"]},
+            # exemple.com and examplee.com deliberately omitted → NXDOMAIN
+        }
+
+        fake_fuzzer = _build_fake_fuzzer(permutations)
+        with patch("dnstwist.Fuzzer", create=True, return_value=fake_fuzzer), \
+             patch("dns.asyncresolver.Resolver") as resolver_cls:
+            resolver_cls.return_value.resolve = _make_dns_responder(registered)
+            result = await tool.run("example.com")
+
         assert result.success is True
-        # Tool filters to only entries where dns-a is set ("registered")
         typos = result.data["typosquats"]
         registered_domains = {t["domain"] for t in typos}
         assert "examp1e.com" in registered_domains
         assert "exarnple.com" in registered_domains
         assert "exampie.com" in registered_domains
-        # Unregistered (dns-a == None) entries dropped
+        # Unregistered candidates dropped
         assert "exemple.com" not in registered_domains
         assert "examplee.com" not in registered_domains
+        # Original domain always skipped
+        assert "example.com" not in registered_domains
         assert result.result_count == 3
-        # Field renames: dns-a -> dns_a, dns-mx -> mx, domain-name -> domain
+        # Field shape: domain/fuzzer/registered/dns_a/mx
         first = next(t for t in typos if t["domain"] == "examp1e.com")
         assert first["fuzzer"] == "replacement"
         assert first["registered"] is True
         assert first["dns_a"] == ["198.51.100.10"]
         assert first["mx"] == ["mail.examp1e.com"]
 
-    @patch("dnstwist.FuzzDomain", create=True)
-    async def test_empty_response(self, mock_fuzz) -> None:
-        """Fuzzer generates permutations but none resolve (no dns-a)."""
+    async def test_empty_response_none_resolve(self) -> None:
+        """Fuzzer generates permutations but none of them resolve.
+        Tool returns success with an empty typosquats list rather than
+        treating "nobody squatted us" as failure."""
         tool = DNSTwistTool()
-        instance = MagicMock()
-        instance.get.return_value = [
-            {"domain-name": "exemple.com", "fuzzer": "vowel-swap", "dns-a": None, "dns-mx": []},
-            {"domain-name": "examplee.com", "fuzzer": "addition", "dns-a": None, "dns-mx": []},
+        permutations = [
+            {"fuzzer": "*original", "domain": "example.com"},
+            {"fuzzer": "vowel-swap", "domain": "exemple.com"},
+            {"fuzzer": "addition", "domain": "examplee.com"},
         ]
-        mock_fuzz.return_value = instance
-        result = await tool.run("example.com")
+        fake_fuzzer = _build_fake_fuzzer(permutations)
+        with patch("dnstwist.Fuzzer", create=True, return_value=fake_fuzzer), \
+             patch("dns.asyncresolver.Resolver") as resolver_cls:
+            # Every lookup raises → no registered candidates
+            resolver_cls.return_value.resolve = _make_dns_responder({})
+            result = await tool.run("example.com")
         assert result.success is True
         assert result.result_count == 0
         assert result.data["typosquats"] == []
 
-    @patch("dnstwist.FuzzDomain", create=True)
-    async def test_library_raises(self, mock_fuzz) -> None:
-        """Lib's ``.generate()`` or ``.get()`` raises mid-run."""
+    async def test_library_raises(self) -> None:
+        """``Fuzzer.generate`` raises mid-run; the outer try/except
+        catches it and reports failure."""
         tool = DNSTwistTool()
-        instance = MagicMock()
-        instance.generate.side_effect = RuntimeError("dnstwist internal error")
-        mock_fuzz.return_value = instance
-        result = await tool.run("example.com")
+        fake_fuzzer = MagicMock()
+        fake_fuzzer.generate.side_effect = RuntimeError("dnstwist internal error")
+        with patch("dnstwist.Fuzzer", create=True, return_value=fake_fuzzer):
+            result = await tool.run("example.com")
         assert result.success is False
-        assert result.error
         assert "dnstwist internal error" in result.error
 
-    @patch("dnstwist.FuzzDomain", create=True)
-    async def test_malformed_lib_output(self, mock_fuzz) -> None:
-        """Lib returns entries missing the expected ``domain-name`` key —
-        a KeyError must be caught by the outer except, not escape."""
+    async def test_check_dns_disabled(self) -> None:
+        """Operators can pass ``check_dns=False`` for offline workflows.
+        Tool returns every permutation marked ``registered=None`` instead
+        of filtering by DNS resolution."""
         tool = DNSTwistTool()
-        instance = MagicMock()
-        instance.get.return_value = [
-            # missing 'domain-name' triggers KeyError inside the list comp
-            {"fuzzer": "replacement", "dns-a": ["1.2.3.4"], "dns-mx": []},
+        permutations = [
+            {"fuzzer": "*original", "domain": "example.com"},
+            {"fuzzer": "replacement", "domain": "examp1e.com"},
+            {"fuzzer": "homoglyph", "domain": "exarnple.com"},
         ]
-        mock_fuzz.return_value = instance
-        result = await tool.run("example.com")
-        assert result.success is False
-        assert result.error
+        fake_fuzzer = _build_fake_fuzzer(permutations)
+        with patch("dnstwist.Fuzzer", create=True, return_value=fake_fuzzer):
+            result = await tool.run("example.com", check_dns=False)
+        assert result.success is True
+        # Original is still skipped; the other two are returned without DNS check
+        assert result.result_count == 2
+        domains = {t["domain"] for t in result.data["typosquats"]}
+        assert domains == {"examp1e.com", "exarnple.com"}
+        assert all(t["registered"] is None for t in result.data["typosquats"])
 
 
 # ────────────────────────────────────────────────────────────────────────
