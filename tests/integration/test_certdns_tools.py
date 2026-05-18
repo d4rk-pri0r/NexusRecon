@@ -210,6 +210,59 @@ class TestPassiveDNSTool:
         assert result.data["subdomains"] == []
         assert result.data["associated"] == []
 
+    @patch("nexusrecon.core.config.NexusConfig.get_secret", return_value="bad-st-key")
+    async def test_unauthorized(self, _secret) -> None:
+        """401 on the primary subdomains endpoint = bad key."""
+        tool = PassiveDNSTool()
+        with respx.mock:
+            respx.get(url__startswith=f"{self.BASE_URL}/domain/example.com/subdomains").mock(
+                return_value=Response(401)
+            )
+            result = await tool.run("example.com")
+        assert result.success is False
+        assert "auth" in result.error.lower() or "SECURITYTRAILS_API_KEY" in result.error
+
+    @patch("nexusrecon.core.config.NexusConfig.get_secret", return_value="fake-st-key")
+    async def test_rate_limited(self, _secret) -> None:
+        """429 on the primary subdomains endpoint = quota exhausted.
+        SecurityTrails' free tier is 50 req/mo which goes fast."""
+        tool = PassiveDNSTool()
+        with respx.mock:
+            respx.get(url__startswith=f"{self.BASE_URL}/domain/example.com/subdomains").mock(
+                return_value=Response(429)
+            )
+            result = await tool.run("example.com")
+        assert result.success is False
+        assert "rate limit" in result.error.lower() or "quota" in result.error.lower()
+
+    @patch("nexusrecon.core.config.NexusConfig.get_secret", return_value="fake-st-key")
+    async def test_auxiliary_endpoint_404(self, _secret) -> None:
+        """If primary subdomains endpoint succeeds but auxiliary endpoints
+        (history/whois/associated) 404, the tool returns success with
+        subdomains populated and an ``_endpoint_errors`` list describing
+        which calls failed."""
+        tool = PassiveDNSTool()
+        with respx.mock:
+            respx.get(url__startswith=f"{self.BASE_URL}/domain/example.com/subdomains").mock(
+                return_value=Response(200, json={"subdomains": ["www"], "subdomain_count": 1})
+            )
+            respx.get(url__startswith=f"{self.BASE_URL}/dns/example.com/history").mock(
+                return_value=Response(404)
+            )
+            respx.get(url__startswith=f"{self.BASE_URL}/domain/example.com/whois").mock(
+                return_value=Response(404)
+            )
+            respx.get(url__startswith=f"{self.BASE_URL}/domain/example.com/associated").mock(
+                return_value=Response(404)
+            )
+            result = await tool.run("example.com")
+        assert result.success is True
+        assert result.data["subdomains"] == ["www.example.com"]
+        # All three auxiliary failures are reported but didn't abort the call
+        errs = result.data.get("_endpoint_errors", [])
+        assert len(errs) == 3
+        assert all("404" in e for e in errs)
+
     @patch("nexusrecon.core.config.NexusConfig.get_secret", return_value="fake-st-key")
     async def test_connection_error(self, _secret) -> None:
         tool = PassiveDNSTool()

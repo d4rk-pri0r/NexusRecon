@@ -21,37 +21,67 @@ class PassiveDNSTool(OSINTTool):
             return ToolResult(success=False, source=self.name, error="SECURITYTRAILS_API_KEY not set")
 
         try:
-            client = httpx.AsyncClient(
+            async with httpx.AsyncClient(
                 base_url="https://api.securitytrails.com/v1",
                 headers={"APIKEY": key},
                 timeout=15.0,
-            )
+            ) as client:
+                results: Dict[str, Any] = {}
+                endpoint_errors: List[str] = []
 
-            results: Dict[str, Any] = {}
+                # Four endpoints. The primary one (subdomain enum) hard-
+                # fails on auth errors so a bad/missing key is visible.
+                # The auxiliary endpoints (history, whois, associated)
+                # may legitimately 404 for some targets, so we record
+                # which ones failed in ``endpoint_errors`` but don't
+                # fail the whole call as long as the primary succeeded.
+                #
+                # Previous revision had every endpoint silently fall out
+                # of an ``if status_code == 200`` gate, leaving callers
+                # unable to tell "this domain has no SecurityTrails
+                # footprint" from "my key is bad / quota exhausted".
 
-            # Subdomain enumeration
-            resp = await client.get(f"/domain/{target}/subdomains")
-            if resp.status_code == 200:
+                resp = await client.get(f"/domain/{target}/subdomains")
+                if resp.status_code in (401, 403):
+                    return ToolResult(
+                        success=False, source=self.name,
+                        error=f"SecurityTrails auth failure (HTTP {resp.status_code}) — check SECURITYTRAILS_API_KEY",
+                    )
+                if resp.status_code == 429:
+                    return ToolResult(
+                        success=False, source=self.name,
+                        error="SecurityTrails rate limit / monthly quota exceeded",
+                    )
+                if resp.status_code != 200:
+                    return ToolResult(
+                        success=False, source=self.name,
+                        error=f"SecurityTrails subdomains returned HTTP {resp.status_code}",
+                    )
                 data = resp.json()
                 subs = [f"{s}.{target}" for s in data.get("subdomains", [])]
                 results["subdomains"] = subs
 
-            # DNS history
-            resp = await client.get(f"/dns/{target}/history")
-            if resp.status_code == 200:
-                results["dns_history"] = resp.json()
+                # Auxiliary endpoints — record failures but don't abort.
+                for endpoint, key_name in [
+                    (f"/dns/{target}/history", "dns_history"),
+                    (f"/domain/{target}/whois", "whois"),
+                    (f"/domain/{target}/associated", "associated"),
+                ]:
+                    aux = await client.get(endpoint)
+                    if aux.status_code == 200:
+                        body = aux.json()
+                        if key_name == "associated":
+                            results[key_name] = body.get("domains", [])
+                        else:
+                            results[key_name] = body
+                    else:
+                        endpoint_errors.append(
+                            f"{endpoint} returned HTTP {aux.status_code}"
+                        )
 
-            # WHOIS
-            resp = await client.get(f"/domain/{target}/whois")
-            if resp.status_code == 200:
-                results["whois"] = resp.json()
+                if endpoint_errors:
+                    results["_endpoint_errors"] = endpoint_errors
 
-            # Associated domains
-            resp = await client.get(f"/domain/{target}/associated")
-            if resp.status_code == 200:
-                results["associated"] = resp.json().get("domains", [])
-
-            await client.aclose()
             total_subs = len(results.get("subdomains", []))
             return ToolResult(
                 success=True, source=self.name, data=results, result_count=total_subs,
