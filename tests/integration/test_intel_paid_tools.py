@@ -205,10 +205,37 @@ class TestCensysTool:
         assert result.data["certificates"]["total"] == 0
         assert result.data["certificates"]["hits"] == []
 
+    @patch("nexusrecon.core.config.NexusConfig.get_secret", return_value="bad-cred")
+    async def test_unauthorized(self, _secret) -> None:
+        """401/403 from Censys = bad API ID/secret."""
+        tool = CensysTool()
+        with respx.mock:
+            respx.get(url__startswith=self.URL).mock(return_value=Response(401))
+            result = await tool.run("example.com")
+        assert result.success is False
+        assert "auth" in result.error.lower() or "CENSYS" in result.error
+
+    @patch("nexusrecon.core.config.NexusConfig.get_secret", return_value="fake-censys-cred")
+    async def test_rate_limited(self, _secret) -> None:
+        tool = CensysTool()
+        with respx.mock:
+            respx.get(url__startswith=self.URL).mock(return_value=Response(429))
+            result = await tool.run("example.com")
+        assert result.success is False
+        assert "rate limit" in result.error.lower()
+
+    @patch("nexusrecon.core.config.NexusConfig.get_secret", return_value="fake-censys-cred")
+    async def test_server_error(self, _secret) -> None:
+        tool = CensysTool()
+        with respx.mock:
+            respx.get(url__startswith=self.URL).mock(return_value=Response(503))
+            result = await tool.run("example.com")
+        assert result.success is False
+        assert "503" in result.error
+
     @patch("nexusrecon.core.config.NexusConfig.get_secret", return_value="fake-censys-cred")
     async def test_error_path(self, _secret) -> None:
-        # Like Shodan, Censys only parses on 200; non-200 silently skips.
-        # Drive an exception to exercise the failure branch.
+        """Network-level failure — outer except branch."""
         tool = CensysTool()
         with respx.mock:
             respx.get(url__startswith=self.URL).mock(
