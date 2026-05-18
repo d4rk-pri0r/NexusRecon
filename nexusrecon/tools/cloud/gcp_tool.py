@@ -79,8 +79,20 @@ class GCPReconTool(OSINTTool):
             url = f"https://{name}.appspot.com"
             try:
                 resp = await client.get(url, timeout=3.0)
-                if resp.status_code != 404:
-                    found.append({"url": url, "status": resp.status_code, "name": name})
+                # Previous revision treated ``status != 404`` as "found",
+                # which reported 500-class errors (provider hiccups,
+                # blocked-by-WAF, TLS handshake failures) as legitimate
+                # hits. App Engine returns 200 for accessible apps and
+                # 403 for "exists but auth required" — those are the
+                # two states that genuinely mean the app exists. Match
+                # the GCS bucket-probe convention next door.
+                if resp.status_code in (200, 403):
+                    found.append({
+                        "url": url,
+                        "status": resp.status_code,
+                        "name": name,
+                        "public": resp.status_code == 200,
+                    })
             except Exception:
                 continue
         return found

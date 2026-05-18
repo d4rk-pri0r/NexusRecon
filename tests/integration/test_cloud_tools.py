@@ -650,8 +650,9 @@ class TestGCPReconTool:
         assert result.data["cloud_run"] == {"status": "stubbed"}
 
     async def test_server_error_path(self) -> None:
-        """500 is not in (200, 403); tool treats it as "not open" and
-        returns empty success."""
+        """Every probe returns 500. Neither GCS nor App Engine match
+        (200, 403), so both produce empty lists — provider hiccups are
+        no longer falsely reported as discovered apps."""
         tool = GCPReconTool()
         with respx.mock(assert_all_called=False) as r:
             r.get(url__regex=r".*").mock(return_value=Response(500))
@@ -660,6 +661,6 @@ class TestGCPReconTool:
 
         assert result.success is True
         assert result.data["gcs_buckets"] == []
-        # App Engine treats != 404 as "found" — 500 IS found. This is the
-        # documented behavior of the source code (intentional or not).
-        assert all(a["status"] == 500 for a in result.data["app_engine"])
+        # App Engine now requires status in (200, 403) — 500s correctly
+        # drop out instead of being reported as "found".
+        assert result.data["app_engine"] == []
