@@ -726,10 +726,11 @@ class TestCDNDetectTool:
         assert "203.0.113.42" in result.data["resolved_ips"]
         assert "nginx" in result.data["response_headers"].get("server", "")
 
-    async def test_network_errors_swallowed(self) -> None:
-        """Tool intentionally returns ``success=True`` even when the
-        HTTP call and DNS lookup both fail — the empty result is
-        informative to the orchestrator, not an error condition."""
+    async def test_both_signals_failed(self) -> None:
+        """When HTTP probe AND DNS resolution both fail, the tool can't
+        say anything useful about CDN presence. Surface that explicitly
+        as ``success=False`` with both error reasons captured — don't
+        silently return "no CDN detected"."""
         tool = CDNTool()
         with patch("socket.getaddrinfo", side_effect=Exception("dns failed")):
             with respx.mock:
@@ -737,8 +738,29 @@ class TestCDNDetectTool:
                     side_effect=ConnectError("connect failed")
                 )
                 result = await tool.run("does-not-exist-12345.invalid")
+        assert result.success is False
+        assert "no HTTP or DNS signal" in result.error
+        assert "probe_errors" in result.data
+        assert "http" in result.data["probe_errors"]
+        assert "dns" in result.data["probe_errors"]
+
+    async def test_partial_signal_dns_only(self) -> None:
+        """HTTP fails but DNS resolves — tool still produces a useful
+        result (IP-range checks may identify the CDN). ``probe_errors``
+        records the HTTP failure for diagnostic transparency."""
+        tool = CDNTool()
+        with patch(
+            "socket.getaddrinfo",
+            return_value=[(2, 1, 6, "", ("104.16.132.229", 80))],
+        ):
+            with respx.mock:
+                respx.get(url__startswith=self.URL_PREFIX).mock(
+                    side_effect=ConnectError("connect failed")
+                )
+                result = await tool.run("example.com")
         assert result.success is True
-        assert result.result_count == 0
-        assert result.data["resolved_ips"] == []
-        assert result.data["response_headers"] == {}
-        assert result.data["detected_cdns"] == []
+        # Cloudflare IP range still matches → detected via IP signal alone
+        names = {c["name"] for c in result.data["detected_cdns"]}
+        assert "cloudflare" in names
+        assert "probe_errors" in result.data
+        assert "http" in result.data["probe_errors"]

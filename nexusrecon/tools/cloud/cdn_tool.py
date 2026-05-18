@@ -86,19 +86,25 @@ class CDNTool(OSINTTool):
         url = f"https://{target}" if not target.startswith("http") else target
         detected: Dict[str, Any] = {}
         headers_raw: Dict[str, str] = {}
-        cname_records: List[str] = []
         resolved_ips: List[str] = []
+        # Track *why* each signal source failed so the operator can tell
+        # "this domain doesn't use a CDN" from "we couldn't probe at all".
+        # Previous revision swallowed both kinds of failure with bare
+        # ``except Exception: pass`` and returned ``success=True`` with
+        # an empty payload regardless.
+        probe_errors: Dict[str, str] = {}
 
         async with httpx.AsyncClient(timeout=10.0, follow_redirects=True, verify=False) as client:
             try:
                 resp = await client.get(url, headers={"User-Agent": USER_AGENT})
                 headers_raw = {k.lower(): v for k, v in dict(resp.headers).items()}
-            except Exception:
-                pass
+            except Exception as exc:
+                probe_errors["http"] = f"{type(exc).__name__}: {exc}"
 
-        # DNS resolution via httpx
+        # DNS resolution
         try:
             from socket import getaddrinfo, AF_INET, AF_INET6
+            dns_per_family_errors: List[str] = []
             for family in (AF_INET, AF_INET6):
                 try:
                     addrs = getaddrinfo(target, 80, family=family)
@@ -106,10 +112,18 @@ class CDNTool(OSINTTool):
                         ip = addr[4][0]
                         if ip not in resolved_ips:
                             resolved_ips.append(ip)
-                except Exception:
+                except Exception as exc:
+                    dns_per_family_errors.append(
+                        f"{'A' if family == AF_INET else 'AAAA'}: {type(exc).__name__}: {exc}"
+                    )
                     continue
-        except Exception:
-            pass
+            # Only surface a DNS error if BOTH families failed — partial
+            # resolution (e.g. v4 only) is normal and shouldn't show up
+            # as an error to the operator.
+            if not resolved_ips and dns_per_family_errors:
+                probe_errors["dns"] = "; ".join(dns_per_family_errors)
+        except Exception as exc:
+            probe_errors["dns"] = f"{type(exc).__name__}: {exc}"
 
         # Check each CDN against headers, CNAMEs, and IPs
         detected_cdns = []
@@ -147,15 +161,34 @@ class CDNTool(OSINTTool):
                 detected_cdns.append(entry)
                 detected[cdn_name] = entry
 
+        # If we got nothing from EITHER signal source (HTTP and DNS both
+        # failed), the result is meaningless — surface the combined error
+        # so the operator knows the probe didn't run, not that the target
+        # has no CDN. If at least one signal arrived, success is correct
+        # even if no signature matched (legitimate "vanilla origin" answer).
+        if not headers_raw and not resolved_ips:
+            return ToolResult(
+                success=False, source=self.name,
+                error=f"CDN detection failed — no HTTP or DNS signal: {probe_errors}",
+                data={"target": target, "probe_errors": probe_errors},
+            )
+
+        payload: Dict[str, Any] = {
+            "target": target,
+            "resolved_ips": resolved_ips,
+            "response_headers": dict(list(headers_raw.items())[:20]),
+            "detected_cdns": detected_cdns,
+            "count": len(detected_cdns),
+            "origin_research": "Use cert.sh history, SPF includes, and historical DNS to find origin IPs",
+        }
+        # Always surface partial-probe diagnostics when at least one signal
+        # source failed — the operator may want to retry HTTP via a proxy
+        # or check why DNS didn't resolve.
+        if probe_errors:
+            payload["probe_errors"] = probe_errors
+
         return ToolResult(
             success=True, source=self.name,
-            data={
-                "target": target,
-                "resolved_ips": resolved_ips,
-                "response_headers": dict(list(headers_raw.items())[:20]),
-                "detected_cdns": detected_cdns,
-                "count": len(detected_cdns),
-                "origin_research": "Use cert.sh history, SPF includes, and historical DNS to find origin IPs",
-            },
+            data=payload,
             result_count=len(detected_cdns),
         )
