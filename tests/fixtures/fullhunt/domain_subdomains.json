@@ -10,11 +10,10 @@
   "status": 200,
   "message": "",
   "metadata": {
-    "total": 5,
-    "all_results": 5,
+    "all_results_count": 5,
     "available_results_for_user": 5,
     "max_results_for_user": 100,
-    "last_scanned": 1715616000,
+    "last_scanned": "2026-05-13T00:00:00Z",
     "timestamp": 1715702400,
     "user_plan": "free"
   }

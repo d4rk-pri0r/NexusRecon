@@ -647,8 +647,9 @@ class TestFullHuntTool:
         data = result.data
         assert data["domain"] == "example.com"
         assert data["total"] == 5
-        # ``all_results`` is what the tool reads (pre-existing bug).
-        assert data["all_results"] == 5
+        # ``all_results_count`` is the documented field per FullHunt's
+        # API docs; the tool reads it correctly now.
+        assert data["all_results_count"] == 5
         hosts = data["hosts"]
         assert "www.example.com" in hosts
         assert "vpn.example.com" in hosts

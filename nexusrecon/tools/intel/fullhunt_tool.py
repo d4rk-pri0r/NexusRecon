@@ -48,8 +48,14 @@ class FullHuntTool(OSINTTool):
 
                 data: Dict[str, Any] = {
                     "domain": target,
+                    # Real FullHunt response (per docs.fullhunt.io/docs/api/domain-apis)
+                    # has ``metadata.all_results_count`` — an earlier
+                    # revision read ``all_results`` (no ``_count`` suffix)
+                    # which silently returned ``None`` on every live call.
+                    # ``metadata.total`` isn't documented; fall back to
+                    # ``len(hosts)`` for an honest count.
                     "total": metadata.get("total", len(hosts)),
-                    "all_results": metadata.get("all_results"),
+                    "all_results_count": metadata.get("all_results_count"),
                     "hosts": hosts[:300],
                 }
 
