@@ -49,6 +49,20 @@ LAMBDA_PATTERNS = [
     "{name}-service", "{name}-lambda", "api-{name}", "fn-{name}",
 ]
 
+# Lambda Function URLs (``lambda-url.<region>.on.aws``) live in their own
+# set of supported regions — not identical to S3's. Previous revision
+# used ``S3_REGIONS[:10]`` as "common regions" for Lambda probes, which
+# silently excluded eu-west-2 / eu-west-3 / eu-north-1 (all valid for
+# Lambda URLs) and over-weighted Asia-Pacific. This list is the
+# documented Lambda-URL set per AWS regional availability tables;
+# ordered by global traffic so the early returns hit fastest.
+LAMBDA_REGIONS = [
+    "us-east-1", "us-east-2", "us-west-1", "us-west-2",
+    "eu-west-1", "eu-west-2", "eu-west-3", "eu-central-1", "eu-north-1",
+    "ap-northeast-1", "ap-southeast-1", "ap-southeast-2", "ap-south-1",
+    "ca-central-1", "sa-east-1",
+]
+
 COGNITO_PATTERNS = [
     "{name}_UserPool", "{name}-UserPool", "{name}UserPool",
     "{name}_pool", "{name}-pool", "{name}Pool",
@@ -215,7 +229,7 @@ class AWSReconTool(OSINTTool):
             name = perm.format(name=base).lower()
             if not name or len(name) > 63:
                 continue
-            for region in S3_REGIONS[:10]:  # common regions
+            for region in LAMBDA_REGIONS:
                 url = f"https://{name}.{region}.lambda-url.on.aws/"
                 try:
                     resp = await client.get(url, timeout=3.0)
