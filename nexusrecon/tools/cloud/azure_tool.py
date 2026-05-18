@@ -178,17 +178,35 @@ class AzureM365Tool(OSINTTool):
             resp = await client.get(url)
             if resp.status_code == 200:
                 text = resp.text
-                # Parse XML-ish response
+                # Parse XML-ish response.
+                #
+                # Federation detection: ``NameSpaceType`` is the
+                # primary signal — a stable enum string (``Managed`` |
+                # ``Federated`` | ``Unknown``) that both the XML and
+                # JSON forms of the endpoint return. The numeric
+                # ``State`` field (1 = managed, 3 = federated) is kept
+                # as a fallback for XML responses that omit
+                # ``NameSpaceType``. Previously this tool used only
+                # ``State == "3"`` while its sibling ``azure_tenant_enum``
+                # read ``NameSpaceType`` from the JSON form — the two
+                # tools couldn't be cross-referenced because they
+                # answered the same question against different fields.
+                namespace_type = self._extract_xml_field(text, "NameSpaceType")
                 state = self._extract_xml_field(text, "State")
                 federation_brand_name = self._extract_xml_field(text, "FederationBrandName")
                 cloud_audience_urn = self._extract_xml_field(text, "CloudInstanceName")
                 domain_type = self._extract_xml_field(text, "DomainType")
 
-                is_federated = state == "3"  # 3 = federated, 1 = managed
+                if namespace_type is not None:
+                    is_federated = namespace_type == "Federated"
+                else:
+                    is_federated = state == "3"
                 federation_protocol = self._extract_xml_field(text, "AuthProtocol")
 
                 return {
                     "found": True,
+                    # Consistent across azure_m365_recon and azure_tenant_enum.
+                    "namespace_type": namespace_type,
                     "is_federated": is_federated,
                     "federation_type": "Federated (ADFS)" if is_federated else "Managed",
                     "federation_brand_name": federation_brand_name,
