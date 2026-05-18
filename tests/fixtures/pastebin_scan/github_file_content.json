@@ -1,3 +1,13 @@
 {
-  "content": "user@example.com:hunter2hunter2\napi_key=\"abc123def456ghi789jkl012mno345pqr\"\nAKIAIOSFODNN7EXAMPLE\n"
+  "name": "leaked.env",
+  "path": "config/leaked.env",
+  "sha": "abc123def456abc123def456abc123def456abcd",
+  "size": 124,
+  "url": "https://api.github.com/repos/example-org/repo/contents/config/leaked.env?ref=main",
+  "html_url": "https://github.com/example-org/repo/blob/main/config/leaked.env",
+  "git_url": "https://api.github.com/repos/example-org/repo/git/blobs/abc123def456abc123def456abc123def456abcd",
+  "download_url": "https://raw.githubusercontent.com/example-org/repo/main/config/leaked.env",
+  "type": "file",
+  "content": "dXNlckBleGFtcGxlLmNvbTpodW50ZXIyaHVudGVyMgphcGlfa2V5PSJhYmMxMjNkZWY0NTZnaGk3ODlqa2wwMTJtbm8zNDVwcXIiCkFLSUFJT1NGT0ROTjdFWEFNUExFCg==",
+  "encoding": "base64"
 }

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import re
 from typing import Any, Dict, List
 
@@ -110,7 +111,27 @@ class PastebinTool(OSINTTool):
                     if raw_url:
                         r = await client.get(raw_url, headers=headers, timeout=10.0)
                         if r.status_code == 200:
-                            body = r.json().get("content", "")
+                            # ``/search/code`` items' ``url`` returns the
+                            # GitHub Contents API response, which encodes
+                            # the file body in base64. Decoding gives the
+                            # real source text we want to scan; without
+                            # this step every credential regex misses
+                            # because base64 input doesn't match any
+                            # ``CRED_PATTERNS`` we have.
+                            payload = r.json()
+                            encoded = payload.get("content", "")
+                            encoding = payload.get("encoding", "")
+                            if encoded and encoding == "base64":
+                                try:
+                                    body = base64.b64decode(encoded).decode(
+                                        "utf-8", errors="replace"
+                                    )
+                                except Exception:
+                                    body = ""
+                            else:
+                                # Older shapes (or non-base64 encodings)
+                                # — pass through as-is.
+                                body = encoded
                 except Exception:
                     pass
                 pastes.append({

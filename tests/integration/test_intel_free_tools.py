@@ -499,11 +499,10 @@ class TestPastebinTool:
     async def test_happy_path(self) -> None:
         """Mocks both providers: psbdmp returns 2 ids, GitHub returns 2 items.
 
-        NOTE: the tool calls ``.json().get("content", "")`` on the GitHub
-        ``/search/code`` item URL — which actually returns repo-file
-        metadata, not gist content. That's a pre-existing bug; the test
-        feeds it a response shape with a ``content`` field so the tool
-        succeeds. The bug-fix is tracked separately."""
+        The GitHub Contents API responds with ``{content: <base64>,
+        encoding: "base64"}`` — the tool now decodes that so the
+        credential harvester sees the real source text. Both providers'
+        leaks should fire matching credential patterns."""
         tool = PastebinTool()
         psbdmp_search = load_fixture("pastebin_scan/psbdmp_search.json")
         psbdmp_dump = load_text_fixture("pastebin_scan/psbdmp_dump.txt")
@@ -529,12 +528,20 @@ class TestPastebinTool:
         pastes = result.data["pastes"]
         sources = {p["source"] for p in pastes}
         assert sources == {"psbdmp", "github_gist"}
-        # Credential harvester should have flagged the AWS access key in both
+        # psbdmp's plaintext dump fires multiple credential patterns
         psbdmp_pastes = [p for p in pastes if p["source"] == "psbdmp"]
         assert len(psbdmp_pastes) == 2
-        # The dump text triggers multiple credential patterns
-        leaked_types = {s["type"] for s in psbdmp_pastes[0]["leaked_secrets"]}
-        assert "aws_access_key" in leaked_types
+        leaked_types_psbdmp = {s["type"] for s in psbdmp_pastes[0]["leaked_secrets"]}
+        assert "aws_access_key" in leaked_types_psbdmp
+        # github gists also fire credential patterns now that the base64
+        # decoding actually surfaces the source text — fixture body is
+        # the same shape as the psbdmp dump (user:pass + api_key + AKIA).
+        github_pastes = [p for p in pastes if p["source"] == "github_gist"]
+        assert len(github_pastes) == 2
+        leaked_types_gh = {s["type"] for s in github_pastes[0]["leaked_secrets"]}
+        assert "aws_access_key" in leaked_types_gh
+        # context_excerpt is the decoded text (not the base64 string)
+        assert "AKIAIOSFODNN7EXAMPLE" in github_pastes[0]["context_excerpt"]
 
     async def test_empty_response(self) -> None:
         """Both providers return empty — paste_count is 0, success stays True."""
