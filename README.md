@@ -33,9 +33,9 @@ hash-chained audit log.
 
 ## Why agentic OSINT?
 
-The hard part of an OSINT engagement isn't running the tools, it's
-deciding **which tool to run next, on what target, in response to what
-the previous tool just told you**.
+Running the tools is the easy part. The hard part is **deciding which
+tool to run next, on what target, in response to what the previous
+tool just told you**.
 
 A subdomain harvester surfaces `vpn.acme.com` → that means you want to
 fingerprint its version with Shodan → that means you want to check
@@ -56,19 +56,18 @@ queues targeted follow-up tool runs based on what the data warrants:
   dispatcher hands it to the **phishing drafter** to write a targeted
   pretext referencing recent SEC filings.
 
-At the end of the run a **`master_reporter` agent** synthesises everything
-into a single cohesive narrative report that an operator can hand
-straight to the client's CISO, backed by:
+At the end of the run a **`master_reporter` agent** writes the whole
+thing up as one narrative report the operator can hand straight to
+the client's CISO. The report is backed by:
 
 - a **ranked attack-thread list** scored by `CVSS × EPSS × KEV × Metasploit`,
 - a **hash-chained audit log** of every tool invocation and scope-gate decision,
 - a **citation graph** linking every finding back to its source tool.
 
-**The value vs. running tools by hand**: an OSINT analyst running the
-same source set manually against a single seed domain typically loses
-6-8 hours, doesn't get cross-tool correlation, doesn't get LLM-driven
-follow-up, doesn't produce a ranked threat list, and doesn't produce
-an audit trail their client's legal team will accept.
+An OSINT analyst running the same source set manually against a
+single seed domain typically loses 6-8 hours and ends the day with no
+cross-tool correlation, no LLM follow-up loop, no ranked threat
+list, and no audit trail their client's legal team will accept.
 
 ---
 
@@ -96,10 +95,11 @@ laptop with default API keys configured, typical 30-60 min run:
 phishing package, attack-surface matrix, vuln correlation, hash-chained
 audit log, Maltego CSV export, the lot.
 
-Doing the same by hand: 6-8 hours of context switching across crt.sh,
-Subfinder, Amass, SecurityTrails, Shodan, Censys, urlscan, GitHub,
-Hunter, HIBP, NVD, KEV, EPSS, Maltego, with no automatic correlation,
-no LLM follow-up loop, no ranked threats, no audit chain.
+By hand, you spend 6-8 hours bouncing across crt.sh, Subfinder, Amass,
+SecurityTrails, Shodan, Censys, urlscan, GitHub, Hunter, HIBP, NVD,
+KEV, EPSS, and Maltego, and you finish without any of the cross-tool
+correlation, LLM follow-up, ranked threats, or audit chain the
+framework gives you for free.
 
 ---
 
@@ -138,8 +138,8 @@ no LLM follow-up loop, no ranked threats, no audit chain.
               └───────────────────┘
 ```
 
-For the full architecture, phase pipeline, agent personas, dispatcher loop,
-state-key conventions, scoring formula, see [`ARCHITECTURE.md`](ARCHITECTURE.md).
+See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the phase pipeline, agent
+personas, dispatcher loop, state-key conventions, and scoring formula.
 
 ---
 
@@ -359,11 +359,10 @@ If you want to help shape the 1.0, see [`BETA_TESTING_GUIDE.md`](BETA_TESTING_GU
 ## License & legal
 
 Licensed under [Apache 2.0](LICENSE). The license grants you broad
-permission to use, modify, and redistribute. We ask one thing in
-return, **use it only against systems you have explicit written
-permission to test.** Full responsible-use policy:
-[`DISCLAIMER.md`](DISCLAIMER.md). Third-party components and the
-authorized-use rider: [`NOTICE`](NOTICE).
+permission to use, modify, and redistribute. One ask in return:
+**use it only against systems you have explicit written permission
+to test.** Full responsible-use policy in [`DISCLAIMER.md`](DISCLAIMER.md).
+Third-party components and the authorized-use rider in [`NOTICE`](NOTICE).
 
 Scope enforcement is built into the framework, every tool invocation is
 checked against the signed scope before execution, tagged with the scope hash,
