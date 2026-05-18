@@ -1,0 +1,21 @@
+{
+  "domain": "example.com",
+  "hosts": [
+    "www.example.com",
+    "api.example.com",
+    "mail.example.com",
+    "vpn.example.com",
+    "dev.example.com"
+  ],
+  "status": 200,
+  "message": "",
+  "metadata": {
+    "total": 5,
+    "all_results": 5,
+    "available_results_for_user": 5,
+    "max_results_for_user": 100,
+    "last_scanned": 1715616000,
+    "timestamp": 1715702400,
+    "user_plan": "free"
+  }
+}

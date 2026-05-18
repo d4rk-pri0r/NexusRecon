@@ -1,0 +1,37 @@
+{
+  "type": "standard",
+  "title": "Example Corp",
+  "displaytitle": "Example Corp",
+  "namespace": {"id": 0, "text": ""},
+  "wikibase_item": "Q42",
+  "titles": {"canonical": "Example_Corp", "normalized": "Example Corp", "display": "Example Corp"},
+  "pageid": 8489,
+  "thumbnail": {
+    "source": "https://upload.wikimedia.org/wikipedia/commons/thumb/example.png",
+    "width": 320,
+    "height": 320
+  },
+  "lang": "en",
+  "dir": "ltr",
+  "revision": "12345",
+  "tid": "abcd-efgh-ijkl",
+  "timestamp": "2026-04-01T12:00:00Z",
+  "description": "American multinational technology company",
+  "description_source": "central",
+  "content_urls": {
+    "desktop": {
+      "page": "https://en.wikipedia.org/wiki/Example_Corp",
+      "revisions": "https://en.wikipedia.org/wiki/Example_Corp?action=history",
+      "edit": "https://en.wikipedia.org/wiki/Example_Corp?action=edit",
+      "talk": "https://en.wikipedia.org/wiki/Talk:Example_Corp"
+    },
+    "mobile": {
+      "page": "https://en.m.wikipedia.org/wiki/Example_Corp",
+      "revisions": "https://en.m.wikipedia.org/wiki/Special:History/Example_Corp",
+      "edit": "https://en.m.wikipedia.org/wiki/Example_Corp?action=edit",
+      "talk": "https://en.m.wikipedia.org/wiki/Talk:Example_Corp"
+    }
+  },
+  "extract": "Example Corp is an American multinational technology company headquartered in Mountain View, California. It was founded in 1998 by Jane Founder and John Founder. The company specializes in Internet-related services and products.",
+  "extract_html": "<p><b>Example Corp</b> is an American multinational technology company.</p>"
+}

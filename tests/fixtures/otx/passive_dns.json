@@ -1,0 +1,50 @@
+{
+  "passive_dns": [
+    {
+      "address": "93.184.216.34",
+      "first": "2024-08-15T00:00:00",
+      "last": "2026-05-01T00:00:00",
+      "hostname": "www.example.com",
+      "record_type": "A",
+      "indicator_link": "/indicator/hostname/www.example.com",
+      "flag_url": "/assets/images/flags/us.png",
+      "flag_title": "United States",
+      "asset_type": "hostname",
+      "asn": "AS15133"
+    },
+    {
+      "address": "93.184.216.35",
+      "first": "2025-01-01T00:00:00",
+      "last": "2026-04-15T00:00:00",
+      "hostname": "api.example.com",
+      "record_type": "A",
+      "indicator_link": "/indicator/hostname/api.example.com",
+      "flag_url": "/assets/images/flags/us.png",
+      "flag_title": "United States",
+      "asset_type": "hostname",
+      "asn": "AS15133"
+    },
+    {
+      "address": "93.184.216.36",
+      "first": "2025-06-01T00:00:00",
+      "last": "2026-05-10T00:00:00",
+      "hostname": "vpn.example.com",
+      "record_type": "A",
+      "indicator_link": "/indicator/hostname/vpn.example.com",
+      "flag_url": "/assets/images/flags/us.png",
+      "flag_title": "United States",
+      "asset_type": "hostname",
+      "asn": "AS15133"
+    },
+    {
+      "address": "93.184.216.37",
+      "first": "2025-09-01T00:00:00",
+      "last": "2026-05-12T00:00:00",
+      "hostname": "unrelated-domain.org",
+      "record_type": "A",
+      "indicator_link": "/indicator/hostname/unrelated-domain.org",
+      "asset_type": "hostname"
+    }
+  ],
+  "count": 4
+}

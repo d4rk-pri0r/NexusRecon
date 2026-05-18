@@ -1,0 +1,9 @@
+{
+  "name": "Example WordPress Site",
+  "description": "Just another WordPress site",
+  "url": "https://example.com",
+  "home": "https://example.com",
+  "gmt_offset": "0",
+  "timezone_string": "UTC",
+  "namespaces": ["oembed/1.0", "wp/v2"]
+}

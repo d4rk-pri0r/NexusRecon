@@ -1,0 +1,53 @@
+[
+  {
+    "event_source": "HttpPlugin",
+    "event_type": "service",
+    "ip": "1.2.3.4",
+    "host": "example.com",
+    "port": "443",
+    "protocol": "https",
+    "summary": "HTTP/1.1 200 OK - nginx/1.18.0 - Example Domain landing page",
+    "time": "2024-05-15T10:00:00Z",
+    "tags": ["http", "tls"],
+    "service": {
+      "software": {
+        "name": "nginx",
+        "version": "1.18.0"
+      }
+    },
+    "geoip": {
+      "country_name": "United States"
+    },
+    "LeakSeverity": {
+      "Score": 0,
+      "CVEs": []
+    }
+  },
+  {
+    "event_source": "JenkinsOpenPlugin",
+    "event_type": "leak",
+    "ip": "5.6.7.8",
+    "host": "ci.example.com",
+    "port": "8080",
+    "protocol": "http",
+    "summary": "Jenkins open instance — no auth required, build history accessible",
+    "time": "2024-05-14T12:00:00Z",
+    "tags": ["http", "leak", "jenkins"],
+    "service": {
+      "software": {
+        "name": "Jenkins",
+        "version": "2.346.1"
+      }
+    },
+    "geoip": {
+      "country_name": "Germany"
+    },
+    "LeakSeverity": {
+      "Score": 8,
+      "CVEs": [
+        {"name": "CVE-2022-29036", "score": 9.8},
+        {"name": "CVE-2022-29037", "score": 7.5}
+      ]
+    }
+  }
+]

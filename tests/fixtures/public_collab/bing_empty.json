@@ -1,0 +1,5 @@
+{
+  "_type": "SearchResponse",
+  "queryContext": {"originalQuery": "site:trello.com \"NothingHere\""},
+  "webPages": {"webSearchUrl": "https://www.bing.com/search?q=...", "totalEstimatedMatches": 0, "value": []}
+}

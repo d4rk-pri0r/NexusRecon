@@ -1,0 +1,53 @@
+{
+  "matches": [
+    {
+      "ip_str": "93.184.216.34",
+      "port": 443,
+      "transport": "tcp",
+      "product": "nginx",
+      "version": "1.19.0",
+      "org": "Edgecast Networks",
+      "location": {
+        "country_name": "United States",
+        "city": "Norwell"
+      },
+      "data": "HTTP/1.1 200 OK\r\nServer: nginx\r\nContent-Type: text/html",
+      "timestamp": "2026-05-01T12:34:56.000000"
+    },
+    {
+      "ip_str": "93.184.216.34",
+      "port": 80,
+      "transport": "tcp",
+      "product": "nginx",
+      "version": "1.19.0",
+      "org": "Edgecast Networks",
+      "location": {
+        "country_name": "United States",
+        "city": "Norwell"
+      },
+      "data": "HTTP/1.1 200 OK\r\nServer: nginx",
+      "timestamp": "2026-05-01T12:30:00.000000"
+    },
+    {
+      "ip_str": "93.184.215.14",
+      "port": 22,
+      "transport": "tcp",
+      "product": "OpenSSH",
+      "version": "8.4",
+      "org": "Edgecast Networks",
+      "location": {
+        "country_name": "United States",
+        "city": "Norwell"
+      },
+      "data": "SSH-2.0-OpenSSH_8.4",
+      "timestamp": "2026-05-02T00:00:00.000000"
+    }
+  ],
+  "total": 42,
+  "facets": {
+    "port": [
+      {"count": 2, "value": "443"},
+      {"count": 1, "value": "22"}
+    ]
+  }
+}

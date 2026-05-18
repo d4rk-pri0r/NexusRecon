@@ -1,0 +1,36 @@
+{
+  "id": "abc123-fake-search-id",
+  "status": 0,
+  "selectors": [
+    {
+      "selectorvalue": "admin@example.com",
+      "selectortype": 1,
+      "bucket": "leaks.public",
+      "added": "2024-08-12T14:33:00Z"
+    },
+    {
+      "selectorvalue": "support@example.com",
+      "selectortype": 1,
+      "bucket": "leaks.public",
+      "added": "2024-09-01T08:11:00Z"
+    },
+    {
+      "selectorvalue": "ceo@example.com",
+      "selectortype": 1,
+      "bucket": "leaks.public",
+      "added": "2025-01-22T19:42:00Z"
+    },
+    {
+      "selectorvalue": "mail.example.com",
+      "selectortype": 2,
+      "bucket": "darknet.tor",
+      "added": "2024-07-04T03:18:00Z"
+    },
+    {
+      "selectorvalue": "vpn.example.com",
+      "selectortype": 2,
+      "bucket": "darknet.tor",
+      "added": "2024-10-15T22:55:00Z"
+    }
+  ]
+}

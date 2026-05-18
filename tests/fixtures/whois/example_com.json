@@ -1,0 +1,13 @@
+{
+  "registrar": "RESERVED-Internet Assigned Numbers Authority",
+  "creation_date": "1995-08-14 04:00:00",
+  "expiration_date": "2026-08-13 04:00:00",
+  "updated_date": "2024-08-14 07:01:31",
+  "name": "Internet Assigned Numbers Authority",
+  "org": "ICANN",
+  "emails": "noc@dns.icann.org",
+  "country": "US",
+  "name_servers": ["A.IANA-SERVERS.NET", "B.IANA-SERVERS.NET"],
+  "status": ["clientDeleteProhibited", "clientTransferProhibited", "clientUpdateProhibited"],
+  "dnssec": "signedDelegation"
+}

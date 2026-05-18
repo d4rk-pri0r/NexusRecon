@@ -1,0 +1,22 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+env:
+  AWS_ACCESS_KEY_ID: AKIAIOSFODNN7EXAMPLE
+  AWS_ACCOUNT_ID: 123456789012
+  TARGET_HOST: prod.example.com
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy to S3
+        run: |
+          aws s3 cp ./dist s3://uploads.example.com/
+          curl -X POST https://hooks.internal/notify
+        env:
+          api_key: supersecret123

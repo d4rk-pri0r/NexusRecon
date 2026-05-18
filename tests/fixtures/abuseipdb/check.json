@@ -1,0 +1,35 @@
+{
+  "data": {
+    "ipAddress": "118.25.6.39",
+    "isPublic": true,
+    "ipVersion": 4,
+    "isWhitelisted": false,
+    "abuseConfidenceScore": 100,
+    "countryCode": "CN",
+    "usageType": "Data Center/Web Hosting/Transit",
+    "isp": "Tencent Cloud Computing",
+    "domain": "tencent.com",
+    "hostnames": [],
+    "totalReports": 89,
+    "numDistinctUsers": 21,
+    "lastReportedAt": "2024-05-15T10:00:00+00:00",
+    "reports": [
+      {
+        "reportedAt": "2024-05-15T10:00:00+00:00",
+        "comment": "SSH brute force attempts against my server. Multiple failed logins from this IP.",
+        "categories": [18, 22],
+        "reporterId": 12345,
+        "reporterCountryCode": "US",
+        "reporterCountryName": "United States"
+      },
+      {
+        "reportedAt": "2024-05-14T08:00:00+00:00",
+        "comment": "Port scanning detected",
+        "categories": [14],
+        "reporterId": 67890,
+        "reporterCountryCode": "DE",
+        "reporterCountryName": "Germany"
+      }
+    ]
+  }
+}

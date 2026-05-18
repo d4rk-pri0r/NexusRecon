@@ -1,0 +1,36 @@
+{
+  "total_count": 2,
+  "incomplete_results": false,
+  "items": [
+    {
+      "name": "config.yaml",
+      "path": "deploy/config.yaml",
+      "sha": "abc123def456abc123def456abc123def456abcd",
+      "url": "https://api.github.com/repositories/100001/contents/deploy/config.yaml?ref=main",
+      "git_url": "https://api.github.com/repositories/100001/git/blobs/abc123def456abc123def456abc123def456abcd",
+      "html_url": "https://github.com/example-org/infra/blob/main/deploy/config.yaml",
+      "repository": {
+        "id": 100001,
+        "name": "infra",
+        "full_name": "example-org/infra",
+        "private": false
+      },
+      "score": 1.0
+    },
+    {
+      "name": "README.md",
+      "path": "README.md",
+      "sha": "deadbeefcafebabe1234567890abcdef12345678",
+      "url": "https://api.github.com/repositories/100002/contents/README.md?ref=main",
+      "git_url": "https://api.github.com/repositories/100002/git/blobs/deadbeefcafebabe1234567890abcdef12345678",
+      "html_url": "https://github.com/example-org/backend/blob/main/README.md",
+      "repository": {
+        "id": 100002,
+        "name": "backend",
+        "full_name": "example-org/backend",
+        "private": false
+      },
+      "score": 0.8
+    }
+  ]
+}

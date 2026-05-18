@@ -1,0 +1,48 @@
+{
+  "status": "ok",
+  "status_message": "Query was successful",
+  "data": {
+    "asn": 15169,
+    "name": "GOOGLE",
+    "description_short": "Google LLC",
+    "description_full": ["Google LLC"],
+    "country_code": "US",
+    "website": "https://about.google",
+    "email_contacts": ["network-abuse@google.com"],
+    "abuse_contacts": ["network-abuse@google.com"],
+    "looking_glass": null,
+    "traffic_estimation": null,
+    "traffic_ratio": "Mostly Outbound",
+    "owner_address": ["1600 Amphitheatre Parkway", "Mountain View, CA 94043", "US"],
+    "rir_allocation": {
+      "rir_name": "ARIN",
+      "country_code": "US",
+      "date_allocated": "2000-03-30T00:00:00"
+    },
+    "iana_assignment": {
+      "assignment_status": "assigned",
+      "description": "Assigned by ARIN",
+      "whois_server": "whois.arin.net",
+      "date_assigned": null
+    },
+    "date_updated": "2024-05-15 10:00:00",
+    "ipv4_prefixes": [
+      {"prefix": "8.8.4.0/24"},
+      {"prefix": "8.8.8.0/24"}
+    ],
+    "ipv6_prefixes": [
+      {"prefix": "2001:4860::/32"}
+    ],
+    "peers": [
+      {"asn": 174, "name": "COGENT-174", "description": "Cogent Communications", "country_code": "US"},
+      {"asn": 3356, "name": "LEVEL3", "description": "Level 3 Parent, LLC", "country_code": "US"}
+    ],
+    "upstreams": [],
+    "downstreams": []
+  },
+  "@meta": {
+    "time_zone": "UTC",
+    "api_version": 1,
+    "execution_time": "20 ms"
+  }
+}

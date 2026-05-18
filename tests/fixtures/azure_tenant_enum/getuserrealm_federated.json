@@ -1,0 +1,13 @@
+{
+  "State": 3,
+  "UserState": 1,
+  "Login": "probe@example.com",
+  "NameSpaceType": "Federated",
+  "DomainName": "example.com",
+  "FederationBrandName": "Example Corp",
+  "AuthURL": "https://adfs.example.com/adfs/ls/?wa=wsignin1.0",
+  "AuthProtocol": "WSTrust",
+  "CloudInstanceName": "microsoftonline.com",
+  "CloudInstanceIssuerUri": "urn:federation:MicrosoftOnline",
+  "DesktopSsoEnabled": false
+}

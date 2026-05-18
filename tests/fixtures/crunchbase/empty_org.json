@@ -1,0 +1,12 @@
+{
+  "properties": {
+    "identifier": {"uuid": "empty-1", "value": "Quiet Company", "permalink": "example"},
+    "website": {"value": "https://example.com"}
+  },
+  "cards": {
+    "founders": [],
+    "leadership": [],
+    "funding_rounds": [],
+    "acquisitions": []
+  }
+}

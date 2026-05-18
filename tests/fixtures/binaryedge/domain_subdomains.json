@@ -1,0 +1,12 @@
+{
+  "query": "example.com",
+  "page": 1,
+  "pagesize": 100,
+  "total": 4,
+  "events": [
+    "www.example.com",
+    "api.example.com",
+    "mail.example.com",
+    "vpn.example.com"
+  ]
+}

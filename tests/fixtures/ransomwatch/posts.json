@@ -1,0 +1,23 @@
+[
+  {
+    "post_title": "example.com",
+    "description": "Files released - 500GB of internal documents",
+    "discovered": "2024-05-15T10:00:00",
+    "group_name": "lockbit",
+    "post_url": "http://lockbitapt.onion/post/example-com-abc123"
+  },
+  {
+    "post_title": "Example Corporation Files",
+    "description": "Confidential data dump",
+    "discovered": "2024-05-10T08:30:00",
+    "group_name": "blackcat",
+    "post_url": "http://blackcatapt.onion/post/example-corp"
+  },
+  {
+    "post_title": "Unrelated Victim Co",
+    "description": "Some other victim entirely",
+    "discovered": "2024-05-05T14:00:00",
+    "group_name": "lockbit",
+    "post_url": "http://lockbitapt.onion/post/unrelated-victim"
+  }
+]

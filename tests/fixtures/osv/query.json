@@ -1,0 +1,52 @@
+{
+  "vulns": [
+    {
+      "id": "GHSA-jfh8-c2jp-5v3q",
+      "summary": "Remote code execution in Log4j",
+      "details": "Apache Log4j2 <=2.14.1 JNDI features used in configuration, log messages, and parameters do not protect against attacker controlled LDAP and other JNDI related endpoints.",
+      "aliases": ["CVE-2021-44228"],
+      "modified": "2024-03-21T15:00:00Z",
+      "published": "2021-12-10T00:00:00Z",
+      "affected": [
+        {
+          "package": {"name": "org.apache.logging.log4j:log4j-core", "ecosystem": "Maven"},
+          "ranges": [
+            {
+              "type": "ECOSYSTEM",
+              "events": [
+                {"introduced": "2.0-beta9"},
+                {"fixed": "2.3.1"}
+              ]
+            },
+            {
+              "type": "ECOSYSTEM",
+              "events": [
+                {"introduced": "2.4"},
+                {"fixed": "2.12.2"}
+              ]
+            }
+          ]
+        },
+        {
+          "package": {"name": "log4j", "ecosystem": "Packagist"},
+          "ranges": [
+            {
+              "type": "ECOSYSTEM",
+              "events": [
+                {"introduced": "2.0-beta9"},
+                {"fixed": "2.15.0"}
+              ]
+            }
+          ]
+        }
+      ],
+      "severity": [
+        {"type": "CVSS_V3", "score": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H"}
+      ],
+      "references": [
+        {"type": "ADVISORY", "url": "https://logging.apache.org/log4j/2.x/security.html"},
+        {"type": "WEB", "url": "https://www.cisa.gov/uscert/apache-log4j-vulnerability-guidance"}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+{
+  "results": [
+    {
+      "_id": "abc-123-def-456",
+      "task": {
+        "url": "https://example.com/login",
+        "time": "2024-05-15T10:00:00.000Z",
+        "method": "manual"
+      },
+      "page": {
+        "domain": "example.com",
+        "url": "https://example.com/",
+        "ip": "93.184.216.34",
+        "country": "US",
+        "server": "ECS (dcb/7F5C)",
+        "title": "Example Domain",
+        "status": "200"
+      },
+      "stats": {
+        "uniqIPs": 5,
+        "uniqCountries": 2,
+        "dataLength": 1234
+      },
+      "screenshot": "https://urlscan.io/screenshots/abc-123.png"
+    },
+    {
+      "_id": "xyz-789-uvw-012",
+      "task": {
+        "url": "https://login.example.com/",
+        "time": "2024-05-10T14:00:00.000Z",
+        "method": "api"
+      },
+      "page": {
+        "domain": "login.example.com",
+        "url": "https://login.example.com/",
+        "ip": "93.184.216.35",
+        "country": "US",
+        "server": "nginx",
+        "title": "Example Login",
+        "status": "200"
+      },
+      "stats": {
+        "uniqIPs": 3,
+        "uniqCountries": 1,
+        "dataLength": 5678
+      },
+      "screenshot": "https://urlscan.io/screenshots/xyz-789.png"
+    }
+  ],
+  "total": 2,
+  "has_more": false
+}

@@ -1,0 +1,16 @@
+{
+  "login": "alice-dev",
+  "id": 1001,
+  "avatar_url": "https://avatars.githubusercontent.com/u/1001?v=4",
+  "html_url": "https://github.com/alice-dev",
+  "name": "Alice Engineer",
+  "company": "@exampleorg",
+  "blog": "https://alice.example.com",
+  "location": "San Francisco, CA",
+  "email": "alice@example.com",
+  "bio": "Backend engineer working on distributed systems.",
+  "public_repos": 42,
+  "followers": 150,
+  "following": 30,
+  "type": "User"
+}

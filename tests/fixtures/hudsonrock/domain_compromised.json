@@ -1,0 +1,43 @@
+{
+  "message": "Domain found in our database",
+  "employeeCredentialsCount": 3,
+  "clientCredentialsCount": 12,
+  "stealers": [
+    {
+      "computerName": "DESKTOP-EMPLOYEE1",
+      "operatingSystem": "Windows 10 Pro",
+      "dateCompromised": "2024-03-15T08:22:11.000Z",
+      "stealerFamily": "RedLine",
+      "antiviruses": ["Windows Defender"],
+      "externalIp": "203.0.113.42",
+      "credentials": [
+        {"url": "https://internal.example.com/login", "username": "alice"},
+        {"url": "https://vpn.example.com", "username": "alice"}
+      ]
+    },
+    {
+      "computerName": "LAPTOP-EMPLOYEE2",
+      "operatingSystem": "Windows 11 Home",
+      "dateCompromised": "2024-04-02T14:11:33.000Z",
+      "stealerFamily": "Vidar",
+      "antiviruses": ["Norton 360"],
+      "externalIp": "203.0.113.99",
+      "credentials": [
+        {"url": "https://internal.example.com/admin", "username": "bob"}
+      ]
+    },
+    {
+      "computerName": "WORKSTATION-3",
+      "operatingSystem": "Windows 10 Enterprise",
+      "dateCompromised": "2024-05-10T03:08:55.000Z",
+      "stealerFamily": "Raccoon",
+      "antiviruses": ["McAfee"],
+      "externalIp": "203.0.113.150",
+      "credentials": [
+        {"url": "https://payroll.example.com", "username": "carol"},
+        {"url": "https://github.com/example", "username": "carol@example.com"},
+        {"url": "https://aws.example.com/console", "username": "carol@example.com"}
+      ]
+    }
+  ]
+}

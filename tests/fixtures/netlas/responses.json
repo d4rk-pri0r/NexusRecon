@@ -1,0 +1,40 @@
+{
+  "items": [
+    {
+      "data": {
+        "iface": {"ipv4": "93.184.216.34"},
+        "port": 443,
+        "protocol": "https",
+        "timestamp": "2026-05-01T12:00:00",
+        "http": {
+          "headers": {"server": "nginx/1.19.0"}
+        },
+        "app": {
+          "http": {"title": "Example Domain"}
+        },
+        "certificate": {
+          "subject": {
+            "common_name": "example.com",
+            "organization": "Internet Corporation for Assigned Names and Numbers"
+          },
+          "subject_alt_name": {
+            "dns_names": ["example.com", "www.example.com", "api.example.com"]
+          }
+        }
+      }
+    },
+    {
+      "data": {
+        "iface": {"ipv4": "93.184.216.34"},
+        "port": 80,
+        "protocol": "http",
+        "timestamp": "2026-05-01T12:01:00",
+        "http": {
+          "headers": {"server": "nginx/1.19.0"}
+        }
+      }
+    }
+  ],
+  "took": 5,
+  "count": 2
+}

@@ -1,0 +1,58 @@
+{
+  "total_count": 2,
+  "incomplete_results": false,
+  "items": [
+    {
+      "name": "config.yaml",
+      "path": "deploy/config.yaml",
+      "sha": "abc123def456abc123def456abc123def456abcd",
+      "url": "https://api.github.com/repositories/12345/contents/deploy/config.yaml?ref=main",
+      "git_url": "https://api.github.com/repositories/12345/git/blobs/abc123def456abc123def456abc123def456abcd",
+      "html_url": "https://github.com/example-org/infra/blob/main/deploy/config.yaml",
+      "repository": {
+        "id": 12345,
+        "name": "infra",
+        "full_name": "example-org/infra",
+        "private": false
+      },
+      "score": 1.0,
+      "text_matches": [
+        {
+          "object_url": "https://api.github.com/repositories/12345/contents/deploy/config.yaml?ref=main",
+          "object_type": "FileContent",
+          "property": "content",
+          "fragment": "host: api.example.com\nport: 443\nupstream: vpn.example.com\n",
+          "matches": [
+            {"text": "example.com", "indices": [12, 23]}
+          ]
+        }
+      ]
+    },
+    {
+      "name": ".env",
+      "path": "services/backend/.env.template",
+      "sha": "deadbeefcafebabe1234567890abcdef12345678",
+      "url": "https://api.github.com/repositories/67890/contents/services/backend/.env.template?ref=main",
+      "git_url": "https://api.github.com/repositories/67890/git/blobs/deadbeefcafebabe1234567890abcdef12345678",
+      "html_url": "https://github.com/example-org/backend/blob/main/services/backend/.env.template",
+      "repository": {
+        "id": 67890,
+        "name": "backend",
+        "full_name": "example-org/backend",
+        "private": false
+      },
+      "score": 0.9,
+      "text_matches": [
+        {
+          "object_url": "https://api.github.com/repositories/67890/contents/services/backend/.env.template?ref=main",
+          "object_type": "FileContent",
+          "property": "content",
+          "fragment": "DB_HOST=db.example.com\nREDIS_URL=cache.example.com:6379\n",
+          "matches": [
+            {"text": "example.com", "indices": [8, 19]}
+          ]
+        }
+      ]
+    }
+  ]
+}

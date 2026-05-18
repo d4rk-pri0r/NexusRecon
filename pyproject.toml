@@ -143,5 +143,10 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["tests"]
+# Default discovery excludes ``tests/live/`` — those tests hit real
+# provider APIs and are opt-in via ``pytest tests/live/`` explicitly.
+testpaths = ["tests/unit", "tests/integration", "tests/smoke"]
+# Add the repo root to sys.path so test modules can import the shared
+# fixture loader: ``from tests.fixtures import load_fixture``.
+pythonpath = ["."]
 filterwarnings = ["ignore::DeprecationWarning"]

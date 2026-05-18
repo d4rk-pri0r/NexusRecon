@@ -1,0 +1,16 @@
+{
+  "login": "carol-devops",
+  "id": 1003,
+  "avatar_url": "https://avatars.githubusercontent.com/u/1003?v=4",
+  "html_url": "https://github.com/carol-devops",
+  "name": "Carol Ops",
+  "company": null,
+  "blog": "https://carol.example",
+  "location": null,
+  "email": "carol@example.com",
+  "bio": null,
+  "public_repos": 7,
+  "followers": 4,
+  "following": 1,
+  "type": "User"
+}

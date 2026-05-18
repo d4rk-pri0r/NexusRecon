@@ -1,0 +1,30 @@
+{
+  "total_count": 2,
+  "incomplete_results": false,
+  "items": [
+    {
+      "name": "config.env",
+      "path": "config/config.env",
+      "sha": "abc123def456",
+      "url": "https://api.github.com/repositories/12345/contents/config/config.env?ref=main",
+      "html_url": "https://github.com/example-user/example-repo/blob/main/config/config.env",
+      "repository": {
+        "id": 12345,
+        "name": "example-repo",
+        "full_name": "example-user/example-repo"
+      }
+    },
+    {
+      "name": "secrets.yaml",
+      "path": "secrets.yaml",
+      "sha": "789abc012def",
+      "url": "https://api.github.com/repositories/67890/contents/secrets.yaml?ref=main",
+      "html_url": "https://github.com/another-user/another-repo/blob/main/secrets.yaml",
+      "repository": {
+        "id": 67890,
+        "name": "another-repo",
+        "full_name": "another-user/another-repo"
+      }
+    }
+  ]
+}

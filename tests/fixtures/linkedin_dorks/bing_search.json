@@ -1,0 +1,34 @@
+{
+  "_type": "SearchResponse",
+  "queryContext": {"originalQuery": "site:linkedin.com/in \"Example\""},
+  "webPages": {
+    "webSearchUrl": "https://www.bing.com/search?q=...",
+    "totalEstimatedMatches": 42,
+    "value": [
+      {
+        "id": "https://www.bingapis.com/api/v7/#WebPages.0",
+        "name": "Alice Engineer | LinkedIn",
+        "url": "https://www.linkedin.com/in/alice-engineer/",
+        "displayUrl": "https://www.linkedin.com/in/alice-engineer/",
+        "snippet": "Senior Software Engineer at Example Inc. 5+ years building distributed systems.",
+        "dateLastCrawled": "2026-04-15T10:00:00.0000000Z"
+      },
+      {
+        "id": "https://www.bingapis.com/api/v7/#WebPages.1",
+        "name": "Bob Security | LinkedIn",
+        "url": "https://www.linkedin.com/in/bob-security/",
+        "displayUrl": "https://www.linkedin.com/in/bob-security/",
+        "snippet": "Security Engineer at Example. Cloud security, AppSec, red teaming.",
+        "dateLastCrawled": "2026-04-10T10:00:00.0000000Z"
+      },
+      {
+        "id": "https://www.bingapis.com/api/v7/#WebPages.2",
+        "name": "Not a profile",
+        "url": "https://www.example.com/blog/post",
+        "displayUrl": "https://www.example.com/blog/post",
+        "snippet": "This is a blog post, not a LinkedIn profile.",
+        "dateLastCrawled": "2026-04-20T10:00:00.0000000Z"
+      }
+    ]
+  }
+}

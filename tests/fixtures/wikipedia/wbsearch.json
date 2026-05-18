@@ -1,0 +1,25 @@
+{
+  "searchinfo": {"search": "example"},
+  "search": [
+    {
+      "id": "Q42",
+      "title": "Q42",
+      "pageid": 123,
+      "display": {
+        "label": {"value": "Example Corp", "language": "en"},
+        "description": {"value": "American multinational technology company", "language": "en"}
+      },
+      "repository": "wikidata",
+      "url": "//www.wikidata.org/wiki/Q42",
+      "label": "Example Corp",
+      "description": "American multinational technology company",
+      "match": {"type": "label", "language": "en", "text": "Example Corp"}
+    },
+    {
+      "id": "Q9999",
+      "label": "Example Foundation",
+      "description": "Non-profit"
+    }
+  ],
+  "success": 1
+}

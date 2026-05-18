@@ -1,0 +1,16 @@
+{
+  "domain": "example.com",
+  "subdomains": [
+    "www",
+    "api",
+    "mail",
+    "vpn",
+    "admin",
+    "dev",
+    "staging",
+    "blog",
+    "cdn",
+    "auth"
+  ],
+  "count": 10
+}

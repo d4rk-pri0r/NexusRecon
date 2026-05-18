@@ -1,0 +1,76 @@
+{
+  "data": {
+    "domain": "example.com",
+    "disposable": false,
+    "webmail": false,
+    "accept_all": false,
+    "pattern": "{first}.{last}",
+    "organization": "Example Inc.",
+    "description": "Example Inc. provides example products and services.",
+    "industry": "Internet & Telecom",
+    "twitter": "exampleinc",
+    "facebook": null,
+    "linkedin": "company/example-inc",
+    "country": "US",
+    "state": "CA",
+    "city": "San Francisco",
+    "postal_code": "94107",
+    "emails": [
+      {
+        "value": "alice.smith@example.com",
+        "type": "personal",
+        "confidence": 95,
+        "first_name": "Alice",
+        "last_name": "Smith",
+        "position": "Chief Executive Officer",
+        "seniority": "executive",
+        "department": "executive",
+        "linkedin": null,
+        "twitter": null,
+        "phone_number": null,
+        "verification": {"date": "2026-04-01", "status": "valid"},
+        "sources": [
+          {"domain": "example.com", "uri": "https://example.com/about", "extracted_on": "2025-12-15", "last_seen_on": "2026-04-01", "still_on_page": true}
+        ]
+      },
+      {
+        "value": "bob.jones@example.com",
+        "type": "personal",
+        "confidence": 87,
+        "first_name": "Bob",
+        "last_name": "Jones",
+        "position": "Engineering Manager",
+        "seniority": "senior",
+        "department": "engineering",
+        "linkedin": "in/bobjones",
+        "twitter": null,
+        "phone_number": null,
+        "verification": {"date": "2026-03-20", "status": "valid"},
+        "sources": [
+          {"domain": "example.com", "uri": "https://example.com/team", "extracted_on": "2025-11-02", "last_seen_on": "2026-03-20", "still_on_page": true}
+        ]
+      },
+      {
+        "value": "carol.wong@example.com",
+        "type": "generic",
+        "confidence": 72,
+        "first_name": "Carol",
+        "last_name": "Wong",
+        "position": "Marketing Lead",
+        "seniority": "senior",
+        "department": "marketing",
+        "linkedin": null,
+        "twitter": null,
+        "phone_number": null,
+        "verification": {"date": "2026-02-10", "status": "accept_all"},
+        "sources": []
+      }
+    ]
+  },
+  "meta": {
+    "results": 3,
+    "limit": 10,
+    "offset": 0,
+    "params": {"domain": "example.com", "company": null, "type": null, "seniority": null, "department": null}
+  }
+}

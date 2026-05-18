@@ -1,0 +1,51 @@
+{
+  "code": 200,
+  "status": "OK",
+  "result": {
+    "query": "names: example.com",
+    "total": 3,
+    "duration_ms": 142,
+    "hits": [
+      {
+        "fingerprint_sha256": "abcd1234efgh5678ijkl9012mnop3456qrst7890uvwx1234yzab5678cdef9012",
+        "parsed": {
+          "subject": {
+            "common_name": ["example.com"]
+          },
+          "validity": {
+            "start": "2025-01-01T00:00:00Z",
+            "end": "2026-01-01T00:00:00Z"
+          }
+        }
+      },
+      {
+        "fingerprint_sha256": "1111222233334444555566667777888899990000aaaabbbbccccddddeeeeffff",
+        "parsed": {
+          "subject": {
+            "common_name": ["www.example.com"]
+          },
+          "validity": {
+            "start": "2025-06-01T00:00:00Z",
+            "end": "2026-06-01T00:00:00Z"
+          }
+        }
+      },
+      {
+        "fingerprint_sha256": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+        "parsed": {
+          "subject": {
+            "common_name": ["api.example.com"]
+          },
+          "validity": {
+            "start": "2025-03-15T00:00:00Z",
+            "end": "2026-03-15T00:00:00Z"
+          }
+        }
+      }
+    ],
+    "links": {
+      "next": "",
+      "prev": ""
+    }
+  }
+}

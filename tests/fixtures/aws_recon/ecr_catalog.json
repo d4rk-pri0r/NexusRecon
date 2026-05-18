@@ -1,0 +1,7 @@
+{
+  "repositories": [
+    "example/web",
+    "example/api",
+    "example/worker"
+  ]
+}

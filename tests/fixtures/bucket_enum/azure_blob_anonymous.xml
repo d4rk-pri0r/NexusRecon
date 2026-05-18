@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<EnumerationResults ContainerName="https://example.blob.core.windows.net/public/">
+  <Blobs>
+    <Blob>
+      <Name>backup.zip</Name>
+      <Properties>
+        <Content-Length>1024</Content-Length>
+      </Properties>
+    </Blob>
+  </Blobs>
+</EnumerationResults>

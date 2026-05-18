@@ -1,0 +1,4 @@
+user@example.com:password123
+admin@example.com:hunter2hunter2
+api_key="abc123def456ghi789jkl012mno345pqr"
+AKIAIOSFODNN7EXAMPLE

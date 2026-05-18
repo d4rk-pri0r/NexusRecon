@@ -1,0 +1,10 @@
+{
+  "message": "This email is associated with a compromised computer",
+  "stealerFamily": "RedLine",
+  "computerName": "DESKTOP-ABC123",
+  "operatingSystem": "Windows 10 Pro",
+  "dateCompromised": "2024-02-27T10:53:48.989Z",
+  "antiviruses": ["Windows Defender"],
+  "externalIp": "196.158.196.83",
+  "malwarePath": "C:\\Users\\victim\\AppData\\Local\\Temp\\file.exe"
+}

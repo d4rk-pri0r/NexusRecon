@@ -1,0 +1,27 @@
+{
+  "data": {
+    "id": "example.com",
+    "type": "domain",
+    "attributes": {
+      "last_analysis_stats": {
+        "harmless": 70,
+        "malicious": 0,
+        "suspicious": 0,
+        "undetected": 5,
+        "timeout": 0
+      },
+      "categories": {
+        "Forcepoint ThreatSeeker": "information technology",
+        "Sophos": "information technology"
+      },
+      "last_dns_records": [
+        {"type": "A", "value": "93.184.216.34", "ttl": 86400}
+      ],
+      "reputation": 0,
+      "total_votes": {"harmless": 12, "malicious": 1},
+      "registrar": "RESERVED-Internet Assigned Numbers Authority",
+      "creation_date": 818398800,
+      "whois": "Domain Name: EXAMPLE.COM\nRegistry Domain ID: 2336799_DOMAIN_COM-VRSN\nRegistrar WHOIS Server: whois.iana.org"
+    }
+  }
+}

@@ -1,0 +1,17 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Connect to backend
+        run: |
+          curl https://api.example.com/health
+        env:
+          password: hunter2hunter2
+          AWS_ACCESS_KEY_ID: AKIAEXAMPLECIBUILD01

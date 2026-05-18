@@ -1,0 +1,52 @@
+{
+  "code": 60000,
+  "matches": [
+    {
+      "ip": "93.184.216.34",
+      "portinfo": {
+        "port": 443,
+        "transport": "tcp",
+        "service": "https",
+        "app": "nginx",
+        "version": "1.19.0"
+      },
+      "geoinfo": {
+        "country": {"names": {"en": "United States"}},
+        "city": {"names": {"en": "Norwell"}}
+      },
+      "timestamp": "2026-05-01T12:00:00"
+    },
+    {
+      "ip": "93.184.216.34",
+      "portinfo": {
+        "port": 80,
+        "transport": "tcp",
+        "service": "http",
+        "app": "nginx",
+        "version": "1.19.0"
+      },
+      "geoinfo": {
+        "country": {"names": {"en": "United States"}},
+        "city": {"names": {"en": "Norwell"}}
+      },
+      "timestamp": "2026-05-01T11:55:00"
+    },
+    {
+      "ip": "93.184.215.14",
+      "portinfo": {
+        "port": 22,
+        "transport": "tcp",
+        "service": "ssh",
+        "app": "OpenSSH",
+        "version": "8.4"
+      },
+      "geoinfo": {
+        "country": {"names": {"en": "United States"}},
+        "city": {"names": {"en": "Norwell"}}
+      },
+      "timestamp": "2026-05-02T00:00:00"
+    }
+  ],
+  "total": 42,
+  "facets": {}
+}

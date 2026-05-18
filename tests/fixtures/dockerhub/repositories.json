@@ -1,0 +1,52 @@
+{
+  "count": 3,
+  "next": null,
+  "previous": null,
+  "results": [
+    {
+      "name": "backend",
+      "namespace": "example",
+      "repository_type": "image",
+      "status": 1,
+      "description": "Example backend service",
+      "is_private": false,
+      "is_automated": false,
+      "star_count": 12,
+      "pull_count": 1450000,
+      "last_updated": "2026-05-15T20:00:00.000000Z",
+      "date_registered": "2019-04-01T11:00:00.000000Z",
+      "affiliation": null,
+      "media_types": ["application/vnd.docker.container.image.v1+json"]
+    },
+    {
+      "name": "frontend",
+      "namespace": "example",
+      "repository_type": "image",
+      "status": 1,
+      "description": "Example frontend web UI",
+      "is_private": false,
+      "is_automated": false,
+      "star_count": 3,
+      "pull_count": 220000,
+      "last_updated": "2026-05-12T09:00:00.000000Z",
+      "date_registered": "2021-08-21T16:00:00.000000Z",
+      "affiliation": null,
+      "media_types": ["application/vnd.docker.container.image.v1+json"]
+    },
+    {
+      "name": "worker",
+      "namespace": "example",
+      "repository_type": "image",
+      "status": 1,
+      "description": null,
+      "is_private": false,
+      "is_automated": false,
+      "star_count": 0,
+      "pull_count": 5400,
+      "last_updated": "2026-04-30T17:33:00.000000Z",
+      "date_registered": "2023-01-10T13:00:00.000000Z",
+      "affiliation": null,
+      "media_types": ["application/vnd.docker.container.image.v1+json"]
+    }
+  ]
+}

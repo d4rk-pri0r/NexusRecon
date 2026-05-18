@@ -1,0 +1,45 @@
+{
+  "status": "ok",
+  "status_message": "Query was successful",
+  "data": {
+    "ip": "8.8.8.8",
+    "ptr_record": "dns.google",
+    "prefixes": [
+      {
+        "prefix": "8.8.8.0/24",
+        "ip": "8.8.8.0",
+        "cidr": 24,
+        "asn": {
+          "asn": 15169,
+          "name": "GOOGLE",
+          "description": "Google LLC",
+          "country_code": "US"
+        },
+        "name": "LVLT-GOGL-8-8-8",
+        "description": "Google LLC",
+        "country_code": "US"
+      }
+    ],
+    "rir_allocation": {
+      "rir_name": "ARIN",
+      "country_code": "US",
+      "ip": "8.0.0.0",
+      "cidr": 9,
+      "prefix": "8.0.0.0/9",
+      "date_allocated": "1992-12-01 00:00:00"
+    },
+    "asn": {
+      "asn": 15169,
+      "name": "GOOGLE",
+      "description_short": "Google LLC",
+      "country_code": "US",
+      "rir_name": "ARIN"
+    },
+    "rir": "ARIN"
+  },
+  "@meta": {
+    "time_zone": "UTC",
+    "api_version": 1,
+    "execution_time": "30 ms"
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "total_count": 2,
+  "incomplete_results": false,
+  "items": [
+    {
+      "name": "deploy.yml",
+      "path": ".github/workflows/deploy.yml",
+      "sha": "ffffffffffffffffffffffffffffffffffffffff",
+      "url": "https://api.github.com/repositories/100001/contents/.github/workflows/deploy.yml?ref=main",
+      "git_url": "https://api.github.com/repositories/100001/git/blobs/ffffffffffffffffffffffffffffffffffffffff",
+      "html_url": "https://github.com/example-org/infra/blob/main/.github/workflows/deploy.yml",
+      "repository": {
+        "id": 100001,
+        "name": "infra",
+        "full_name": "example-org/infra",
+        "private": false
+      },
+      "score": 1.0
+    },
+    {
+      "name": "ci.yml",
+      "path": ".github/workflows/ci.yml",
+      "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "url": "https://api.github.com/repositories/100002/contents/.github/workflows/ci.yml?ref=main",
+      "git_url": "https://api.github.com/repositories/100002/git/blobs/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "html_url": "https://github.com/example-org/backend/blob/main/.github/workflows/ci.yml",
+      "repository": {
+        "id": 100002,
+        "name": "backend",
+        "full_name": "example-org/backend",
+        "private": false
+      },
+      "score": 0.9
+    }
+  ]
+}

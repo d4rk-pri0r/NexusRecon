@@ -1,0 +1,42 @@
+{
+  "_type": "SearchResponse",
+  "queryContext": {"originalQuery": "site:trello.com \"Example\""},
+  "webPages": {
+    "webSearchUrl": "https://www.bing.com/search?q=...",
+    "totalEstimatedMatches": 7,
+    "value": [
+      {
+        "id": "https://www.bingapis.com/api/v7/#WebPages.0",
+        "name": "Engineering Roadmap | Trello",
+        "url": "https://trello.com/b/AbCd1234/example-engineering-roadmap",
+        "displayUrl": "https://trello.com/b/AbCd1234/...",
+        "snippet": "Example public roadmap board with sprint planning and OKRs.",
+        "dateLastCrawled": "2026-03-15T10:00:00.0000000Z"
+      },
+      {
+        "id": "https://www.bingapis.com/api/v7/#WebPages.1",
+        "name": "Example Knowledge Base",
+        "url": "https://example.atlassian.net/wiki/spaces/ENG",
+        "displayUrl": "https://example.atlassian.net/wiki/...",
+        "snippet": "Internal-looking Confluence space accidentally exposed publicly.",
+        "dateLastCrawled": "2026-03-20T10:00:00.0000000Z"
+      },
+      {
+        "id": "https://www.bingapis.com/api/v7/#WebPages.2",
+        "name": "Engineering Wiki | Notion",
+        "url": "https://www.notion.so/example/Engineering-Wiki-abc123",
+        "displayUrl": "https://www.notion.so/...",
+        "snippet": "Public Notion workspace covering engineering practices.",
+        "dateLastCrawled": "2026-03-22T10:00:00.0000000Z"
+      },
+      {
+        "id": "https://www.bingapis.com/api/v7/#WebPages.3",
+        "name": "Unrelated result",
+        "url": "https://random-blog.example/post",
+        "displayUrl": "random-blog.example",
+        "snippet": "Not a collab board.",
+        "dateLastCrawled": "2026-03-22T10:00:00.0000000Z"
+      }
+    ]
+  }
+}

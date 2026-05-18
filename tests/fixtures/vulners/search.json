@@ -1,0 +1,51 @@
+{
+  "result": "OK",
+  "data": {
+    "total": 3,
+    "search": [
+      {
+        "_index": "vulners",
+        "_id": "CVE-2021-44228",
+        "_score": 12.5,
+        "_source": {
+          "id": "CVE-2021-44228",
+          "title": "Apache Log4j2 Remote Code Execution",
+          "type": "cve",
+          "published": "2021-12-10T10:15:09",
+          "vhref": "https://vulners.com/cve/CVE-2021-44228",
+          "description": "Apache Log4j2 JNDI features allow remote code execution.",
+          "cvss": {"score": 10.0, "vector": "AV:N/AC:L/Au:N/C:C/I:C/A:C"},
+          "cvss3": {"cvssV3": {"baseScore": 10.0}}
+        }
+      },
+      {
+        "_index": "vulners",
+        "_id": "EDB-ID:50592",
+        "_score": 11.0,
+        "_source": {
+          "id": "EDB-ID:50592",
+          "title": "Apache Log4j2 2.14.1 - Remote Code Execution",
+          "type": "exploitdb",
+          "published": "2021-12-14T00:00:00",
+          "vhref": "https://vulners.com/exploitdb/EDB-ID:50592",
+          "description": "ExploitDB exploit for Log4Shell.",
+          "cvss": {"score": 10.0}
+        }
+      },
+      {
+        "_index": "vulners",
+        "_id": "MSF:EXPLOIT-MULTI-HTTP-LOG4SHELL",
+        "_score": 10.0,
+        "_source": {
+          "id": "MSF:EXPLOIT-MULTI-HTTP-LOG4SHELL",
+          "title": "Apache Log4j Log4Shell Metasploit Module",
+          "type": "metasploit",
+          "published": "2021-12-13T00:00:00",
+          "vhref": "https://vulners.com/metasploit/MSF:EXPLOIT-MULTI-HTTP-LOG4SHELL",
+          "description": "Metasploit module exploiting Log4Shell.",
+          "cvss": {"score": 9.8}
+        }
+      }
+    ]
+  }
+}

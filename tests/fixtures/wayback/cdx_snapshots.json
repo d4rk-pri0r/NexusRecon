@@ -1,0 +1,38 @@
+[
+  {
+    "urlkey": "com,example)/",
+    "timestamp": "20200101000000",
+    "original": "https://example.com/",
+    "mimetype": "text/html",
+    "statuscode": "200",
+    "digest": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "length": "1234"
+  },
+  {
+    "urlkey": "com,example)/about",
+    "timestamp": "20210315120000",
+    "original": "https://example.com/about",
+    "mimetype": "text/html",
+    "statuscode": "200",
+    "digest": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    "length": "2048"
+  },
+  {
+    "urlkey": "com,example)/api/users",
+    "timestamp": "20220607093015",
+    "original": "https://example.com/api/users",
+    "mimetype": "application/json",
+    "statuscode": "200",
+    "digest": "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+    "length": "512"
+  },
+  {
+    "urlkey": "com,example)/contact",
+    "timestamp": "20230412183045",
+    "original": "https://example.com/contact",
+    "mimetype": "text/html",
+    "statuscode": "200",
+    "digest": "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
+    "length": "1800"
+  }
+]

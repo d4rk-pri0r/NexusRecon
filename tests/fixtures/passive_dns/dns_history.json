@@ -1,0 +1,20 @@
+{
+  "records": [
+    {
+      "values": [{"ip": "93.184.216.34"}],
+      "type": "a",
+      "first_seen": "2020-01-01",
+      "last_seen": "2026-05-01",
+      "organizations": ["Example Inc"]
+    },
+    {
+      "values": [{"ip": "93.184.216.35"}],
+      "type": "a",
+      "first_seen": "2018-06-15",
+      "last_seen": "2019-12-31",
+      "organizations": ["Example Inc"]
+    }
+  ],
+  "type": "a",
+  "pages": 1
+}

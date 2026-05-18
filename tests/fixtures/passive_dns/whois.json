@@ -1,0 +1,15 @@
+{
+  "registrar": {
+    "name": "RESERVED-Internet Assigned Numbers Authority"
+  },
+  "createdDate": "1995-08-14T04:00:00.000Z",
+  "expiresDate": "2026-08-13T04:00:00.000Z",
+  "updatedDate": "2024-08-14T07:01:31.000Z",
+  "contact": [
+    {
+      "type": "registrant",
+      "organization": "ICANN"
+    }
+  ],
+  "nameServers": ["a.iana-servers.net", "b.iana-servers.net"]
+}

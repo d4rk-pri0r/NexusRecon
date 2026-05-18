@@ -1,0 +1,34 @@
+[
+  {
+    "appId": "com.example.mainapp",
+    "title": "Example Mobile",
+    "developer": "Example Inc.",
+    "developerEmail": "android@example.com",
+    "realInstalls": 1000000,
+    "updated": 1715000000
+  },
+  {
+    "appId": "com.example.tools",
+    "title": "Example Tools",
+    "developer": "Example Inc.",
+    "developerEmail": "support@example.com",
+    "realInstalls": 50000,
+    "updated": 1714000000
+  },
+  {
+    "appId": "com.unrelated.game",
+    "title": "Random Game",
+    "developer": "Other Studios",
+    "developerEmail": "dev@otherstudios.io",
+    "realInstalls": 200000,
+    "updated": 1700000000
+  },
+  {
+    "appId": "com.example.legacy",
+    "title": "Legacy App",
+    "developer": "Example Inc.",
+    "developerEmail": "noreply@example.com",
+    "realInstalls": 1500,
+    "updated": 1600000000
+  }
+]

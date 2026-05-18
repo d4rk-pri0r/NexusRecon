@@ -1,0 +1,12 @@
+{
+  "token_endpoint": "https://login.microsoftonline.com/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/oauth2/v2.0/token",
+  "jwks_uri": "https://login.microsoftonline.com/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/discovery/v2.0/keys",
+  "issuer": "https://sts.windows.net/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/",
+  "userinfo_endpoint": "https://graph.microsoft.com/oidc/userinfo",
+  "authorization_endpoint": "https://login.microsoftonline.com/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/oauth2/v2.0/authorize",
+  "tenant_region_scope": "NA",
+  "cloud_instance_name": "microsoftonline.com",
+  "cloud_graph_host_name": "graph.windows.net",
+  "msgraph_host": "graph.microsoft.com",
+  "rbac_url": "https://pas.windows.net"
+}

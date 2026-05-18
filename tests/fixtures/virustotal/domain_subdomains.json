@@ -1,0 +1,8 @@
+{
+  "data": [
+    {"id": "www.example.com", "type": "domain", "attributes": {}},
+    {"id": "api.example.com", "type": "domain", "attributes": {}},
+    {"id": "mail.example.com", "type": "domain", "attributes": {}}
+  ],
+  "meta": {"count": 3}
+}

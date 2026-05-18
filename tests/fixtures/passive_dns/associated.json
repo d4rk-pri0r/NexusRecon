@@ -1,0 +1,8 @@
+{
+  "domains": [
+    {"hostname": "iana-servers.net", "alexa_rank": 12345, "computed_country": "US"},
+    {"hostname": "example.org", "alexa_rank": 10000, "computed_country": "US"},
+    {"hostname": "example.net", "alexa_rank": 10001, "computed_country": "US"}
+  ],
+  "domain_count": 3
+}

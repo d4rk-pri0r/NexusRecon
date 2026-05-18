@@ -1,0 +1,25 @@
+{
+  "success": true,
+  "quota": 49997,
+  "found": 2,
+  "result": [
+    {
+      "email": "user@example.com",
+      "username": "user",
+      "password": "Hunter2!",
+      "hash": null,
+      "hash_type": null,
+      "source": {"name": "Collection #1", "breach_date": "2019-01-07", "unverified": true, "compilation": true},
+      "database": {"name": "Collection #1", "breach_date": "2019-01-07", "unverified": true, "compilation": true}
+    },
+    {
+      "email": "user@example.com",
+      "username": null,
+      "password": null,
+      "hash": "5f4dcc3b5aa765d61d8327deb882cf99",
+      "hash_type": "md5",
+      "source": {"name": "LinkedIn", "breach_date": "2012-06-05", "unverified": false, "compilation": false},
+      "database": {"name": "LinkedIn", "breach_date": "2012-06-05", "unverified": false, "compilation": false}
+    }
+  ]
+}

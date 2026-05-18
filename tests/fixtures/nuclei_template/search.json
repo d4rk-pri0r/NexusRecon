@@ -1,0 +1,24 @@
+{
+  "total_count": 2,
+  "incomplete_results": false,
+  "items": [
+    {
+      "name": "CVE-2021-44228.yaml",
+      "path": "http/cves/2021/CVE-2021-44228.yaml",
+      "sha": "abc123def456",
+      "url": "https://api.github.com/repositories/268924532/contents/http/cves/2021/CVE-2021-44228.yaml",
+      "git_url": "https://api.github.com/repositories/268924532/git/blobs/abc123def456",
+      "html_url": "https://github.com/projectdiscovery/nuclei-templates/blob/main/http/cves/2021/CVE-2021-44228.yaml",
+      "repository": {"full_name": "projectdiscovery/nuclei-templates"}
+    },
+    {
+      "name": "CVE-2021-44228-workflow.yaml",
+      "path": "workflows/CVE-2021-44228-workflow.yaml",
+      "sha": "deadbeef1234",
+      "url": "https://api.github.com/repositories/268924532/contents/workflows/CVE-2021-44228-workflow.yaml",
+      "git_url": "https://api.github.com/repositories/268924532/git/blobs/deadbeef1234",
+      "html_url": "https://github.com/projectdiscovery/nuclei-templates/blob/main/workflows/CVE-2021-44228-workflow.yaml",
+      "repository": {"full_name": "projectdiscovery/nuclei-templates"}
+    }
+  ]
+}

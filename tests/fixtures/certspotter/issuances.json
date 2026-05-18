@@ -1,0 +1,32 @@
+[
+  {
+    "id": "13456789",
+    "tbs_sha256": "abc123def456abc123def456abc123def456abc123def456abc123def456abc1",
+    "dns_names": ["www.example.com", "example.com"],
+    "pubkey_sha256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+    "issuer": {"name": "C=US, O=Let's Encrypt, CN=R3"},
+    "not_before": "2026-01-15T00:00:00Z",
+    "not_after": "2026-04-15T00:00:00Z",
+    "cert_der": null
+  },
+  {
+    "id": "13456790",
+    "tbs_sha256": "111122223333444455556666777788889999aaaabbbbccccddddeeeeffff0000",
+    "dns_names": ["api.example.com", "*.api.example.com"],
+    "pubkey_sha256": "0000ffffeeeeddddccccbbbbaaaa999988887777666655554444333322221111",
+    "issuer": {"name": "C=US, O=Let's Encrypt, CN=R3"},
+    "not_before": "2026-02-01T00:00:00Z",
+    "not_after": "2026-05-01T00:00:00Z",
+    "cert_der": null
+  },
+  {
+    "id": "13456791",
+    "tbs_sha256": "deadbeefcafebabe1234567890abcdef1234567890abcdef1234567890abcdef",
+    "dns_names": ["mail.example.com", "vpn.example.com"],
+    "pubkey_sha256": "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+    "issuer": "Sectigo Limited",
+    "not_before": "2026-02-15T00:00:00Z",
+    "not_after": "2027-02-15T00:00:00Z",
+    "cert_der": null
+  }
+]

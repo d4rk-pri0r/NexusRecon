@@ -1,0 +1,18 @@
+{
+  "total_count": 1,
+  "incomplete_results": false,
+  "items": [
+    {
+      "login": "exampleorg",
+      "id": 1342004,
+      "node_id": "MDEyOk9yZ2FuaXphdGlvbjEzNDIwMDQ=",
+      "avatar_url": "https://avatars.githubusercontent.com/u/1342004?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/exampleorg",
+      "html_url": "https://github.com/exampleorg",
+      "type": "Organization",
+      "site_admin": false,
+      "score": 1.0
+    }
+  ]
+}

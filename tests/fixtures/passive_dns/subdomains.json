@@ -1,0 +1,13 @@
+{
+  "subdomains": [
+    "www",
+    "api",
+    "mail",
+    "vpn",
+    "admin",
+    "dev",
+    "staging",
+    "blog"
+  ],
+  "subdomain_count": 8
+}

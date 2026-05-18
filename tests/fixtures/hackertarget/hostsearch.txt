@@ -1,0 +1,5 @@
+www.example.com,93.184.216.34
+api.example.com,93.184.216.35
+mail.example.com,93.184.216.36
+vpn.example.com,93.184.216.37
+admin.example.com,93.184.216.38

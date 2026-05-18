@@ -1,0 +1,122 @@
+{
+  "entities": {
+    "Q42": {
+      "pageid": 123,
+      "ns": 0,
+      "title": "Q42",
+      "lastrevid": 9999,
+      "modified": "2026-04-01T12:00:00Z",
+      "type": "item",
+      "id": "Q42",
+      "labels": {"en": {"language": "en", "value": "Example Corp"}},
+      "descriptions": {"en": {"language": "en", "value": "American multinational technology company"}},
+      "claims": {
+        "P571": [
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P571",
+              "datavalue": {
+                "value": {
+                  "time": "+1998-09-04T00:00:00Z",
+                  "timezone": 0,
+                  "before": 0,
+                  "after": 0,
+                  "precision": 11,
+                  "calendarmodel": "http://www.wikidata.org/entity/Q1985727"
+                },
+                "type": "time"
+              },
+              "datatype": "time"
+            },
+            "type": "statement",
+            "rank": "preferred"
+          }
+        ],
+        "P159": [
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P159",
+              "datavalue": {"value": {"entity-type": "item", "numeric-id": 485176, "id": "Q485176"}, "type": "wikibase-entityid"},
+              "datatype": "wikibase-item"
+            },
+            "type": "statement",
+            "rank": "normal"
+          }
+        ],
+        "P452": [
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P452",
+              "datavalue": {"value": {"entity-type": "item", "numeric-id": 11661, "id": "Q11661"}, "type": "wikibase-entityid"},
+              "datatype": "wikibase-item"
+            },
+            "type": "statement",
+            "rank": "normal"
+          },
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P452",
+              "datavalue": {"value": {"entity-type": "item", "numeric-id": 880, "id": "Q880"}, "type": "wikibase-entityid"},
+              "datatype": "wikibase-item"
+            },
+            "type": "statement",
+            "rank": "normal"
+          }
+        ],
+        "P169": [
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P169",
+              "datavalue": {"value": {"entity-type": "item", "numeric-id": 12345, "id": "Q12345"}, "type": "wikibase-entityid"},
+              "datatype": "wikibase-item"
+            },
+            "type": "statement",
+            "rank": "normal"
+          }
+        ],
+        "P112": [
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P112",
+              "datavalue": {"value": {"entity-type": "item", "numeric-id": 100001, "id": "Q100001"}, "type": "wikibase-entityid"},
+              "datatype": "wikibase-item"
+            },
+            "type": "statement",
+            "rank": "normal"
+          }
+        ],
+        "P1082": [
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P1082",
+              "datavalue": {"value": {"amount": "+12345", "unit": "1"}, "type": "quantity"},
+              "datatype": "quantity"
+            },
+            "type": "statement",
+            "rank": "normal"
+          }
+        ],
+        "P856": [
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P856",
+              "datavalue": {"value": "https://example.com", "type": "string"},
+              "datatype": "url"
+            },
+            "type": "statement",
+            "rank": "normal"
+          }
+        ]
+      },
+      "sitelinks": {}
+    }
+  }
+}

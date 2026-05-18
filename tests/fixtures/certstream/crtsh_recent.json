@@ -1,0 +1,46 @@
+[
+  {
+    "issuer_ca_id": 183267,
+    "issuer_name": "C=US, O=Let's Encrypt, CN=R3",
+    "common_name": "www.example.com",
+    "name_value": "www.example.com\nexample.com",
+    "id": 8888888888,
+    "entry_timestamp": "2026-05-14T00:00:00",
+    "not_before": "2026-05-14T00:00:00",
+    "not_after": "2026-08-12T00:00:00",
+    "serial_number": "deadbeef"
+  },
+  {
+    "issuer_ca_id": 183267,
+    "issuer_name": "C=US, O=Let's Encrypt, CN=R3",
+    "common_name": "examp1e.com",
+    "name_value": "examp1e.com",
+    "id": 8888888889,
+    "entry_timestamp": "2026-05-13T12:30:00",
+    "not_before": "2026-05-13T12:30:00",
+    "not_after": "2026-08-11T12:30:00",
+    "serial_number": "feedface"
+  },
+  {
+    "issuer_ca_id": 183267,
+    "issuer_name": "C=US, O=Let's Encrypt, CN=R3",
+    "common_name": "exarnple.com",
+    "name_value": "exarnple.com",
+    "id": 8888888890,
+    "entry_timestamp": "2026-05-12T08:00:00",
+    "not_before": "2026-05-12T08:00:00",
+    "not_after": "2026-08-10T08:00:00",
+    "serial_number": "cafebabe"
+  },
+  {
+    "issuer_ca_id": 183267,
+    "issuer_name": "C=US, O=Let's Encrypt, CN=R3",
+    "common_name": "old-cert.example.com",
+    "name_value": "old-cert.example.com",
+    "id": 7777777777,
+    "entry_timestamp": "2024-01-01T00:00:00",
+    "not_before": "2024-01-01T00:00:00",
+    "not_after": "2024-04-01T00:00:00",
+    "serial_number": "00000000"
+  }
+]

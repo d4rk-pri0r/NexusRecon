@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RealmInfo Success="true">
+  <State>3</State>
+  <UserState>1</UserState>
+  <Login>user@example.com</Login>
+  <NameSpaceType>Federated</NameSpaceType>
+  <DomainName>example.com</DomainName>
+  <FederationBrandName>Example Corp</FederationBrandName>
+  <AuthURL>https://adfs.example.com/adfs/ls/?username=user%40example.com&amp;wa=wsignin1.0&amp;wtrealm=urn%3afederation%3aMicrosoftOnline&amp;wctx=</AuthURL>
+  <AuthProtocol>WSTrust</AuthProtocol>
+  <CloudInstanceName>microsoftonline.com</CloudInstanceName>
+  <CloudInstanceIssuerUri>urn:federation:MicrosoftOnline</CloudInstanceIssuerUri>
+  <DomainType>4</DomainType>
+</RealmInfo>
