@@ -55,20 +55,31 @@ from nexusrecon.tools.web.wayback_tool import WaybackTool
 #
 # The tool wraps the library, which speaks the CDX server protocol; we
 # mock the library class itself rather than respx-mocking the HTTP layer.
-# The tool reads ``snapshot.url``, ``.timestamp``, ``.status``, and
-# ``.mimetype`` off each yielded snapshot, so the fake snapshots expose
-# those exact attributes via SimpleNamespace.
+# The tool reads ``snapshot.original`` (the captured URL),
+# ``snapshot.timestamp``, ``snapshot.statuscode`` and
+# ``snapshot.mimetype`` off each yielded snapshot — the same attribute
+# names ``waybackpy.CDXSnapshot`` actually exposes (see
+# ``venv/lib/.../waybackpy/cdx_snapshot.py``). The fake snapshots mirror
+# those names via SimpleNamespace so we'd catch any drift if the tool
+# ever started reading mis-named attributes again.
 # ────────────────────────────────────────────────────────────────────────
 
 def _fake_snapshots(records: Iterable[dict]) -> List[SimpleNamespace]:
     """Convert raw CDX-style dicts into objects with the attributes
-    the wayback tool reads off each snapshot."""
+    the wayback tool reads off each snapshot.
+
+    Attribute names match the real ``waybackpy.CDXSnapshot`` API
+    (``original`` / ``timestamp`` / ``statuscode`` / ``mimetype``).
+    If the tool's reads ever drift back to the old ``.url`` / ``.status``
+    spelling, these mocks won't satisfy the read and the test will fail
+    loudly with ``AttributeError`` — which is the point.
+    """
     out = []
     for rec in records:
         out.append(SimpleNamespace(
-            url=rec["original"],
+            original=rec["original"],
             timestamp=rec["timestamp"],
-            status=rec["statuscode"],
+            statuscode=rec["statuscode"],
             mimetype=rec["mimetype"],
         ))
     return out
@@ -151,7 +162,12 @@ class TestWaybackTool:
         fake_cdx = MagicMock()
 
         def _bad_gen():
-            yield SimpleNamespace(url="https://example.com/", timestamp="x", status="200", mimetype="text/html")
+            yield SimpleNamespace(
+                original="https://example.com/",
+                timestamp="x",
+                statuscode="200",
+                mimetype="text/html",
+            )
             raise ValueError("malformed snapshot row from CDX")
 
         fake_cdx.snapshots.return_value = _bad_gen()

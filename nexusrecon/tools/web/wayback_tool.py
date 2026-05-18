@@ -25,12 +25,19 @@ class WaybackTool(OSINTTool):
                 count += 1
                 if count > 1000:
                     break
-                url = snapshot.url
+                # ``waybackpy.CDXSnapshot`` exposes the captured URL as
+                # ``.original`` and the HTTP status code as ``.statuscode``
+                # (see venv/lib/.../waybackpy/cdx_snapshot.py). An earlier
+                # version of this tool read ``.url`` and ``.status`` which
+                # don't exist on the real class — every live call raised
+                # ``AttributeError`` inside the outer ``try`` and the
+                # operator just saw ``success=False``.
+                url = snapshot.original
                 urls.add(url)
                 snapshots.append({
                     "url": url,
                     "timestamp": snapshot.timestamp,
-                    "status": snapshot.status,
+                    "status": snapshot.statuscode,
                     "mimetype": snapshot.mimetype,
                 })
 

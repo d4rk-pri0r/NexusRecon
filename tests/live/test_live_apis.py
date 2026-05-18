@@ -164,6 +164,28 @@ async def test_osv_live() -> None:
 
 
 @pytest.mark.live("none")
+async def test_wayback_live() -> None:
+    """End-to-end against the real waybackpy CDX server. Catches the
+    class of bug where the tool reads attribute names off
+    ``CDXSnapshot`` that don't exist on the real class — the kind of
+    drift the mocked tests can't see because the fixtures and the
+    buggy tool agreed with each other."""
+    from nexusrecon.tools.web.wayback_tool import WaybackTool
+    result = await WaybackTool().run(LIVE_TARGET_DOMAIN)
+    # example.com has Wayback snapshots going back to 1995 — if this
+    # returns success=False the tool is broken (not the provider).
+    if result.success:
+        assert "urls" in result.data
+        assert "snapshots" in result.data
+        # If any snapshot came back, confirm the dict shape matches
+        # what downstream consumers (entity graph, reports) expect.
+        if result.data["snapshots"]:
+            snap = result.data["snapshots"][0]
+            assert "url" in snap and "timestamp" in snap
+            assert "status" in snap and "mimetype" in snap
+
+
+@pytest.mark.live("none")
 async def test_ransomwatch_live() -> None:
     from nexusrecon.tools.intel.ransomwatch_tool import RansomwatchTool
     # Searches a known org name unlikely to actually be on the leak board
