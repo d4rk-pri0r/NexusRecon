@@ -102,3 +102,24 @@ class UserAgentPool:
     @property
     def current(self) -> str:
         return self._current
+
+
+# Module-level pool + helper. Tools call ``random_ua()`` once at request
+# time (or once at module-import time for tools whose headers dict is a
+# module-level constant) to pull a fresh User-Agent off the rotation.
+# This replaces a per-tool hardcoded
+# ``"Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0"``
+# string that was identical across 47 tools — a perfect fingerprint
+# signal for any WAF watching for scripted clients.
+_DEFAULT_POOL = UserAgentPool(strategy="random")
+
+
+def random_ua() -> str:
+    """Return a random User-Agent from the rotation pool.
+
+    Cheap (one ``random.choice`` against an in-memory list). Safe to
+    call once at module-import time for tools whose ``_HEADERS`` dict
+    is module-level, OR per-request for tools that build the headers
+    dict inside the request method.
+    """
+    return _DEFAULT_POOL.get(rotate=True)

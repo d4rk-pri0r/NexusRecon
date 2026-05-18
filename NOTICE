@@ -1,0 +1,56 @@
+NexusRecon — Agentic OSINT Orchestration Framework
+Copyright 2026 d4rk pri0r / darkpriorlabs
+
+This product is licensed under the Apache License, Version 2.0
+(see LICENSE).
+
+────────────────────────────────────────────────────────────────────
+Authorized Use Policy
+────────────────────────────────────────────────────────────────────
+
+The Apache 2.0 license grants you broad permission to use, modify,
+and redistribute this software. We ask one thing in return:
+
+  Use it only against systems you have explicit written
+  permission to test.
+
+NexusRecon is reconnaissance tooling for authorized red-team and
+penetration-testing engagements. It enforces engagement scope at the
+framework level — every tool invocation is validated against a signed
+scope file before execution. Operators using this software outside
+that intended use are exposing themselves to civil and criminal
+liability under computer-fraud statutes in nearly every jurisdiction
+(CFAA in the US, Computer Misuse Act in the UK, EU Directive 2013/40,
+and equivalents).
+
+The maintainers do not provide support to operators who cannot
+demonstrate written authorization for the target of their use. Bug
+reports, feature requests, and general questions remain welcome from
+everyone.
+
+Full terms and the responsible-use policy: DISCLAIMER.md.
+
+────────────────────────────────────────────────────────────────────
+Third-Party Components
+────────────────────────────────────────────────────────────────────
+
+NexusRecon orchestrates and depends on many third-party libraries and
+external services. Their respective licenses apply to their code; see
+each project's LICENSE for terms. Notable categories:
+
+  • Python libraries (CrewAI, LangGraph, LangChain, httpx, structlog,
+    Pydantic, Textual, Typer, etc.)
+  • CLI binaries the framework wraps (subfinder, amass, dnsx, httpx,
+    nuclei, katana, arjun, gitleaks, trufflehog, gowitness, gau,
+    maigret, theHarvester)
+  • External API services (Shodan, Censys, VirusTotal, GreyNoise,
+    SecurityTrails, Hunter.io, HIBP, GitHub, Crunchbase, FullHunt,
+    BinaryEdge, Netlas, ZoomEye, AbuseIPDB, LeakIX, IntelX, OTX,
+    Chaos, IPinfo, urlscan, Censys, Wayback Machine, KEV, EPSS,
+    NVD, OSV, GitHub Advisory DB, Vulners, Hudson Rock, EmailRep,
+    LeakCheck, Wikipedia, SEC EDGAR, Adzuna, Bing, and others)
+
+Use of each external API is governed by that provider's terms of
+service. The framework does not modify or redistribute upstream API
+responses; it parses them for use in the operator's authorized
+engagement.

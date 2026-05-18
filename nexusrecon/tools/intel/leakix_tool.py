@@ -5,6 +5,7 @@ from typing import Any, Dict, List
 
 import httpx
 
+from nexusrecon.opsec.useragent import random_ua
 from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
 
@@ -26,7 +27,7 @@ class LeakIXTool(OSINTTool):
         key = self.config.get_secret("leakix_api_key")
         headers: Dict[str, str] = {
             "Accept": "application/json",
-            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0",
+            "User-Agent": random_ua(),
         }
         if key:
             headers["api-key"] = key

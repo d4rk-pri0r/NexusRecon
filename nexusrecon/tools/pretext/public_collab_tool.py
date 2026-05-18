@@ -5,6 +5,7 @@ from typing import Any, Dict, List
 
 import httpx
 
+from nexusrecon.opsec.useragent import random_ua
 from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
 
@@ -45,7 +46,7 @@ class PublicCollabTool(OSINTTool):
                     base_url="https://api.bing.microsoft.com/v7.0",
                     headers={
                         "Ocp-Apim-Subscription-Key": bing_key,
-                        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0",
+                        "User-Agent": random_ua(),
                     },
                     timeout=15.0,
                 ) as client:
@@ -72,7 +73,7 @@ class PublicCollabTool(OSINTTool):
                 trello_resp = await client.get(
                     "https://trello.com/search",
                     params={"q": target, "modelTypes": "boards"},
-                    headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0"},
+                    headers={"User-Agent": random_ua()},
                 )
                 if trello_resp.status_code == 200 and "boards" in trello_resp.text.lower():
                     results.append({

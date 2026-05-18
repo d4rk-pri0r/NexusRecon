@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Optional
 import httpx
+from nexusrecon.opsec.useragent import random_ua
 from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
 
@@ -107,7 +108,7 @@ class JobsTool(OSINTTool):
                 resp = await client.get(
                     "https://www.google.com/search",
                     params={"q": f"{target} jobs hiring", "ibp": "htl;jobs"},
-                    headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"},
+                    headers={"User-Agent": random_ua()},
                 )
                 if resp.status_code == 200:
                     # Extract job titles from Google Jobs results

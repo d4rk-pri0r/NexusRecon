@@ -4,6 +4,7 @@ import asyncio
 import re
 from typing import Any, Dict, List, Optional
 import httpx
+from nexusrecon.opsec.useragent import random_ua
 from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
 
@@ -31,11 +32,10 @@ GOOGLE_DORKS = [
     ('site:{target} inurl:.env', 'Environment file exposure'),
 ]
 
-USER_AGENTS = [
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-]
+# Per-request UA rotation via the central opsec pool. Previously a
+# 3-entry local list — now backed by ~30 realistic browser strings
+# from ``nexusrecon.opsec.useragent``. ``random_ua()`` is cheap so
+# each search engine call gets a fresh pick.
 
 
 @register_tool
@@ -76,7 +76,7 @@ class DorksTool(OSINTTool):
 
     async def _search_google(self, client: httpx.AsyncClient, query: str) -> Optional[List[str]]:
         headers = {
-            "User-Agent": USER_AGENTS[0],
+            "User-Agent": random_ua(),
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             "Accept-Language": "en-US,en;q=0.5",
         }
@@ -95,7 +95,7 @@ class DorksTool(OSINTTool):
             return None
 
     async def _search_bing(self, client: httpx.AsyncClient, query: str) -> Optional[List[str]]:
-        headers = {"User-Agent": USER_AGENTS[1], "Accept": "text/html"}
+        headers = {"User-Agent": random_ua(), "Accept": "text/html"}
         params = {"q": query, "count": 10}
         try:
             resp = await client.get("https://www.bing.com/search", params=params, headers=headers)

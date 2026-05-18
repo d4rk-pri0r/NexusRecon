@@ -11,8 +11,8 @@ Tier: T0 (GitHub API only, passive)
 """
 
 from __future__ import annotations
+import asyncio
 import re
-import time
 from typing import Any, Dict, List, Optional
 import httpx
 from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
@@ -216,7 +216,11 @@ class GitHubTool(OSINTTool):
         for dork in GITHUB_CODE_DORKS[:20]:  # top 20 most relevant
             q = f'"{dork}" org:{target}' if not target.startswith(("http", "www")) else f'"{dork}" "{target}"'
             resp = await client.get("/search/code", params={"q": q, "per_page": 5})
-            time.sleep(1.1)  # rate limit
+            # GitHub's search-code endpoint enforces ~30 req/min — pause
+            # between dorks to stay under the limit. Async sleep so we
+            # yield the event loop to other tools running in parallel
+            # (previously this was ``time.sleep`` which blocked everyone).
+            await asyncio.sleep(1.1)
             if resp.status_code == 200:
                 data = resp.json()
                 count = data.get("total_count", 0)

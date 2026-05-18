@@ -2,6 +2,7 @@
 from __future__ import annotations
 from typing import Any, Dict, List, Optional
 import httpx
+from nexusrecon.opsec.useragent import random_ua
 from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
 
@@ -70,7 +71,7 @@ CDN_SIGNATURES: Dict[str, Dict[str, Any]] = {
     },
 }
 
-USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+USER_AGENT = random_ua()
 
 
 @register_tool

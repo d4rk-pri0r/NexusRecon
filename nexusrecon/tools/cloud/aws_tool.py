@@ -21,6 +21,7 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
+from nexusrecon.opsec.useragent import random_ua
 from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
 
@@ -87,7 +88,7 @@ class AWSReconTool(OSINTTool):
         if self._http is None:
             self._http = httpx.AsyncClient(
                 timeout=5.0,
-                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"},
+                headers={"User-Agent": random_ua()},
             )
         return self._http
 

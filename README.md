@@ -16,7 +16,7 @@
 [![version](https://img.shields.io/badge/version-0.5.0-blue)](nexusrecon/__init__.py)
 [![python](https://img.shields.io/badge/python-3.11--3.13-blue)](pyproject.toml)
 [![engine](https://img.shields.io/badge/engine-agentic-purple)](#why-agentic-osint)
-[![license](https://img.shields.io/badge/license-proprietary-red)](DISCLAIMER.md)
+[![license](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
 You hand it a scope file and a seed domain. ~30–60 minutes later it
 hands you back a ranked, prioritized, citation-backed attack-surface
@@ -356,10 +356,14 @@ If you want to help shape the 1.0, see [`BETA_TESTING_GUIDE.md`](BETA_TESTING_GU
 
 ---
 
-## Legal
+## License & legal
 
-Proprietary software. **Authorized engagements only.** Full terms in
-[`DISCLAIMER.md`](DISCLAIMER.md).
+Licensed under [Apache 2.0](LICENSE). The license grants you broad
+permission to use, modify, and redistribute. We ask one thing in
+return — **use it only against systems you have explicit written
+permission to test.** Full responsible-use policy:
+[`DISCLAIMER.md`](DISCLAIMER.md). Third-party components and the
+authorized-use rider: [`NOTICE`](NOTICE).
 
 Scope enforcement is built into the framework — every tool invocation is
 checked against the signed scope before execution, tagged with the scope hash,

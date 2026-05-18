@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
+from nexusrecon.opsec.useragent import random_ua
 from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
 
@@ -71,7 +72,7 @@ class BucketEnumTool(OSINTTool):
         try:
             async with httpx.AsyncClient(
                 timeout=8.0,
-                headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0"},
+                headers={"User-Agent": random_ua()},
             ) as client:
                 tasks = []
                 for name in names[:60]:

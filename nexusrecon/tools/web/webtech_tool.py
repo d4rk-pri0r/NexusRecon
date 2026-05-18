@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Optional
 import httpx
+from nexusrecon.opsec.useragent import random_ua
 from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
 
@@ -48,7 +49,7 @@ TECH_SIGNATURES: Dict[str, Dict[str, Any]] = {
     "hsts": {"headers": {"strict-transport-security": ""}, "cats": ["security"]},
 }
 
-USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+USER_AGENT = random_ua()
 
 
 @register_tool

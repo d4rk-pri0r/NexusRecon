@@ -1,0 +1,48 @@
+name: tests
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  pytest:
+    name: pytest (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # CrewAI does not yet support 3.14 — see Prerequisites in MANUAL.md.
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install package + dev dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Run unit + integration + smoke tests
+        # tests/live/ is excluded by default (it hits real APIs and
+        # needs secrets the public CI can't provide).
+        run: pytest tests/unit tests/integration tests/smoke -q --tb=short
+
+  # Lint runs once on the latest supported Python — same code under
+  # every interpreter so no benefit from the full matrix.
+  ruff:
+    name: ruff lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install ruff
+      - run: ruff check nexusrecon tests

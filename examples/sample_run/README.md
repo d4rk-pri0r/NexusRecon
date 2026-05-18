@@ -1,6 +1,12 @@
 # Sample Campaign Walkthrough
 
-This directory contains annotated output from a realistic campaign run.
+> **⚠️ Walkthrough only — actual report files aren't checked in yet.**
+> This document narrates what a realistic campaign run *would* produce.
+> A real end-to-end run against a known-vulnerable public target (with
+> the actual `master_report.md`, `findings.json`, `audit.jsonl`, etc.
+> committed alongside) is the v0.6.0 milestone — see [ROADMAP.md](../../ROADMAP.md).
+
+This directory is annotated output from a realistic campaign run.
 
 ## Scenario: Bug Bounty — Example Corp (example.com)
 

@@ -2,6 +2,7 @@
 from __future__ import annotations
 from typing import Any, Dict, List, Optional
 import httpx
+from nexusrecon.opsec.useragent import random_ua
 from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
 
@@ -95,7 +96,7 @@ class NewsTool(OSINTTool):
             for source in NEWS_SOURCES:
                 try:
                     params = {k: v.format(target=target) for k, v in source["params"].items()}
-                    resp = await client.get(source["url"], params=params, headers={"User-Agent": "Mozilla/5.0"})
+                    resp = await client.get(source["url"], params=params, headers={"User-Agent": random_ua()})
                     if resp.status_code == 200:
                         parsed = self._parse_rss(resp.text)
                         for item in parsed[:10]:

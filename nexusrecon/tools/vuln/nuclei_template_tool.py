@@ -5,6 +5,7 @@ from typing import Any, Dict, List
 
 import httpx
 
+from nexusrecon.opsec.useragent import random_ua
 from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
 
@@ -29,7 +30,7 @@ class NucleiTemplateTool(OSINTTool):
         headers: Dict[str, str] = {
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
-            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0",
+            "User-Agent": random_ua(),
         }
         if token:
             headers["Authorization"] = f"Bearer {token}"

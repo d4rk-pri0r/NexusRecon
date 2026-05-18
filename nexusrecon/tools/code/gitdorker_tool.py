@@ -1,7 +1,6 @@
 """gitdorker tool — automated GitHub dork scanning."""
 from __future__ import annotations
 import asyncio
-import time
 from typing import Any, Dict, List, Optional
 import httpx
 from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
@@ -59,7 +58,9 @@ class GitDorkerTool(OSINTTool):
             for dork, description in CURATED_DORKS:
                 q = f'{dork} org:{target}' if not target.startswith("http") else f'{dork} "{target}"'
                 resp = await client.get("/search/code", params={"q": q, "per_page": 1})
-                time.sleep(1.1)
+                # Async sleep — was ``time.sleep`` which blocks the event
+                # loop and other tools running in parallel.
+                await asyncio.sleep(1.1)
                 if resp.status_code == 200:
                     data = resp.json()
                     total = data.get("total_count", 0)

@@ -25,6 +25,7 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
+from nexusrecon.opsec.useragent import random_ua
 from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
 
@@ -46,7 +47,7 @@ class AzureM365Tool(OSINTTool):
         if self._http is None:
             self._http = httpx.AsyncClient(
                 timeout=10.0,
-                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+                headers={"User-Agent": random_ua()},
                 follow_redirects=True,
                 http2=True,
             )

@@ -46,7 +46,7 @@ Notes on the per-tool behavior we're locking in:
 """
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
@@ -69,9 +69,9 @@ from nexusrecon.tools.cloud.github_actions_tool import GitHubActionsTool
 class TestGitHubReconTool:
     BASE = "https://api.github.com"
 
-    @patch("nexusrecon.tools.code.github_tool.time.sleep", lambda _x: None)
+    @patch("nexusrecon.tools.code.github_tool.asyncio.sleep", new_callable=AsyncMock)
     @patch("nexusrecon.core.config.NexusConfig.get_secret", return_value="ghp_faketoken")
-    async def test_happy_path(self, _secret) -> None:
+    async def test_happy_path(self, _secret, _sleep) -> None:
         tool = GitHubTool()
         org_fixture = load_fixture("github_recon/org.json")
         repos_fixture = load_fixture("github_recon/org_repos.json")
@@ -118,9 +118,9 @@ class TestGitHubReconTool:
         assert len(findings) == 20
         assert all(f["total"] == 3 for f in findings)
 
-    @patch("nexusrecon.tools.code.github_tool.time.sleep", lambda _x: None)
+    @patch("nexusrecon.tools.code.github_tool.asyncio.sleep", new_callable=AsyncMock)
     @patch("nexusrecon.core.config.NexusConfig.get_secret", return_value="ghp_faketoken")
-    async def test_empty_response(self, _secret) -> None:
+    async def test_empty_response(self, _secret, _sleep) -> None:
         """Org doesn't exist, no repos, no search hits — clean empty result."""
         tool = GitHubTool()
         with respx.mock:
@@ -141,9 +141,9 @@ class TestGitHubReconTool:
         assert result.data["domain_in_code"]["total"] == 0
         assert result.data["secret_searches"]["findings"] == []
 
-    @patch("nexusrecon.tools.code.github_tool.time.sleep", lambda _x: None)
+    @patch("nexusrecon.tools.code.github_tool.asyncio.sleep", new_callable=AsyncMock)
     @patch("nexusrecon.core.config.NexusConfig.get_secret", return_value="ghp_faketoken")
-    async def test_error_path(self, _secret) -> None:
+    async def test_error_path(self, _secret, _sleep) -> None:
         """Connection-level failure bubbles up to outer except → success=False."""
         tool = GitHubTool()
         with respx.mock:
@@ -155,9 +155,9 @@ class TestGitHubReconTool:
         assert result.error  # any descriptive error string is fine
         assert "DNS" in result.error or "resolution" in result.error.lower()
 
-    @patch("nexusrecon.tools.code.github_tool.time.sleep", lambda _x: None)
+    @patch("nexusrecon.tools.code.github_tool.asyncio.sleep", new_callable=AsyncMock)
     @patch("nexusrecon.core.config.NexusConfig.get_secret", return_value="ghp_faketoken")
-    async def test_malformed_json(self, _secret) -> None:
+    async def test_malformed_json(self, _secret, _sleep) -> None:
         """Non-JSON body on /orgs/{org} triggers .json() to raise → outer except."""
         tool = GitHubTool()
         with respx.mock:
@@ -437,9 +437,9 @@ class TestPostmanTool:
 class TestGitDorkerTool:
     URL = "https://api.github.com/search/code"
 
-    @patch("nexusrecon.tools.code.gitdorker_tool.time.sleep", lambda _x: None)
+    @patch("nexusrecon.tools.code.gitdorker_tool.asyncio.sleep", new_callable=AsyncMock)
     @patch("nexusrecon.core.config.NexusConfig.get_secret", return_value="ghp_faketoken")
-    async def test_happy_path(self, _secret) -> None:
+    async def test_happy_path(self, _secret, _sleep) -> None:
         tool = GitDorkerTool()
         fixture = load_fixture("gitdorker/search_code.json")
         # 20 dorks → 20 search calls; same fixture for each, so we expect
@@ -459,9 +459,9 @@ class TestGitDorkerTool:
         # result_count sums total across findings → 20 * 7 = 140
         assert result.result_count == 140
 
-    @patch("nexusrecon.tools.code.gitdorker_tool.time.sleep", lambda _x: None)
+    @patch("nexusrecon.tools.code.gitdorker_tool.asyncio.sleep", new_callable=AsyncMock)
     @patch("nexusrecon.core.config.NexusConfig.get_secret", return_value="ghp_faketoken")
-    async def test_empty_response(self, _secret) -> None:
+    async def test_empty_response(self, _secret, _sleep) -> None:
         tool = GitDorkerTool()
         with respx.mock:
             respx.get(url__startswith=self.URL).mock(
@@ -472,9 +472,9 @@ class TestGitDorkerTool:
         assert result.result_count == 0
         assert result.data["dork_results"] == []
 
-    @patch("nexusrecon.tools.code.gitdorker_tool.time.sleep", lambda _x: None)
+    @patch("nexusrecon.tools.code.gitdorker_tool.asyncio.sleep", new_callable=AsyncMock)
     @patch("nexusrecon.core.config.NexusConfig.get_secret", return_value="ghp_faketoken")
-    async def test_rate_limited(self, _secret) -> None:
+    async def test_rate_limited(self, _secret, _sleep) -> None:
         """403 is treated as "skip this dork" — tool returns success with
         whatever was collected (nothing here). Mirrors the documented
         behavior of github_subdomains: rate-limit → partial success."""
@@ -486,9 +486,9 @@ class TestGitDorkerTool:
         assert result.result_count == 0
         assert result.data["dork_results"] == []
 
-    @patch("nexusrecon.tools.code.gitdorker_tool.time.sleep", lambda _x: None)
+    @patch("nexusrecon.tools.code.gitdorker_tool.asyncio.sleep", new_callable=AsyncMock)
     @patch("nexusrecon.core.config.NexusConfig.get_secret", return_value="ghp_faketoken")
-    async def test_malformed_json(self, _secret) -> None:
+    async def test_malformed_json(self, _secret, _sleep) -> None:
         tool = GitDorkerTool()
         with respx.mock:
             respx.get(url__startswith=self.URL).mock(

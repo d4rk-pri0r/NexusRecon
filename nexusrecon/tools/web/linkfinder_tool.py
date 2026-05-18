@@ -7,6 +7,7 @@ from urllib.parse import urljoin, urlparse
 
 import httpx
 
+from nexusrecon.opsec.useragent import random_ua
 from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
 
@@ -38,7 +39,7 @@ class LinkFinderTool(OSINTTool):
         js_files_scanned: List[str] = []
 
         headers = {
-            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0",
+            "User-Agent": random_ua(),
             "Accept": "text/html,application/xhtml+xml,application/javascript,*/*;q=0.9",
         }
 

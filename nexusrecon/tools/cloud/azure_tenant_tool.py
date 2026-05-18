@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
+from nexusrecon.opsec.useragent import random_ua
 from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
 
@@ -28,7 +29,7 @@ class AzureTenantTool(OSINTTool):
             async with httpx.AsyncClient(
                 timeout=15.0,
                 follow_redirects=True,
-                headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0"},
+                headers={"User-Agent": random_ua()},
             ) as client:
                 # 1. OpenID configuration → tenant ID
                 oidc_resp = await client.get(
