@@ -315,8 +315,9 @@ class TestGreyNoiseTool:
 
     @patch("nexusrecon.core.config.NexusConfig.get_secret", return_value="fake-gn-key")
     async def test_empty_response(self, _secret) -> None:
-        # GreyNoise returns a 200 with status="unknown" for unseen IPs;
-        # the tool still wraps it as a single-record success.
+        """GreyNoise returns 200 with ``classification="unknown"`` for
+        IPs not in its database. The tool surfaces the response data but
+        reports ``result_count=0`` because there's no actionable signal."""
         tool = GreyNoiseTool()
         empty = {"ip": "192.0.2.1", "noise": False, "riot": False, "classification": "unknown"}
         with respx.mock:
@@ -325,15 +326,46 @@ class TestGreyNoiseTool:
             )
             result = await tool.run("192.0.2.1")
         assert result.success is True
-        assert result.result_count == 1
+        # No noise, no RIOT, classification "unknown" → no signal → count 0
+        assert result.result_count == 0
         assert result.data["classification"] == "unknown"
         assert result.data["noise"] is False
 
     @patch("nexusrecon.core.config.NexusConfig.get_secret", return_value="fake-gn-key")
+    async def test_rate_limited(self, _secret) -> None:
+        """429 from GreyNoise is a real failure, not a "no data" response."""
+        tool = GreyNoiseTool()
+        with respx.mock:
+            respx.get(url__startswith=self.URL).mock(return_value=Response(429))
+            result = await tool.run("8.8.8.8")
+        assert result.success is False
+        assert "rate limit" in result.error.lower()
+
+    @patch("nexusrecon.core.config.NexusConfig.get_secret", return_value="bad-key")
+    async def test_unauthorized(self, _secret) -> None:
+        """401 indicates a bad API key — surface that distinctly so the
+        operator can fix their config instead of seeing silent empties."""
+        tool = GreyNoiseTool()
+        with respx.mock:
+            respx.get(url__startswith=self.URL).mock(return_value=Response(401))
+            result = await tool.run("8.8.8.8")
+        assert result.success is False
+        assert "Invalid" in result.error or "API key" in result.error
+
+    @patch("nexusrecon.core.config.NexusConfig.get_secret", return_value="fake-gn-key")
+    async def test_server_error(self, _secret) -> None:
+        """5xx from GreyNoise is a provider outage, not "no data"."""
+        tool = GreyNoiseTool()
+        with respx.mock:
+            respx.get(url__startswith=self.URL).mock(return_value=Response(503))
+            result = await tool.run("8.8.8.8")
+        assert result.success is False
+        assert "503" in result.error
+
+    @patch("nexusrecon.core.config.NexusConfig.get_secret", return_value="fake-gn-key")
     async def test_error_path(self, _secret) -> None:
-        # GreyNoise's only failure path is ``except Exception``; a 429
-        # would return success=True with empty data. We trigger a
-        # connection-level error to exercise the failure branch.
+        """Network-level failure (connection refused, DNS unreachable) is
+        caught by the outer ``except`` and reported as failure."""
         tool = GreyNoiseTool()
         with respx.mock:
             respx.get(url__startswith=self.URL).mock(
