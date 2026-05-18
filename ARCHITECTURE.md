@@ -48,9 +48,9 @@ agentic OSINT platform."
 
 Traditional OSINT automation is **pipeline-shaped**: a fixed sequence of
 tools runs in a predetermined order, each producing output the next stage
-consumes. If your pipeline is well-tuned, the output is comprehensive;
-if it's not, you get gaps. Either way, the tool order doesn't adapt to
-what's being discovered.
+consumes. If your pipeline is well-tuned the output covers what you
+asked for; if it isn't, you get gaps. Either way the tool order doesn't
+adapt to what's being discovered.
 
 NexusRecon is **state-shaped**. There's a shared mutable state object
 (the "campaign state") that every tool writes into and every agent reads
@@ -576,7 +576,7 @@ NexusRecon does the boring parts.
 ## 12. Where to read next
 
 - **`README.md`**: quick-start: install, configure, run
-- **`MANUAL.md`**: comprehensive operator manual (1100+ lines)
+- **`MANUAL.md`**: full operator manual (1100+ lines)
 - **`BETA_TESTING_GUIDE.md`**: closed-beta tester onboarding
 - **`TESTING_RUNBOOK.md`**: end-to-end test procedure
 - **`CONFIGURATION_GUIDE.md`**: every env var, every API key, what each unlocks
