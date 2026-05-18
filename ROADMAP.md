@@ -1,8 +1,7 @@
 # NexusRecon Roadmap
 
-Where the project is, what's between us and 1.0, what comes after.
-This is a living document, pull requests welcome, but the
-prioritisation is set by the maintainer.
+Current state, what's left before 1.0, what comes after. Pull requests
+welcome; prioritisation is set by the maintainer.
 
 ---
 
@@ -11,7 +10,8 @@ prioritisation is set by the maintainer.
 What works today:
 
 - 9-phase reconnaissance pipeline + credential harvest (phase 7.5).
-- 89-tool registry with scope-gated execution.
+- Tool registry with scope-gated execution (run `nexusrecon tools` for
+  the live count).
 - LLM-driven dynamic dispatcher (lite / full / off).
 - Audit chain (hash-chained JSONL), cost tracker, rate limiter.
 - 17 deliverable report types (master narrative, top threads,
@@ -32,7 +32,7 @@ What's still pre-beta about it:
 
 ---
 
-## Path to `0.6.0`, beta launch
+## Path to `0.6.0`: beta launch
 
 These are the items that have to land before the project goes out to
 "thousands of well-trained eyes." Prioritised in execution order;
@@ -97,7 +97,7 @@ each is independently testable.
 
 ---
 
-## Path to `1.0.0`, production-ready
+## Path to `1.0.0`: production-ready
 
 Once the beta has run for a meaningful number of cycles and the
 beta-blocker work above has shaken out:
@@ -145,7 +145,7 @@ beta-blocker work above has shaken out:
 
 ---
 
-## Post-`1.0`, ecosystem
+## Post-`1.0`: ecosystem
 
 - [ ] **Public LLM-prompt evaluation set.** Once enough campaigns
       have run, publish prompt + expected-output pairs for the 11

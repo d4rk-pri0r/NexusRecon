@@ -1,13 +1,10 @@
 # Contributing to NexusRecon
 
-Thank you for considering a contribution. This document covers the
-practical things, how to set up a dev environment, where things live,
-and what we expect from a pull request.
-
-For the *what we won't accept* side (anything that weakens scope
-enforcement, anything that adds telemetry, anything that hides errors
-from operators), see [DISCLAIMER.md](DISCLAIMER.md) and the "Design
-invariants" section of [ARCHITECTURE.md](ARCHITECTURE.md).
+How to set up a dev environment, where the code lives, and what a
+mergeable pull request looks like. The hard rules that aren't covered
+here (no telemetry, no scope-guard bypass, no swallowed errors) live in
+[DISCLAIMER.md](DISCLAIMER.md) and the "Design invariants" section of
+[ARCHITECTURE.md](ARCHITECTURE.md).
 
 ---
 
@@ -43,7 +40,7 @@ nexusrecon/
 ├── models/         # Pydantic data models (Scope, Campaign, Finding, …)
 ├── opsec/          # Stealth profiles, rate limiter, UA pool, proxy
 ├── reports/        # Report engine (17 deliverables)
-├── tools/          # 89 OSINT tools organized by category
+├── tools/          # OSINT tool registry, organized by category
 └── tui/            # Textual UI screens, banner, env editor
 tests/
 ├── fixtures/       # Per-tool sample responses (JSON, HTML, XML)

@@ -123,6 +123,5 @@ bug-free; we promise we'll respond seriously when you find one.
 Operators are responsible for using the framework within the bounds
 of their engagement authorisation (see [DISCLAIMER.md](DISCLAIMER.md)).
 A security bug in NexusRecon does not transfer your authorisation to
-us, if you discover a vuln by running NexusRecon outside an
-authorised engagement, you still ran it outside an authorised
-engagement.
+us. If you discover a vuln by running NexusRecon outside an authorised
+engagement, you still ran it outside an authorised engagement.
