@@ -26,6 +26,7 @@ class GreyNoiseTool(BaseHTTPTool):
                 base_url="https://api.greynoise.io",
                 headers={"key": key},
                 timeout=15.0,
+                **self._proxy_kwargs(),
             ) as client:
                 resp = await client.get("/v2/noise/quick", params={"ip": target})
 

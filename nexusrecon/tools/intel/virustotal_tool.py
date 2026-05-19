@@ -28,6 +28,7 @@ class VirusTotalTool(BaseHTTPTool):
                 base_url="https://www.virustotal.com/api/v3",
                 headers={"x-apikey": key},
                 timeout=15.0,
+                **self._proxy_kwargs(),
             ) as client:
                 target_type = kwargs.get("target_type", "domain")
                 if target_type == "domain":

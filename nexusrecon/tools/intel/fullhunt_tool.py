@@ -34,6 +34,7 @@ class FullHuntTool(BaseHTTPTool):
                     "User-Agent": random_ua(),
                 },
                 timeout=20.0,
+                **self._proxy_kwargs(),
             ) as client:
                 resp = await client.get(f"/domain/{target}/subdomains")
                 fail = self.classify_response(resp, "domain/subdomains")

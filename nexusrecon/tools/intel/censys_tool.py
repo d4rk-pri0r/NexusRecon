@@ -28,6 +28,7 @@ class CensysTool(BaseHTTPTool):
                 base_url="https://search.censys.io/api/v2",
                 auth=(api_id, api_secret),
                 timeout=15.0,
+                **self._proxy_kwargs(),
             ) as client:
                 results: Dict[str, Any] = {}
 

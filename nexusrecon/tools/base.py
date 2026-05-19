@@ -194,6 +194,35 @@ class BaseHTTPTool(OSINTTool):
     def _provider(self) -> str:
         return self.provider_label or self.name.replace("_", " ").title()
 
+    @staticmethod
+    def _proxy_kwargs() -> Dict[str, Any]:
+        """Return httpx-compatible proxy kwargs for the active campaign.
+
+        Reads :func:`nexusrecon.opsec.context.get_current_proxy_url`,
+        which the registry sets via ``proxy_context`` when a campaign has
+        a proxy manager bound. Returns ``{}`` when no proxy is active so
+        callers can unconditionally spread the result into their
+        ``httpx.AsyncClient(...)`` call:
+
+            async with httpx.AsyncClient(
+                base_url="https://api.example.com",
+                headers={...},
+                timeout=15.0,
+                **self._proxy_kwargs(),
+            ) as client:
+                ...
+
+        Without a campaign context (e.g. running ``tool.run()`` directly
+        in a test or REPL), this returns ``{}`` and the client connects
+        direct ── the same behaviour the tool had before OPSEC wiring.
+        """
+        from nexusrecon.opsec.context import get_current_proxy_url
+
+        url = get_current_proxy_url()
+        if url:
+            return {"proxy": url}
+        return {}
+
     def classify_response(
         self,
         resp: httpx.Response,

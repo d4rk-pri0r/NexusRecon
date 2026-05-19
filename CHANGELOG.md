@@ -35,6 +35,37 @@ minor bumps (0.x → 0.x+1) may break APIs.
   plus `workflow_dispatch` for manual runs. Each test is gated by
   its `@pytest.mark.live("<provider>")` marker; missing secrets
   auto-skip rather than fail.
+- **OPSEC wire-level enforcement**: `ToolRegistry.set_campaign_context`
+  now accepts `stealth_profile`, `rate_limiter`, and `proxy_manager`
+  kwargs. `registry.execute()` awaits `rate_limiter.wait(tool.name)`
+  before invoking `tool.run()`, and propagates the resolved proxy URL
+  via a new `nexusrecon.opsec.context.proxy_context` ContextVar.
+  `BaseHTTPTool._proxy_kwargs()` reads the ContextVar and returns
+  httpx-compatible proxy kwargs for tools to spread into their
+  `httpx.AsyncClient(...)` call. Closes the "OPSEC declared in config
+  but not verified at the wire level" ROADMAP gap, for the 5 reference
+  HTTP tools (shodan/virustotal/censys/fullhunt/greynoise). 37 unit
+  tests + 9 wire-verification integration tests cover the new path.
+- **`OPSEC_STATUS.md`**: honest accounting of what the OPSEC layer
+  actually enforces at the wire level versus what's still
+  declared-only. Lists the remaining 65 HTTP tools that still need
+  migration to `BaseHTTPTool` to gain proxy support, and the
+  campaign-runner gap (`set_campaign_context` accepts the OPSEC
+  primitives but the campaign runner doesn't yet pass them).
+- **Report-quality automated assertions** (`tests/unit/test_report_quality.py`):
+  13 tests covering the four ROADMAP Day-7 properties without
+  requiring real LLM calls: AI-tell phrase scanner across agent
+  prompts + report templates + report engine prose (LLM-disclaimer
+  artifacts, marketing fluff, high-signal AI vocabulary); scope-hash
+  presence in `ReportEngine` and templates; CVE citation regex
+  validator (rejects malformed `CVE-XX-...` references in static
+  prose); findings deduplication for CVEs and breached emails.
+- **`tests/manual/REPORT_QUALITY_CHECKLIST.md`**: per-campaign manual
+  checklist for the 10 target shapes the ROADMAP wanted Day 7 to
+  cover. Operator runs this once before tagging a beta release;
+  things only a human can judge (narrative coherence, tone,
+  whether a phishing draft sounds plausible) live here, while
+  static-checkable properties land in the automated tests above.
 
 ### Changed
 
@@ -46,6 +77,11 @@ minor bumps (0.x → 0.x+1) may break APIs.
   `"<Provider> rate limit - back off and retry"`,
   `"<Provider> returned HTTP <code>"`). Behaviour unchanged for the
   52 integration tests covering these tools.
+- Same 5 reference tools also spread `**self._proxy_kwargs()` into
+  their `httpx.AsyncClient(...)` instantiations so they pick up the
+  active campaign proxy URL when the registry has a `ProxyManager`
+  bound. The remaining 65 HTTP tools still build raw clients without
+  proxy support; see `OPSEC_STATUS.md` for the migration tracker.
 - `CONTRIBUTING.md`: "Adding a new OSINT tool" example rewritten to
   inherit from `BaseHTTPTool` and use `classify_response()`. Hard
   rule #4 reworded from "explicit status-code branches" to "use the

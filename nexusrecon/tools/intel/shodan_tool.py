@@ -28,6 +28,7 @@ class ShodanTool(BaseHTTPTool):
                 base_url="https://api.shodan.io",
                 params={"key": key},
                 timeout=15.0,
+                **self._proxy_kwargs(),
             ) as client:
                 # Each endpoint below was previously gated by
                 # ``if resp.status_code == 200`` and silently skipped on
