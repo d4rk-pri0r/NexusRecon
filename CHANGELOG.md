@@ -20,18 +20,45 @@ minor bumps (0.x → 0.x+1) may break APIs.
   ~30-entry pool instead of all hardcoding the same Firefox-128
   string. Closes the "everyone running NexusRecon has an identical
   TLS+UA fingerprint" issue.
+- **`BaseHTTPTool`** (`nexusrecon/tools/base.py`): subclass of
+  `OSINTTool` for tools that hit JSON HTTP APIs. Provides a
+  `classify_response(resp, endpoint="")` helper that converts the
+  common provider error codes (401/403/429/5xx) into uniform
+  `ToolResult(success=False)` failures. Tools subclass it and
+  customise via `provider_label` and `soft_failure_codes` class
+  attributes. Eliminates the per-tool restated if-tree that was the
+  root cause of the 0.5.0 silent-failure bug cluster. 11 new unit
+  tests in `tests/unit/test_tool_base.py` pin the contract.
+- **`.github/workflows/live-drift.yml`**: weekly tripwire that runs
+  `tests/live/` against real provider APIs and surfaces upstream
+  schema drift as workflow failures. Scheduled Mondays 06:00 UTC
+  plus `workflow_dispatch` for manual runs. Each test is gated by
+  its `@pytest.mark.live("<provider>")` marker; missing secrets
+  auto-skip rather than fail.
+
+### Changed
+
+- 5 reference HTTP tools (`shodan`, `virustotal`, `censys`,
+  `fullhunt`, `greynoise`) migrated to inherit from `BaseHTTPTool`.
+  Each lost its private `_classify_status()` helper in favour of the
+  shared one; error text is now uniform across the registry
+  (`"<Provider> auth failure (HTTP 401) - check <KEY>"`,
+  `"<Provider> rate limit - back off and retry"`,
+  `"<Provider> returned HTTP <code>"`). Behaviour unchanged for the
+  52 integration tests covering these tools.
+- `CONTRIBUTING.md`: "Adding a new OSINT tool" example rewritten to
+  inherit from `BaseHTTPTool` and use `classify_response()`. Hard
+  rule #4 reworded from "explicit status-code branches" to "use the
+  base class instead of restating the if-tree by hand."
+- `examples/sample_run/README.md`: flagged as a walkthrough only;
+  the actual checked-in real-target report run is the v0.6.0
+  milestone (see `ROADMAP.md`).
 
 ### Fixed
 
 - `github_recon` and `gitdorker`: replaced blocking `time.sleep(1.1)`
   with `await asyncio.sleep(1.1)` so dork-loop pauses don't block
   the event loop for tools running in parallel.
-
-### Changed
-
-- `examples/sample_run/README.md`: flagged as a walkthrough only;
-  the actual checked-in real-target report run is the v0.6.0
-  milestone (see `ROADMAP.md`).
 
 ## [0.5.0] - 2026-05-18 - pre-beta
 

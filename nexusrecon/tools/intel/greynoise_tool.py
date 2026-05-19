@@ -1,14 +1,15 @@
-"""GreyNoise API tool — IP noise context."""
+"""GreyNoise API tool, IP noise context."""
 from __future__ import annotations
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 import httpx
-from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
+from nexusrecon.tools.base import BaseHTTPTool, Category, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
 
 
 @register_tool
-class GreyNoiseTool(OSINTTool):
+class GreyNoiseTool(BaseHTTPTool):
     name = "greynoise"
+    provider_label = "GreyNoise"
     tier = Tier.T0
     category = Category.INFRASTRUCTURE
     requires_keys = ["greynoise_api_key"]
@@ -28,26 +29,15 @@ class GreyNoiseTool(OSINTTool):
             ) as client:
                 resp = await client.get("/v2/noise/quick", params={"ip": target})
 
-                # Explicit status-code branches. The previous revision
-                # had none — every non-2xx response (bad key, rate limit,
-                # 5xx) returned ``success=True`` with empty data, which
-                # made provider outages and quota exhaustion silently
+                # ``classify_response`` from :class:`BaseHTTPTool` replaces
+                # an earlier revision that had no status-code branches at
+                # all; every non-2xx response (bad key, rate limit, 5xx)
+                # returned ``success=True`` with empty data, making
+                # provider outages and quota exhaustion silently
                 # indistinguishable from "IP not in database".
-                if resp.status_code == 401:
-                    return ToolResult(
-                        success=False, source=self.name,
-                        error="Invalid GreyNoise API key",
-                    )
-                if resp.status_code == 429:
-                    return ToolResult(
-                        success=False, source=self.name,
-                        error="GreyNoise rate limit exceeded — back off and retry",
-                    )
-                if resp.status_code != 200:
-                    return ToolResult(
-                        success=False, source=self.name,
-                        error=f"GreyNoise returned HTTP {resp.status_code}",
-                    )
+                fail = self.classify_response(resp)
+                if fail is not None:
+                    return fail
 
                 r = resp.json()
 

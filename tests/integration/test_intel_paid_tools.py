@@ -428,14 +428,18 @@ class TestGreyNoiseTool:
 
     @patch("nexusrecon.core.config.NexusConfig.get_secret", return_value="bad-key")
     async def test_unauthorized(self, _secret) -> None:
-        """401 indicates a bad API key — surface that distinctly so the
-        operator can fix their config instead of seeing silent empties."""
+        """401 indicates a bad API key, surface that distinctly so the
+        operator can fix their config instead of seeing silent empties.
+
+        Post-``BaseHTTPTool`` migration the error text is uniform across
+        the registry, ``"<Provider> auth failure (HTTP 401) - check <KEY>"``.
+        """
         tool = GreyNoiseTool()
         with respx.mock:
             respx.get(url__startswith=self.URL).mock(return_value=Response(401))
             result = await tool.run("8.8.8.8")
         assert result.success is False
-        assert "Invalid" in result.error or "API key" in result.error
+        assert "auth" in result.error.lower() or "GREYNOISE_API_KEY" in result.error
 
     @patch("nexusrecon.core.config.NexusConfig.get_secret", return_value="fake-gn-key")
     async def test_server_error(self, _secret) -> None:

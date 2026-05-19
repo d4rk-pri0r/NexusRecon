@@ -1,14 +1,15 @@
-"""Censys API tool — hosts and certificates search."""
+"""Censys API tool, hosts and certificates search."""
 from __future__ import annotations
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 import httpx
-from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
+from nexusrecon.tools.base import BaseHTTPTool, Category, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
 
 
 @register_tool
-class CensysTool(OSINTTool):
+class CensysTool(BaseHTTPTool):
     name = "censys"
+    provider_label = "Censys"
     tier = Tier.T0
     category = Category.INFRASTRUCTURE
     requires_keys = ["censys_api_id", "censys_api_secret"]
@@ -30,15 +31,16 @@ class CensysTool(OSINTTool):
             ) as client:
                 results: Dict[str, Any] = {}
 
-                # The status-code branches below replace bare ``if status
-                # == 200`` gates that previously masked Censys auth errors,
-                # rate-limits, and 5xx outages as silent empty responses.
+                # ``classify_response`` from :class:`BaseHTTPTool` replaces
+                # bare ``if status == 200`` gates that previously masked
+                # Censys auth errors, rate-limits, and 5xx outages as
+                # silent empty responses.
 
                 # Host search
                 if kwargs.get("ip") or not kwargs.get("is_domain", True):
                     ip = kwargs.get("ip", target)
                     resp = await client.get(f"/hosts/{ip}")
-                    fail = self._classify_status(resp, f"hosts/{ip}")
+                    fail = self.classify_response(resp, f"hosts/{ip}")
                     if fail is not None:
                         return fail
                     results["host"] = resp.json()
@@ -48,7 +50,7 @@ class CensysTool(OSINTTool):
                     resp = await client.get("/certificates/search", params={
                         "q": f"names: {target}", "per_page": 20,
                     })
-                    fail = self._classify_status(resp, "certificates/search")
+                    fail = self.classify_response(resp, "certificates/search")
                     if fail is not None:
                         return fail
                     data = resp.json()
@@ -70,23 +72,3 @@ class CensysTool(OSINTTool):
             )
         except Exception as e:
             return ToolResult(success=False, source=self.name, error=str(e))
-
-    def _classify_status(self, resp: httpx.Response, endpoint: str) -> Optional[ToolResult]:
-        """Convert provider error codes into explicit failures.
-        Returns ``None`` on 2xx so the caller continues."""
-        if resp.status_code in (401, 403):
-            return ToolResult(
-                success=False, source=self.name,
-                error=f"Censys auth failure on {endpoint} (HTTP {resp.status_code}) — check CENSYS_API_ID / CENSYS_API_SECRET",
-            )
-        if resp.status_code == 429:
-            return ToolResult(
-                success=False, source=self.name,
-                error=f"Censys rate limit on {endpoint} — back off and retry",
-            )
-        if resp.status_code != 200:
-            return ToolResult(
-                success=False, source=self.name,
-                error=f"Censys {endpoint} returned HTTP {resp.status_code}",
-            )
-        return None

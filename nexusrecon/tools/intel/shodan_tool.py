@@ -1,14 +1,15 @@
-"""Shodan API tool — host info + search + facets."""
+"""Shodan API tool, host info + search + facets."""
 from __future__ import annotations
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 import httpx
-from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
+from nexusrecon.tools.base import BaseHTTPTool, Category, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
 
 
 @register_tool
-class ShodanTool(OSINTTool):
+class ShodanTool(BaseHTTPTool):
     name = "shodan"
+    provider_label = "Shodan"
     tier = Tier.T0
     category = Category.INFRASTRUCTURE
     requires_keys = ["shodan_api_key"]
@@ -32,8 +33,9 @@ class ShodanTool(OSINTTool):
                 # ``if resp.status_code == 200`` and silently skipped on
                 # any other status. That made bad keys, rate limits, and
                 # provider outages indistinguishable from "no data for
-                # this target". The shared status-code helper below
-                # converts those into explicit failures.
+                # this target". ``classify_response`` from
+                # :class:`BaseHTTPTool` converts those into explicit
+                # failures with a uniform error format across the registry.
                 primary_endpoint = "host search" if not kwargs.get("is_ip", False) else "host details"
 
                 # If domain, do a hostname-scoped host search (primary).
@@ -41,7 +43,7 @@ class ShodanTool(OSINTTool):
                     resp = await client.get("/shodan/host/search", params={
                         "query": f'hostname:"{target}"', "facets": "port:10,org:10",
                     })
-                    fail = self._classify_status(resp, primary_endpoint)
+                    fail = self.classify_response(resp, primary_endpoint)
                     if fail is not None:
                         return fail
                     results["search"] = self._parse_search_results(resp.json())
@@ -49,12 +51,12 @@ class ShodanTool(OSINTTool):
                 # If an explicit IP was supplied, get host details (primary).
                 if kwargs.get("ip"):
                     resp = await client.get(f"/shodan/host/{kwargs['ip']}")
-                    fail = self._classify_status(resp, "host details")
+                    fail = self.classify_response(resp, "host details")
                     if fail is not None:
                         return fail
                     results["host"] = self._parse_host(resp.json())
 
-                # DNS lookup is auxiliary — failures here don't fail the
+                # DNS lookup is auxiliary, failures here don't fail the
                 # whole call, just leave ``dns_resolution`` absent.
                 if not kwargs.get("is_ip", False):
                     resp = await client.get("/dns/resolve", params={"hostnames": target})
@@ -67,32 +69,6 @@ class ShodanTool(OSINTTool):
             )
         except Exception as e:
             return ToolResult(success=False, source=self.name, error=str(e))
-
-    def _classify_status(self, resp: httpx.Response, endpoint: str) -> Optional[ToolResult]:
-        """Convert provider error codes into explicit ``ToolResult``
-        failures. Returns ``None`` if the response is 2xx (caller
-        continues). Returns a populated ``ToolResult(success=False)``
-        otherwise.
-
-        Shodan documents 401/403 for auth failures (bad/missing key) and
-        429 for rate-limit; 5xx are transient provider outages.
-        """
-        if resp.status_code in (401, 403):
-            return ToolResult(
-                success=False, source=self.name,
-                error=f"Shodan auth failure on {endpoint} (HTTP {resp.status_code}) — check SHODAN_API_KEY",
-            )
-        if resp.status_code == 429:
-            return ToolResult(
-                success=False, source=self.name,
-                error=f"Shodan rate limit on {endpoint} — back off and retry",
-            )
-        if resp.status_code != 200:
-            return ToolResult(
-                success=False, source=self.name,
-                error=f"Shodan {endpoint} returned HTTP {resp.status_code}",
-            )
-        return None
 
     def _parse_search_results(self, data: Dict) -> Dict:
         hosts = []

@@ -1,0 +1,101 @@
+name: live-drift
+
+# Weekly tripwire for upstream API schema changes.
+#
+# ``tests/live/`` hits real provider APIs (Shodan, VirusTotal, Censys,
+# GitHub, etc.). The tests assert on structural invariants only (field
+# names, types, success flag presence), never on specific values that
+# change over time. When a provider renames a field or changes its
+# envelope shape, one of these tests fails and we know the mocked
+# fixture in ``tests/integration/`` is now out of date.
+#
+# Each test is gated by ``@pytest.mark.live("<provider>")`` and the
+# ``tests/live/conftest.py`` auto-skips any test whose required env
+# vars aren't present. That means this workflow runs whatever subset
+# of the live suite has secrets configured ── adding a new API key as
+# a repo secret automatically widens coverage without editing the
+# workflow.
+#
+# Schedule: Monday 06:00 UTC. Manual ``workflow_dispatch`` for ad-hoc
+# runs (debugging a flaky provider, after adding a new secret, etc.).
+
+on:
+  schedule:
+    # Minute Hour Day-of-month Month Day-of-week. Monday is 1.
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+jobs:
+  live:
+    name: live API drift
+    runs-on: ubuntu-latest
+    # Keep the job from hanging on a stuck upstream forever. Individual
+    # tests have httpx-level timeouts; this is a belt-and-braces cap.
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install package + dev dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Run live-drift tests
+        env:
+          # Subdomain enumeration
+          CHAOS_API_KEY: ${{ secrets.CHAOS_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.LIVE_GITHUB_TOKEN }}
+          # DNS / passive DNS
+          SECURITYTRAILS_API_KEY: ${{ secrets.SECURITYTRAILS_API_KEY }}
+          # Email & identity
+          HUNTER_API_KEY: ${{ secrets.HUNTER_API_KEY }}
+          INTELX_API_KEY: ${{ secrets.INTELX_API_KEY }}
+          # Infrastructure intel
+          SHODAN_API_KEY: ${{ secrets.SHODAN_API_KEY }}
+          CENSYS_API_ID: ${{ secrets.CENSYS_API_ID }}
+          CENSYS_API_SECRET: ${{ secrets.CENSYS_API_SECRET }}
+          VIRUSTOTAL_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
+          GREYNOISE_API_KEY: ${{ secrets.GREYNOISE_API_KEY }}
+          BINARYEDGE_API_KEY: ${{ secrets.BINARYEDGE_API_KEY }}
+          NETLAS_API_KEY: ${{ secrets.NETLAS_API_KEY }}
+          FULLHUNT_API_KEY: ${{ secrets.FULLHUNT_API_KEY }}
+          ZOOMEYE_API_KEY: ${{ secrets.ZOOMEYE_API_KEY }}
+          ABUSEIPDB_API_KEY: ${{ secrets.ABUSEIPDB_API_KEY }}
+          # Breach
+          HAVEIBEENPWNED_API_KEY: ${{ secrets.HAVEIBEENPWNED_API_KEY }}
+          LEAKCHECK_API_KEY: ${{ secrets.LEAKCHECK_API_KEY }}
+          # Vuln intel
+          VULNERS_API_KEY: ${{ secrets.VULNERS_API_KEY }}
+          # Pretext
+          CRUNCHBASE_API_KEY: ${{ secrets.CRUNCHBASE_API_KEY }}
+        # ``-r a`` prints a summary line per test outcome (passed, failed,
+        # skipped) so the workflow log makes the drift signal obvious.
+        # We deliberately do NOT add ``--tb=long`` ── traceback short keeps
+        # the failure noise readable in the GitHub Actions UI.
+        run: pytest tests/live -v -r a --tb=short
+
+      - name: Summarise results in the job summary
+        if: always()
+        # Pull the pytest summary line into the GitHub-rendered job
+        # summary so it shows up at the top of the run page without
+        # needing to expand the log.
+        run: |
+          {
+            echo "## live-drift run summary"
+            echo ""
+            echo "Triggered: \`${{ github.event_name }}\`"
+            echo "Commit: \`${{ github.sha }}\`"
+            echo ""
+            echo "Each test in tests/live/ is gated by a per-provider"
+            echo "marker that auto-skips when its API key isn't configured"
+            echo "as a repository secret. Skipped tests are expected ──"
+            echo "the signal we care about is **failures** (upstream"
+            echo "schema drift) and unexpected **passes** after adding"
+            echo "a new secret."
+          } >> "$GITHUB_STEP_SUMMARY"

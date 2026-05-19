@@ -54,10 +54,17 @@ tests/
 
 ## Adding a new OSINT tool
 
-Every tool inherits from ``OSINTTool`` (``nexusrecon/tools/base.py``)
+Every tool inherits from either ``OSINTTool`` or its HTTP-API
+specialisation ``BaseHTTPTool`` (both in ``nexusrecon/tools/base.py``)
 and is wired into the registry with ``@register_tool``.
 
-A minimal tool:
+**If your tool hits a JSON HTTP API**, use ``BaseHTTPTool``. The base
+class provides ``classify_response()`` which converts the common
+provider error codes (401/403/429/5xx) into uniform
+``ToolResult(success=False)`` values so you don't restate the if-tree
+in every tool. This is the recommended path for new HTTP-API tools.
+
+A minimal HTTP-API tool:
 
 ```python
 """Example HTTP-API tool, describe what the upstream does."""
@@ -65,15 +72,16 @@ from __future__ import annotations
 from typing import Any, Dict
 import httpx
 from nexusrecon.opsec.useragent import random_ua
-from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
+from nexusrecon.tools.base import BaseHTTPTool, Category, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
 
 
 @register_tool
-class ExampleTool(OSINTTool):
+class ExampleTool(BaseHTTPTool):
     name = "example"
-    tier = Tier.T0              # T0 passive | T1 semi-passive | T2 light active | T3 active
-    category = Category.DOMAIN  # see Category enum in base.py
+    provider_label = "Example"   # human-readable, used in classify_response() error text
+    tier = Tier.T0               # T0 passive | T1 semi-passive | T2 light active | T3 active
+    category = Category.DOMAIN   # see Category enum in base.py
     requires_keys = ["example_api_key"]  # env var names, framework checks via is_available()
     description = "One-sentence description visible in `nexusrecon tools`"
     target_types = ["domain"]            # what kinds of input the tool accepts
@@ -95,21 +103,12 @@ class ExampleTool(OSINTTool):
                 timeout=15.0,
             ) as client:
                 resp = await client.get(f"/v1/lookup/{target}")
-                if resp.status_code in (401, 403):
-                    return ToolResult(
-                        success=False, source=self.name,
-                        error="Example API auth failure, check EXAMPLE_API_KEY",
-                    )
-                if resp.status_code == 429:
-                    return ToolResult(
-                        success=False, source=self.name,
-                        error="Example API rate limit, back off and retry",
-                    )
-                if resp.status_code != 200:
-                    return ToolResult(
-                        success=False, source=self.name,
-                        error=f"Example API returned HTTP {resp.status_code}",
-                    )
+                # ``classify_response`` returns None on 2xx (caller
+                # continues), or a populated ``ToolResult(success=False)``
+                # for 401/403/429/5xx with uniform error text.
+                fail = self.classify_response(resp, "lookup")
+                if fail is not None:
+                    return fail
                 raw = resp.json()
             return ToolResult(
                 success=True, source=self.name,
@@ -119,6 +118,17 @@ class ExampleTool(OSINTTool):
         except Exception as exc:
             return ToolResult(success=False, source=self.name, error=str(exc))
 ```
+
+**Tools that don't fit the HTTP-API pattern** (subprocess wrappers,
+pure-DNS lookups, hash-chain readers, etc.) inherit from ``OSINTTool``
+directly. The hard rules below still apply.
+
+**Soft-failure status codes.** If your provider returns a non-2xx
+status as a *legitimate* zero-result answer (Hudson Rock returns 404
+for "email not in database"), declare it via
+``soft_failure_codes = (404,)`` on the class. ``classify_response``
+will return ``None`` for those codes so your ``run()`` can treat them
+as success-with-zero-results.
 
 **Hard rules**:
 
@@ -132,9 +142,10 @@ class ExampleTool(OSINTTool):
 3. **No blocking I/O in async functions.** ``time.sleep`` → ``await
    asyncio.sleep``. Anything else that blocks the event loop will
    serialise the entire campaign.
-4. **Explicit status-code branches.** 401/403 → auth fail, 429 → rate
-   limit, other non-200 → fail with the status code in the error
-   message. Don't rely on a bare ``if status == 200`` gate.
+4. **Use ``BaseHTTPTool.classify_response()`` for HTTP-API tools.**
+   Don't restate the 401/403/429/non-200 if-tree by hand. The base
+   class already gets it right and gives uniform error text across the
+   registry.
 5. **``result_count`` reflects actual hits.** An "IP not in our DB"
    200-response should count as 0, not 1.
 

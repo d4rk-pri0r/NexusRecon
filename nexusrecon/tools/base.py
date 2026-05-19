@@ -19,8 +19,9 @@ import time
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Type, TypeVar
+from typing import Any, Dict, List, Optional, Tuple, Type, TypeVar
 
+import httpx
 import structlog
 
 from nexusrecon.core.config import get_config
@@ -135,6 +136,115 @@ class OSINTTool(abc.ABC):
             text=True,
             timeout=timeout_sec,
             cwd=cwd,
+        )
+
+
+class BaseHTTPTool(OSINTTool):
+    """
+    Base class for tools that hit an upstream HTTP API.
+
+    Provides ``classify_response()``, a status-code helper that turns the
+    common provider error codes (401/403/429/5xx) into populated
+    ``ToolResult(success=False)`` values. Replaces the bare
+    ``if resp.status_code == 200`` gate that previously masked auth
+    failures, rate-limits, and provider outages as silent empty
+    responses, the #1 source of bugs the 0.5.0 test sprint surfaced.
+
+    Subclasses customise via two class attributes:
+
+      - ``provider_label``: human-readable provider name used in error
+        messages, e.g. ``"VirusTotal"``. Defaults to ``cls.name`` with
+        underscores replaced by spaces and title-cased.
+      - ``soft_failure_codes``: HTTP status codes that ``classify_response``
+        should NOT treat as failures. The caller handles them as
+        zero-result success cases. Example: Hudson Rock returns 404 for
+        "email not in database", which is a legitimate empty answer.
+
+    Usage:
+
+        @register_tool
+        class ExampleTool(BaseHTTPTool):
+            name = "example"
+            provider_label = "Example"
+            requires_keys = ["example_api_key"]
+            ...
+
+            async def run(self, target, **kwargs):
+                key = self.config.get_secret("example_api_key")
+                if not key:
+                    return ToolResult(
+                        success=False, source=self.name,
+                        error="EXAMPLE_API_KEY not set",
+                    )
+                try:
+                    async with httpx.AsyncClient(...) as client:
+                        resp = await client.get(f"/lookup/{target}")
+                        fail = self.classify_response(resp, "lookup")
+                        if fail is not None:
+                            return fail
+                        ...
+                except Exception as exc:
+                    return ToolResult(success=False, source=self.name, error=str(exc))
+    """
+
+    provider_label: Optional[str] = None
+    soft_failure_codes: Tuple[int, ...] = ()
+
+    @property
+    def _provider(self) -> str:
+        return self.provider_label or self.name.replace("_", " ").title()
+
+    def classify_response(
+        self,
+        resp: httpx.Response,
+        endpoint: str = "",
+    ) -> Optional[ToolResult]:
+        """
+        Convert provider error codes into explicit ``ToolResult`` failures.
+
+        Returns ``None`` if the response is 2xx, or if its status code is
+        in :attr:`soft_failure_codes` (caller continues processing).
+        Returns a populated ``ToolResult(success=False)`` otherwise.
+
+        - 401 / 403: auth failure. Includes a "check <KEY>" hint built
+          from :attr:`requires_keys`.
+        - 429: rate limit. Caller should back off.
+        - Any other non-2xx: returns the status code in the error so the
+          operator can correlate with provider status pages.
+        """
+        if resp.is_success:
+            return None
+        if resp.status_code in self.soft_failure_codes:
+            return None
+
+        endpoint_label = f" on {endpoint}" if endpoint else ""
+
+        if resp.status_code in (401, 403):
+            keys_hint = ""
+            if self.requires_keys:
+                names = " / ".join(k.upper() for k in self.requires_keys)
+                keys_hint = f" - check {names}"
+            return ToolResult(
+                success=False,
+                source=self.name,
+                error=(
+                    f"{self._provider} auth failure{endpoint_label} "
+                    f"(HTTP {resp.status_code}){keys_hint}"
+                ),
+            )
+        if resp.status_code == 429:
+            return ToolResult(
+                success=False,
+                source=self.name,
+                error=(
+                    f"{self._provider} rate limit{endpoint_label} - "
+                    f"back off and retry"
+                ),
+            )
+        return ToolResult(
+            success=False,
+            source=self.name,
+            error=f"{self._provider}{endpoint_label} returned HTTP {resp.status_code}",
         )
 
 

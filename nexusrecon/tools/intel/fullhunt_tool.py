@@ -1,4 +1,4 @@
-"""FullHunt — attack surface enumeration."""
+"""FullHunt, attack surface enumeration."""
 from __future__ import annotations
 
 from typing import Any, Dict, List
@@ -6,17 +6,18 @@ from typing import Any, Dict, List
 import httpx
 
 from nexusrecon.opsec.useragent import random_ua
-from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
+from nexusrecon.tools.base import BaseHTTPTool, Category, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
 
 
 @register_tool
-class FullHuntTool(OSINTTool):
+class FullHuntTool(BaseHTTPTool):
     name = "fullhunt"
+    provider_label = "FullHunt"
     tier = Tier.T0
     category = Category.INFRASTRUCTURE
     requires_keys = ["fullhunt_api_key"]
-    description = "FullHunt attack surface enumeration — subdomains, exposed ports, technologies"
+    description = "FullHunt attack surface enumeration: subdomains, exposed ports, technologies"
     target_types = ["domain"]
 
     async def run(self, target: str, **kwargs: Any) -> ToolResult:
@@ -35,13 +36,9 @@ class FullHuntTool(OSINTTool):
                 timeout=20.0,
             ) as client:
                 resp = await client.get(f"/domain/{target}/subdomains")
-
-                if resp.status_code in (401, 403):
-                    return ToolResult(success=False, source=self.name, error="Invalid FullHunt API key")
-                if resp.status_code == 429:
-                    return ToolResult(success=False, source=self.name, error="FullHunt rate limit exceeded")
-                if resp.status_code != 200:
-                    return ToolResult(success=False, source=self.name, error=f"FullHunt returned {resp.status_code}")
+                fail = self.classify_response(resp, "domain/subdomains")
+                if fail is not None:
+                    return fail
 
                 raw = resp.json()
                 hosts: List[str] = raw.get("hosts", [])
@@ -50,7 +47,7 @@ class FullHuntTool(OSINTTool):
                 data: Dict[str, Any] = {
                     "domain": target,
                     # Real FullHunt response (per docs.fullhunt.io/docs/api/domain-apis)
-                    # has ``metadata.all_results_count`` — an earlier
+                    # has ``metadata.all_results_count``; an earlier
                     # revision read ``all_results`` (no ``_count`` suffix)
                     # which silently returned ``None`` on every live call.
                     # ``metadata.total`` isn't documented; fall back to
