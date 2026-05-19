@@ -198,30 +198,15 @@ class BaseHTTPTool(OSINTTool):
     def _proxy_kwargs() -> Dict[str, Any]:
         """Return httpx-compatible proxy kwargs for the active campaign.
 
-        Reads :func:`nexusrecon.opsec.context.get_current_proxy_url`,
-        which the registry sets via ``proxy_context`` when a campaign has
-        a proxy manager bound. Returns ``{}`` when no proxy is active so
-        callers can unconditionally spread the result into their
-        ``httpx.AsyncClient(...)`` call:
-
-            async with httpx.AsyncClient(
-                base_url="https://api.example.com",
-                headers={...},
-                timeout=15.0,
-                **self._proxy_kwargs(),
-            ) as client:
-                ...
-
-        Without a campaign context (e.g. running ``tool.run()`` directly
-        in a test or REPL), this returns ``{}`` and the client connects
-        direct ── the same behaviour the tool had before OPSEC wiring.
+        Thin wrapper around :func:`nexusrecon.opsec.context.proxy_kwargs`
+        ── kept as an instance-level method here so the migrated reference
+        tools can read ``self._proxy_kwargs()`` idiomatically. Non-
+        BaseHTTPTool subclasses (``holehe``, ``maigret``, etc.) should
+        import ``proxy_kwargs`` directly from ``opsec.context``.
         """
-        from nexusrecon.opsec.context import get_current_proxy_url
+        from nexusrecon.opsec.context import proxy_kwargs
 
-        url = get_current_proxy_url()
-        if url:
-            return {"proxy": url}
-        return {}
+        return proxy_kwargs()
 
     def classify_response(
         self,

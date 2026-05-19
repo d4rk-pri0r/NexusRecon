@@ -66,6 +66,41 @@ minor bumps (0.x → 0.x+1) may break APIs.
   things only a human can judge (narrative coherence, tone,
   whether a phishing draft sounds plausible) live here, while
   static-checkable properties land in the automated tests above.
+- **Maigret tool** (`nexusrecon/tools/identity/maigret_tool.py`):
+  full implementation replacing the previous stub. Subprocess wrapper
+  around the `maigret` CLI (install via `pipx install maigret` ── the
+  PyPI package pins `networkx<3` which conflicts with NexusRecon's
+  `networkx>=3.3`, so library-import is not viable). Checks a
+  username against ~500 top sites by default (`top_sites` kwarg
+  configurable, up to ~3000); accepts either an explicit username
+  target or an email which triggers username derivation. Parses
+  maigret's `--json simple` output and dedupes hits by
+  `(username, service)`. 13 integration tests cover the parsing,
+  binary-missing path, email-derivation flow, role-account
+  short-circuit, subprocess timeout, and cross-candidate dedup.
+- **Username derivation utility**
+  (`nexusrecon/core/username_derivation.py`): pure-Python heuristics
+  that turn an email + optional harvested names into a ranked list of
+  likely usernames. Handles dotted/underscored/dashed corporate
+  emails, initial-prefix patterns (jdoe), numeric suffixes that
+  persist across services (jane.doe2 → janedoe2 etc.), and
+  last-first name forms (DOE, Jane → jane.doe). Role accounts
+  (admin@, info@) short-circuit to empty. 26 unit tests pin the
+  derivation contract.
+- **Phase 2 maigret integration** (`nexusrecon/graph/nodes.py`):
+  after holehe runs on the top 20 emails, maigret runs on the top 5
+  emails with 2 derived username candidates each (10 maigret
+  invocations max, semaphore=2 for concurrency). Results land under
+  `email_intel.emails[em].maigret_accounts` and
+  `email_intel.emails[em].derived_usernames`. Aggregate
+  account-association summary fed to the `cloud_identity` agent so
+  the dispatcher trace can include "this employee has accounts at
+  N services across holehe+maigret" reasoning.
+- **`cloud_identity` agent prompt extended**: now receives
+  per-email account counts and high-confidence handles (3+
+  service-hits with same username), with directive to surface
+  account-association correlations and recommend follow-up
+  breach-database lookups against confirmed handles.
 
 ### Changed
 
@@ -82,6 +117,24 @@ minor bumps (0.x → 0.x+1) may break APIs.
   active campaign proxy URL when the registry has a `ProxyManager`
   bound. The remaining 65 HTTP tools still build raw clients without
   proxy support; see `OPSEC_STATUS.md` for the migration tracker.
+- **`holehe_tool.py` now honours OPSEC**: previously the
+  `_HEADERS = {"User-Agent": random_ua(), ...}` was module-level,
+  freezing the UA at import time so every holehe invocation in the
+  same Python process sent the same UA. Headers are now built per
+  `run()` call. The internal `httpx.AsyncClient` also now spreads
+  `proxy_kwargs()` from `nexusrecon.opsec.context` so holehe's ~121
+  outbound probes route through the campaign proxy. Two new wire
+  tests (`TestHolehyeProxyAndUaRotation`) catch regressions.
+- **`proxy_kwargs()` lifted to a free function** in
+  `nexusrecon.opsec.context`. `BaseHTTPTool._proxy_kwargs` still
+  exists as a thin wrapper for the migrated tools, but library-
+  driven tools (holehe, future maigret-as-library) can call
+  `proxy_kwargs()` directly without inheriting from `BaseHTTPTool`.
+- **Structural OPSEC wire test**: new
+  `TestProxySupportStructural::test_every_basehttp_tool_calls_proxy_kwargs`
+  walks every registered `BaseHTTPTool` subclass and grep-asserts
+  that its source calls `_proxy_kwargs()`. Catches the next tool
+  that inherits from BaseHTTPTool but forgets the proxy spread.
 - `CONTRIBUTING.md`: "Adding a new OSINT tool" example rewritten to
   inherit from `BaseHTTPTool` and use `classify_response()`. Hard
   rule #4 reworded from "explicit status-code branches" to "use the

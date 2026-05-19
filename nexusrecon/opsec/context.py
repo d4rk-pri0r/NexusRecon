@@ -23,7 +23,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import Iterator, Optional
+from typing import Any, Dict, Iterator, Optional
 
 # ContextVar of Optional[str] for the active outbound proxy URL.
 # ``None`` means no proxy (direct connection); a string is an
@@ -36,6 +36,36 @@ _current_proxy_url: ContextVar[Optional[str]] = ContextVar(
 def get_current_proxy_url() -> Optional[str]:
     """Return the proxy URL set by the enclosing ``proxy_context``, or None."""
     return _current_proxy_url.get()
+
+
+def proxy_kwargs() -> Dict[str, Any]:
+    """Return httpx-compatible proxy kwargs for the active campaign.
+
+    Returns ``{}`` when no proxy is active, or ``{"proxy": url}`` when
+    ``proxy_context`` has been entered with a non-None URL. Designed for
+    tools that build their own ``httpx.AsyncClient`` ── either via
+    ``BaseHTTPTool`` (which exposes this as ``self._proxy_kwargs()``) or
+    directly from ``OSINTTool`` subclasses that need proxy support
+    without inheriting from BaseHTTPTool. Tools like ``holehe`` and
+    ``maigret`` fall in the second category: they manage their own
+    client lifecycle through a library or subprocess, but should still
+    respect the campaign proxy.
+
+    Usage from a non-BaseHTTPTool::
+
+        from nexusrecon.opsec.context import proxy_kwargs
+
+        async with httpx.AsyncClient(
+            headers={...},
+            timeout=10.0,
+            **proxy_kwargs(),
+        ) as client:
+            ...
+    """
+    url = get_current_proxy_url()
+    if url:
+        return {"proxy": url}
+    return {}
 
 
 @contextmanager

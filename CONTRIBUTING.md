@@ -27,6 +27,27 @@ Confirm you can boot the TUI before opening a PR:
 nexusrecon
 ```
 
+### Optional external binaries
+
+A handful of tools wrap external CLIs that aren't pip-installable into
+NexusRecon's own env (either binary-only or with conflicting deps).
+Install these separately if you want full coverage:
+
+```bash
+# Subdomain enumeration
+brew install subfinder amass         # macOS, or use your platform's pkg
+
+# Active probing
+brew install httpx-toolkit nuclei
+
+# Username account discovery (~3000 sites)
+pipx install maigret                  # pipx isolates its networkx<3 pin
+```
+
+Tools whose binaries aren't present are auto-marked unavailable by
+``OSINTTool.is_available()`` ── they skip cleanly during campaigns
+rather than crashing.
+
 ---
 
 ## Where things live

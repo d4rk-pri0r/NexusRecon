@@ -32,22 +32,42 @@ tests above will start asserting on them.
 
 ### Tool migration (proxy support)
 
-Only 5 of 70 HTTP tools currently inherit from `BaseHTTPTool` and call
-`self._proxy_kwargs()`:
+**Wired (consume the proxy context):**
 
-- `shodan`, `virustotal`, `censys`, `fullhunt`, `greynoise`
+- 5 `BaseHTTPTool` subclasses: `shodan`, `virustotal`, `censys`,
+  `fullhunt`, `greynoise` ── spread `**self._proxy_kwargs()` into
+  their httpx clients.
+- 2 library-driven tools that consume `proxy_kwargs()` directly via
+  the free function in `nexusrecon.opsec.context`: `holehe` (rotates
+  UA per call too, post-fix) and the inner client `maigret` would
+  use if/when its subprocess CLI supports proxy flags.
 
-The remaining ~65 HTTP tools still build raw `httpx.AsyncClient(...)`
-calls without proxy support. They will silently bypass the proxy
-manager even when one is bound. To migrate a tool:
+**Not wired (still need migration):**
 
-1. Change parent from `OSINTTool` to `BaseHTTPTool`.
+- ~63 HTTP tools that build raw `httpx.AsyncClient(...)` calls in
+  their `run()` methods without consulting either `_proxy_kwargs()`
+  or `proxy_kwargs()`. They will silently bypass the proxy manager.
+
+To migrate a tool:
+
+1. Change parent from `OSINTTool` to `BaseHTTPTool` (if the tool fits
+   the JSON-HTTP-API shape and benefits from `classify_response`).
 2. Add `provider_label = "..."` if the auto-derived name is ugly.
 3. Replace any private `_classify_status` helper with calls to
    `self.classify_response(resp, endpoint=...)`.
 4. Spread `**self._proxy_kwargs()` into every `httpx.AsyncClient(...)`
    call inside `run()`.
-5. Run the tool's integration tests to confirm no regression.
+5. For tools that can't reasonably inherit from `BaseHTTPTool`
+   (subprocess wrappers, library-driven tools): import
+   `from nexusrecon.opsec.context import proxy_kwargs` and spread
+   `**proxy_kwargs()` into the AsyncClient ctor directly.
+6. Run the tool's integration tests to confirm no regression.
+
+**Structural test catches new tools that miss the migration:**
+`tests/integration/test_opsec_wire.py::TestProxySupportStructural::test_every_basehttp_tool_calls_proxy_kwargs`
+walks every registered `BaseHTTPTool` subclass and asserts the source
+calls `_proxy_kwargs()`. A tool that inherits from BaseHTTPTool but
+doesn't consume the helper fails the test.
 
 Track per-tool migration in PRs that follow the
 `feat(tools): migrate <tool> to BaseHTTPTool` pattern.

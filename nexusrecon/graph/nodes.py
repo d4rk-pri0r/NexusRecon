@@ -252,12 +252,100 @@ async def phase2_identity_cloud(state: CampaignGraphState) -> CampaignGraphState
             if data is not None:
                 email_intel["emails"].setdefault(em, {})["registered_services"] = data.get("registered_services", [])
 
+    # Maigret — expand the email-input account footprint via username
+    # derivation. Holehe covers ~121 services; maigret covers ~3000 but
+    # is keyed by username, not email. We derive likely handles from
+    # the email local-part + any harvested names (from hunter), then
+    # probe each derived username with maigret. The two together give
+    # the dispatcher the broadest possible account-association signal.
+    #
+    # Wall-clock budget: maigret per-username ≈ 30-90s at 500 top-sites
+    # × 10s timeout. We cap aggressively: top 5 emails × 2 candidates
+    # each = 10 maigret invocations, semaphore=2, so ~5 minutes total
+    # at stealth profile "normal". Tunable via env if needed.
+    if emails:
+        maigret_sem = asyncio.Semaphore(2)
+
+        async def _run_maigret(em: str) -> tuple[str, Any]:
+            # Build the names list from any hunter metadata for this
+            # email. Each email's record in email_intel may carry a
+            # position/department/name field; collect what's there.
+            email_record = email_intel["emails"].get(em, {})
+            harvested_names: List[str] = []
+            for key in ("name", "first_name", "last_name"):
+                val = email_record.get(key)
+                if val and isinstance(val, str):
+                    harvested_names.append(val)
+            # If we have first+last separately, also build the combined.
+            if email_record.get("first_name") and email_record.get("last_name"):
+                harvested_names.append(
+                    f"{email_record['first_name']} {email_record['last_name']}"
+                )
+
+            async with maigret_sem:
+                r = await registry.execute(
+                    "maigret",
+                    em,
+                    "email",
+                    names=harvested_names,
+                    max_candidates=2,
+                )
+                return em, r.data if r.success else None
+
+        maigret_results = await asyncio.gather(
+            *(_run_maigret(em) for em in emails[:5]),
+            return_exceptions=True,
+        )
+        for item in maigret_results:
+            if isinstance(item, BaseException):
+                continue
+            em, data = item
+            if data is not None:
+                # Attach maigret-discovered accounts under a separate
+                # key so the agent can distinguish holehe hits (email-
+                # registration confirmed) from maigret hits (handle
+                # match across services, less certain attribution).
+                email_intel["emails"].setdefault(em, {})["maigret_accounts"] = (
+                    data.get("registered_services", [])
+                )
+                email_intel["emails"][em]["derived_usernames"] = (
+                    data.get("candidates", [])
+                )
+
     # B29: commit cloud_intel + email_intel to state BEFORE the agent runs so the
     # attribution gate (which reads state["cloud_intel"]) can downgrade stem-match
     # findings. Previously these assignments happened after the agent — the gate
     # ran blind and missed stem-match identifiers like third-party tenant IDs.
     state["cloud_intel"] = cloud_intel
     state["email_intel"] = email_intel
+
+    # Build account-association summary for the agent: per-email
+    # count of holehe + maigret hits, plus aggregate handle patterns
+    # that appeared on multiple services (high-confidence handle).
+    account_summary: Dict[str, Any] = {
+        "per_email_account_count": {},
+        "high_confidence_handles": [],
+    }
+    handle_service_count: Dict[str, int] = {}
+    for em, record in email_intel["emails"].items():
+        holehe_count = len(record.get("registered_services") or [])
+        maigret_count = len(record.get("maigret_accounts") or [])
+        if holehe_count or maigret_count:
+            account_summary["per_email_account_count"][em] = {
+                "holehe": holehe_count,
+                "maigret": maigret_count,
+                "derived_usernames": record.get("derived_usernames", []),
+            }
+        for hit in record.get("maigret_accounts") or []:
+            handle = hit.get("username")
+            if handle:
+                handle_service_count[handle] = handle_service_count.get(handle, 0) + 1
+    # A handle that appears on 3+ services is likely the person's
+    # consistent online identity, not a coincidence.
+    account_summary["high_confidence_handles"] = sorted(
+        [(h, c) for h, c in handle_service_count.items() if c >= 3],
+        key=lambda x: -x[1],
+    )[:10]
 
     # Agent synthesis: Cloud & Identity Specialist analyzes
     executor = _get_executor()
@@ -267,6 +355,7 @@ async def phase2_identity_cloud(state: CampaignGraphState) -> CampaignGraphState
             task_data={
                 "cloud_intel": {k: _summarize_dict(v) for k, v in list(cloud_intel.items())[:10]},
                 "email_intel": {"email_count": len(email_intel["emails"]), "format": email_intel.get("format")},
+                "account_associations": account_summary,
             },
             task_prompt="Analyze the cloud and identity reconnaissance results. Check "
                         "attribution_confidence on each cloud source — values below 0.5 "
@@ -276,7 +365,13 @@ async def phase2_identity_cloud(state: CampaignGraphState) -> CampaignGraphState
                         "2. M365/Azure federation type and its implications for phishing "
                         "3. Email format patterns and their confidence levels "
                         "4. Recommended next steps for identity-based attack vectors "
-                        "5. Low-confidence cloud assets (attribution_confidence < 0.5) must be tagged [POSSIBLE] with info severity only",
+                        "5. Low-confidence cloud assets (attribution_confidence < 0.5) must be tagged [POSSIBLE] with info severity only "
+                        "6. Account-association correlations from holehe + maigret: which employees "
+                        "have the broadest online footprint (highest combined hit count); which "
+                        "handle patterns appear consistently across multiple services (likely "
+                        "stable identity); and what those handles imply for breach-correlation "
+                        "follow-up (the dispatcher should consider running hibp/intelx/dehashed "
+                        "against high-confidence handles in addition to the harvested email).",
             state=state,
         )
         state.setdefault("agent_messages", []).append({

@@ -377,3 +377,159 @@ class TestSourceRoutedProxy:
         assert shodan_init is not None
         # Per-source rule wins over the default current proxy.
         assert shodan_init.get("proxy") == "socks5://127.0.0.1:9050"
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Non-BaseHTTPTool proxy support: holehe (and other library-driven tools)
+# ──────────────────────────────────────────────────────────────────────────
+
+
+class TestHolehyeProxyAndUaRotation:
+    """Holehe inherits from OSINTTool, not BaseHTTPTool, but it still
+    needs proxy support and per-call UA rotation. These tests pin both
+    properties so a regression that re-froze the UA at module scope or
+    re-removed ``**proxy_kwargs()`` from the AsyncClient ctor fails
+    loud."""
+
+    async def test_holehe_uses_proxy_when_manager_set(self):
+        """Critical: when a proxy is bound, holehe's ~121 outbound
+        probes must go through it. Pre-Day-7 fix they bypassed it."""
+        try:
+            from nexusrecon.tools.identity.holehe_tool import HoloTool
+        except ImportError:
+            pytest.skip("holehe library not installed in this env")
+
+        proxy_mgr = ProxyManager(proxy_url="http://capture.local:8080")
+        registry = _build_registry_with_tool(
+            HoloTool(), proxy_manager=proxy_mgr,
+        )
+
+        recorded_kwargs = []
+        original_init = httpx.AsyncClient.__init__
+
+        def _capture_init(self, *args, **kwargs):
+            recorded_kwargs.append(kwargs)
+            return original_init(self, *args, **kwargs)
+
+        # Holehe imports its own modules at runtime which would do real
+        # network calls. Patch holehe.core.get_functions to return an
+        # empty list so the only httpx.AsyncClient construction we see
+        # is holehe's own ── then we can assert on its kwargs.
+        with patch.object(httpx.AsyncClient, "__init__", _capture_init), \
+             patch("holehe.core.import_submodules", return_value={}), \
+             patch("holehe.core.get_functions", return_value=[]):
+            await registry.execute("holehe", "test@example.com", "email")
+
+        # At least one captured init should be holehe's (no base_url
+        # set, since holehe uses the AsyncClient without a base URL).
+        # We identify it by the absence of base_url and presence of
+        # the follow_redirects=True flag holehe uses.
+        holehe_init = next(
+            (k for k in recorded_kwargs
+             if "base_url" not in k and k.get("follow_redirects") is True),
+            None,
+        )
+        assert holehe_init is not None, (
+            "holehe never built an httpx client (or its init kwargs "
+            "have changed shape ── update this test if so)"
+        )
+        assert holehe_init.get("proxy") == "http://capture.local:8080", (
+            "holehe is NOT routing through the configured proxy ── this "
+            "is the 'OPSEC declared but bypassed' regression Day 6 "
+            "fixed. Make sure holehe_tool.py spreads **proxy_kwargs() "
+            "into its httpx.AsyncClient(...) call."
+        )
+
+    async def test_holehe_rotates_ua_across_invocations(self):
+        """A second invocation should see a different User-Agent in
+        most cases ── statistically guaranteed across ~50 calls against
+        a 35-entry pool. Pre-Day-7 fix every invocation in the same
+        process used the same UA (frozen at module import)."""
+        try:
+            from nexusrecon.tools.identity.holehe_tool import HoloTool
+        except ImportError:
+            pytest.skip("holehe library not installed in this env")
+
+        tool = HoloTool()
+        registry = _build_registry_with_tool(tool)
+
+        seen_uas = []
+        original_init = httpx.AsyncClient.__init__
+
+        def _capture_init(self, *args, **kwargs):
+            headers = kwargs.get("headers", {})
+            if "User-Agent" in headers and "base_url" not in kwargs:
+                seen_uas.append(headers["User-Agent"])
+            return original_init(self, *args, **kwargs)
+
+        with patch.object(httpx.AsyncClient, "__init__", _capture_init), \
+             patch("holehe.core.import_submodules", return_value={}), \
+             patch("holehe.core.get_functions", return_value=[]):
+            for _ in range(20):
+                await registry.execute("holehe", "test@example.com", "email")
+
+        distinct = set(seen_uas)
+        assert len(seen_uas) == 20, (
+            f"expected 20 holehe invocations, got {len(seen_uas)}"
+        )
+        # 20 picks from a ~35-entry pool: ~14 distinct expected. Floor
+        # at 5 to dodge unlucky RNG runs.
+        assert len(distinct) >= 5, (
+            f"holehe only used {len(distinct)} distinct UAs across 20 "
+            f"invocations ── module-level UA freeze regression?"
+        )
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Structural test: every BaseHTTPTool subclass uses _proxy_kwargs
+# ──────────────────────────────────────────────────────────────────────────
+
+
+class TestProxySupportStructural:
+    """Catch tools that are positioned to consume the proxy but don't.
+
+    Every ``BaseHTTPTool`` subclass should call ``self._proxy_kwargs()``
+    somewhere in its source. A subclass that doesn't is a silent
+    regression: the OPSEC layer is bound but the tool ignores it. This
+    test walks the source for each registered BaseHTTPTool subclass and
+    asserts the call appears.
+
+    Non-``BaseHTTPTool`` HTTP tools (holehe, maigret etc.) are caught by
+    their dedicated wire tests above ── this test only covers the
+    BaseHTTPTool inheritance chain."""
+
+    def test_every_basehttp_tool_calls_proxy_kwargs(self):
+        from inspect import getsourcefile
+        from pathlib import Path
+
+        from nexusrecon.tools.base import BaseHTTPTool
+        # Import the tool modules so subclasses register themselves.
+        import nexusrecon.tools.intel.shodan_tool  # noqa: F401
+        import nexusrecon.tools.intel.virustotal_tool  # noqa: F401
+        import nexusrecon.tools.intel.censys_tool  # noqa: F401
+        import nexusrecon.tools.intel.fullhunt_tool  # noqa: F401
+        import nexusrecon.tools.intel.greynoise_tool  # noqa: F401
+
+        violators = []
+        for cls in BaseHTTPTool.__subclasses__():
+            # Skip private test fixtures (their source file is a test
+            # module, not a tool ── they don't need to call
+            # _proxy_kwargs to satisfy this contract).
+            if cls.__name__.startswith("_"):
+                continue
+            src_file = getsourcefile(cls)
+            if not src_file:
+                continue
+            # Skip anything that lives under tests/ ── another safety
+            # net for test-helper classes that aren't real tools.
+            if "/tests/" in src_file:
+                continue
+            src = Path(src_file).read_text()
+            if "_proxy_kwargs()" not in src and "proxy_kwargs()" not in src:
+                violators.append((cls.__name__, src_file))
+
+        assert not violators, (
+            "These BaseHTTPTool subclasses don't call _proxy_kwargs() ── "
+            "they'll silently bypass the campaign proxy:\n"
+            + "\n".join(f"  {name}  ({src})" for name, src in violators)
+        )

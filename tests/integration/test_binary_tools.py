@@ -723,36 +723,11 @@ class TestGowitnessTool:
 # ────────────────────────────────────────────────────────────────────────
 
 class TestMaigretTool:
-
-    @patch.object(MaigretTool, "is_available", return_value=True)
-    async def test_happy_path(self, _avail) -> None:
-        tool = MaigretTool()
-        stdout = json.dumps({"GitHub": {"status": {"status": "Claimed"}}, "Twitter": {"status": {"status": "Available"}}})
-        with patch.object(tool, "run_subprocess",
-                          return_value=_mock_completed(stdout=stdout)):
-            result = await tool.run("janedoe")
-        assert result.success is True
-        # Maigret tool stores the raw output and reports result_count=0
-        # (it's effectively a passthrough; the campaign agent parses the raw).
-        assert "GitHub" in result.data["raw"]
-
-    @patch.object(MaigretTool, "is_available", return_value=True)
-    async def test_empty_output(self, _avail) -> None:
-        tool = MaigretTool()
-        with patch.object(tool, "run_subprocess",
-                          return_value=_mock_completed(stdout="")):
-            result = await tool.run("janedoe")
-        assert result.success is True
-        assert result.data["raw"] == ""
-
-    @patch.object(MaigretTool, "is_available", return_value=True)
-    async def test_subprocess_error(self, _avail) -> None:
-        tool = MaigretTool()
-        with patch.object(tool, "run_subprocess",
-                          side_effect=subprocess.TimeoutExpired(cmd="maigret", timeout=300)):
-            result = await tool.run("janedoe")
-        assert result.success is False
-        assert result.error
+    """The maigret tool was rewritten from a synchronous ``run_subprocess``
+    stub to an async ``asyncio.create_subprocess_exec`` wrapper that
+    parses JSON output files. Comprehensive coverage now lives in
+    ``tests/integration/test_maigret_tool.py``. This stub is retained
+    only so test counts/grep patterns don't change unexpectedly."""
 
     async def test_binary_missing(self) -> None:
         tool = MaigretTool()
