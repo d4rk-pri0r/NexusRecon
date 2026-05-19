@@ -28,6 +28,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, Dict, List
 
+from nexusrecon.core.attribution import score_handle_attribution
 from nexusrecon.core.username_derivation import derive_usernames
 from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
@@ -139,14 +140,56 @@ class MaigretTool(OSINTTool):
             seen.add(key)
             deduped.append(hit)
 
+        # Score each hit's attribution confidence. We pass the
+        # original target (which may be an email) plus harvested names
+        # so the scorer can apply derivation rank + profile coherence
+        # signals. Hits below the actionable threshold stay in the
+        # result set ── filtering is the caller's responsibility ──
+        # but every hit carries its confidence + signal breakdown so
+        # downstream consumers can threshold consistently.
+        email_anchor = target if "@" in target else None
+        harvested_names = kwargs.get("names") or []
+        for hit in deduped:
+            attribution = score_handle_attribution(
+                email=email_anchor,
+                handle=hit.get("username", ""),
+                service=hit.get("service", ""),
+                profile_data=hit.get("profile", {}),
+                harvested_names=harvested_names,
+            )
+            hit["confidence"] = attribution.score
+            hit["confidence_band"] = attribution.confidence_band
+            hit["confidence_signals"] = attribution.signals
+            hit["confidence_rationale"] = attribution.rationale
+
+        # Sort by confidence descending so the most credible hits are
+        # at the top of the result list ── important for downstream
+        # truncation (the agent only sees the first N entries).
+        deduped.sort(key=lambda h: -h.get("confidence", 0.0))
+
+        # Aggregate counts by confidence band so the caller knows what
+        # they're looking at without re-iterating the hit list.
+        band_counts = {"high": 0, "medium": 0, "noise": 0}
+        for hit in deduped:
+            band_counts[hit.get("confidence_band", "noise")] = (
+                band_counts.get(hit.get("confidence_band", "noise"), 0) + 1
+            )
+
         return ToolResult(
             success=True, source=self.name,
             data={
                 "input": target,
                 "candidates": candidates,
                 "registered_count": len(deduped),
+                "actionable_count": band_counts["high"] + band_counts["medium"],
+                "high_confidence_count": band_counts["high"],
                 "registered_services": deduped,
+                "confidence_breakdown": band_counts,
             },
+            # ``result_count`` stays as the raw hit count for framework
+            # metrics consistency. Downstream consumers that want to
+            # avoid acting on noise should read ``actionable_count`` or
+            # filter ``registered_services`` by ``confidence_band``.
             result_count=len(deduped),
         )
 

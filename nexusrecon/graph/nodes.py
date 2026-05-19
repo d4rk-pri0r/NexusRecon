@@ -319,33 +319,65 @@ async def phase2_identity_cloud(state: CampaignGraphState) -> CampaignGraphState
     state["cloud_intel"] = cloud_intel
     state["email_intel"] = email_intel
 
-    # Build account-association summary for the agent: per-email
-    # count of holehe + maigret hits, plus aggregate handle patterns
-    # that appeared on multiple services (high-confidence handle).
+    # Build account-association summary for the agent. Filters maigret
+    # hits to those at "actionable" confidence (>= 0.6) so the
+    # cloud_identity agent doesn't reason about noise. Common-name
+    # collisions (smith on Reddit derived from john.smith@... etc.)
+    # have already been scored down by the attribution scorer; this
+    # is just where we threshold.
     account_summary: Dict[str, Any] = {
         "per_email_account_count": {},
-        "high_confidence_handles": [],
+        "actionable_accounts": [],
+        "filtered_noise_count": 0,
     }
-    handle_service_count: Dict[str, int] = {}
     for em, record in email_intel["emails"].items():
-        holehe_count = len(record.get("registered_services") or [])
-        maigret_count = len(record.get("maigret_accounts") or [])
-        if holehe_count or maigret_count:
+        holehe_hits = record.get("registered_services") or []
+        maigret_hits = record.get("maigret_accounts") or []
+
+        # Split maigret hits by confidence band ── only actionable
+        # (medium + high) feeds the agent prompt. Noise gets counted
+        # but not surfaced so the agent isn't tempted to act on it.
+        actionable_maigret = [
+            h for h in maigret_hits
+            if h.get("confidence", 0.0) >= 0.6
+        ]
+        noise_maigret = [
+            h for h in maigret_hits
+            if h.get("confidence", 0.0) < 0.6
+        ]
+        account_summary["filtered_noise_count"] += len(noise_maigret)
+
+        if holehe_hits or actionable_maigret:
             account_summary["per_email_account_count"][em] = {
-                "holehe": holehe_count,
-                "maigret": maigret_count,
+                "holehe": len(holehe_hits),
+                "maigret_actionable": len(actionable_maigret),
+                "maigret_noise_filtered": len(noise_maigret),
                 "derived_usernames": record.get("derived_usernames", []),
             }
-        for hit in record.get("maigret_accounts") or []:
-            handle = hit.get("username")
-            if handle:
-                handle_service_count[handle] = handle_service_count.get(handle, 0) + 1
-    # A handle that appears on 3+ services is likely the person's
-    # consistent online identity, not a coincidence.
-    account_summary["high_confidence_handles"] = sorted(
-        [(h, c) for h, c in handle_service_count.items() if c >= 3],
-        key=lambda x: -x[1],
-    )[:10]
+
+        # Build the per-account "actionable" record carrying enough
+        # evidence for the agent to cite (rationale + signals + url).
+        for hit in actionable_maigret:
+            account_summary["actionable_accounts"].append({
+                "email": em,
+                "handle": hit.get("username"),
+                "service": hit.get("service"),
+                "url": hit.get("url"),
+                "confidence": hit.get("confidence"),
+                "confidence_band": hit.get("confidence_band"),
+                "rationale": hit.get("confidence_rationale"),
+                "signals": hit.get("confidence_signals"),
+            })
+
+    # Sort actionable accounts by confidence descending for the agent.
+    account_summary["actionable_accounts"].sort(
+        key=lambda a: -a.get("confidence", 0.0),
+    )
+    # Cap the list for context-window politeness ── top 25 are plenty
+    # for the agent to reason about.
+    account_summary["actionable_accounts"] = (
+        account_summary["actionable_accounts"][:25]
+    )
 
     # Agent synthesis: Cloud & Identity Specialist analyzes
     executor = _get_executor()
@@ -366,12 +398,19 @@ async def phase2_identity_cloud(state: CampaignGraphState) -> CampaignGraphState
                         "3. Email format patterns and their confidence levels "
                         "4. Recommended next steps for identity-based attack vectors "
                         "5. Low-confidence cloud assets (attribution_confidence < 0.5) must be tagged [POSSIBLE] with info severity only "
-                        "6. Account-association correlations from holehe + maigret: which employees "
-                        "have the broadest online footprint (highest combined hit count); which "
-                        "handle patterns appear consistently across multiple services (likely "
-                        "stable identity); and what those handles imply for breach-correlation "
-                        "follow-up (the dispatcher should consider running hibp/intelx/dehashed "
-                        "against high-confidence handles in addition to the harvested email).",
+                        "6. Account-association analysis. The ``account_associations.actionable_accounts`` "
+                        "list contains maigret hits that scored >= 0.6 attribution confidence after "
+                        "applying derivation-rank + handle-uniqueness + service-tier + profile-coherence "
+                        "scoring. Each entry carries its score, confidence_band (high/medium), and a "
+                        "rationale string. The ``filtered_noise_count`` field reports how many hits "
+                        "the scorer rejected as collisions ── DO NOT speculate about those; they are "
+                        "common-name false positives (john.smith on Reddit, admin on a forum, etc.). "
+                        "For each high-band actionable account, cite the rationale and recommend a "
+                        "follow-up dispatch (e.g. hibp/intelx/dehashed against the confirmed handle "
+                        "as a separate query from the email). For medium-band accounts, flag them as "
+                        "tentative and suggest profile-page verification before action. Never claim a "
+                        "handle belongs to the email's owner without citing at least one strong signal "
+                        "from the rationale (exact derivation, Tier 1 service, or profile corroboration).",
             state=state,
         )
         state.setdefault("agent_messages", []).append({

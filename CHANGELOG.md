@@ -101,6 +101,50 @@ minor bumps (0.x → 0.x+1) may break APIs.
   service-hits with same username), with directive to surface
   account-association correlations and recommend follow-up
   breach-database lookups against confirmed handles.
+- **Attribution confidence scoring**
+  (`nexusrecon/core/attribution.py`): multi-axis scorer that
+  defends the framework against the "John Smith" false-positive
+  trap. Replaces the previous "≥3 service hits = high confidence"
+  heuristic (which guaranteed false positives on common names)
+  with a weighted combination of four signals:
+  - **Derivation rank**: how directly the handle ties to the
+    verified email. Exact local-part match = 1.0; stripped-suffix
+    variant = 0.8; separator variant = 0.6; initial-prefix
+    pattern = 0.4; lone-component = 0.2.
+  - **Handle uniqueness**: membership in a bundled common-handles
+    list (~400 entries: top US given/family names from Census,
+    generic role handles, common breach-data patterns). Common
+    handles get a length-weighted penalty.
+  - **Service trust tier**: hand-curated tier mapping covering
+    ~80 services. Tier 1 (LinkedIn/GitHub/StackOverflow) = 1.0;
+    Tier 2 (Reddit/Twitter/Discord) = 0.7; Tier 3
+    (gaming/image-hosts) = 0.4; Tier 4 (dating/anonymous) = 0.2.
+  - **Profile coherence**: bio mentions email domain stem? Profile
+    name matches harvested name? Mostly 0.0 today because maigret
+    rarely exposes bio text; lays the foundation for Phase B
+    (profile-page fetching).
+  Weights: derivation 0.35, uniqueness 0.20, service-tier 0.20,
+  profile 0.25. Actionable threshold 0.6. 41 unit tests pin every
+  signal individually plus the John-Smith-collision-filtered and
+  obvious-attribution-clears-threshold end-to-end scenarios.
+- **Maigret tool computes attribution per hit**: every entry in
+  `registered_services` now carries `confidence` (float),
+  `confidence_band` (high/medium/noise), `confidence_signals`
+  (per-axis breakdown), and `confidence_rationale` (human-readable
+  citation string). Hits are sorted by confidence descending. New
+  `actionable_count` and `confidence_breakdown` fields summarise
+  the scoring distribution. 3 new integration tests verify the
+  scoring is wired and hits sort correctly.
+- **Phase 2 filters maigret noise before reaching the agent**: the
+  `account_associations` payload now contains only hits at the
+  actionable threshold (≥ 0.6) and reports the noise count
+  separately. The `cloud_identity` agent prompt directs the LLM
+  to cite the rationale per actionable hit and explicitly NOT
+  speculate about the filtered noise (John Smiths on Reddit, admin
+  on random forums, etc.). The dispatcher trace becomes
+  defensible: "this handle scored 0.78 because exact-derivation +
+  Tier 1 service + bio mentions employer" instead of "this
+  handle hit on 24 services."
 
 ### Changed
 

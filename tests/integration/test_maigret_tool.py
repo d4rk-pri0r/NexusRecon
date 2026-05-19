@@ -290,6 +290,95 @@ class TestMaigretEndToEnd:
         assert result.result_count == 0
 
     @patch("shutil.which", return_value="/usr/local/bin/maigret")
+    async def test_each_hit_carries_confidence_and_signals(self, _which):
+        """Every parsed hit should have ``confidence``,
+        ``confidence_band``, ``confidence_signals``, and
+        ``confidence_rationale`` attached by the scorer."""
+        tool = MaigretTool()
+        mock_create = _build_mock_subprocess(_MAIGRET_JSON_HIT, "jane.doe")
+
+        with patch("asyncio.create_subprocess_exec", new=mock_create):
+            result = await tool.run("jane.doe", target_type="username")
+
+        for hit in result.data["registered_services"]:
+            assert "confidence" in hit
+            assert 0.0 <= hit["confidence"] <= 1.0
+            assert hit["confidence_band"] in ("high", "medium", "noise")
+            assert set(hit["confidence_signals"].keys()) == {
+                "derivation", "uniqueness", "service_tier", "profile",
+            }
+            assert isinstance(hit["confidence_rationale"], str)
+            assert hit["confidence_rationale"]  # non-empty
+
+    @patch("shutil.which", return_value="/usr/local/bin/maigret")
+    async def test_actionable_count_filters_noise(self, _which):
+        """``actionable_count`` should only count hits at medium+ band ──
+        the noise floor stays out of the actionable metric."""
+        tool = MaigretTool()
+        # Mix: GitHub for jane.doe (Tier 1, low confidence as plain
+        # username with no email anchor) vs a distinctive handle on
+        # GitHub (should clear actionable).
+        fixture = {
+            "GitHub": {
+                "url_user": "https://github.com/xochitl.vukovic",
+                "status": {"status": "Claimed", "ids": {}},
+            },
+        }
+        mock_create = _build_mock_subprocess(fixture, "xochitl.vukovic")
+
+        with patch("asyncio.create_subprocess_exec", new=mock_create):
+            result = await tool.run(
+                "xochitl.vukovic@example.com",
+                target_type="email",
+                max_candidates=1,
+            )
+
+        # The hit is exact-derivation + Tier 1 + distinctive handle ──
+        # should clear actionable.
+        assert result.data["actionable_count"] >= 1
+        assert result.data["confidence_breakdown"]["high"] + result.data["confidence_breakdown"]["medium"] >= 1
+
+    @patch("shutil.which", return_value="/usr/local/bin/maigret")
+    async def test_hits_sorted_by_confidence_descending(self, _which):
+        """The most credible hits should appear first in
+        ``registered_services``. Downstream consumers truncate to top
+        N for agent context windows; we don't want noise outranking
+        signal."""
+        tool = MaigretTool()
+        # Mix of high-trust (GitHub) and low-trust (Steam) service hits
+        # for the same handle. GitHub should rank higher.
+        fixture = {
+            "Steam": {
+                "url_user": "https://steamcommunity.com/id/jane.doe",
+                "status": {"status": "Claimed", "ids": {}},
+            },
+            "GitHub": {
+                "url_user": "https://github.com/jane.doe",
+                "status": {"status": "Claimed", "ids": {}},
+            },
+            "OkCupid": {
+                "url_user": "https://okcupid.com/jane.doe",
+                "status": {"status": "Claimed", "ids": {}},
+            },
+        }
+        mock_create = _build_mock_subprocess(fixture, "jane.doe")
+
+        with patch("asyncio.create_subprocess_exec", new=mock_create):
+            result = await tool.run(
+                "jane.doe@example.com",
+                target_type="email",
+                max_candidates=1,
+            )
+
+        confidences = [h["confidence"] for h in result.data["registered_services"]]
+        assert confidences == sorted(confidences, reverse=True), (
+            f"hits not sorted by confidence: {confidences}"
+        )
+        # GitHub (Tier 1) should appear before OkCupid (Tier 4).
+        services_in_order = [h["service"] for h in result.data["registered_services"]]
+        assert services_in_order.index("GitHub") < services_in_order.index("OkCupid")
+
+    @patch("shutil.which", return_value="/usr/local/bin/maigret")
     async def test_dedup_across_candidates(self, _which):
         """Two derived usernames hitting the same service must produce
         ONE finding, not two, per the (username, service) dedup."""
