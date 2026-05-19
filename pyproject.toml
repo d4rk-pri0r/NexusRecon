@@ -82,6 +82,11 @@ dev = [
     "pytest>=8.2.0",
     "pytest-asyncio>=0.23.0",
     "pytest-cov>=5.0.0",
+    # pytest-timeout: per-test timeout protection. Without it, a test
+    # that accidentally invokes a real subprocess or hits a real network
+    # endpoint will hang indefinitely (this happened with TestPhase7
+    # and TestRunWorkflow before the unit/ mocks were fixed).
+    "pytest-timeout>=2.3.0",
     "black>=24.4.0",
     "ruff>=0.5.0",
     "mypy>=1.10.0",
@@ -143,10 +148,16 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-# Default discovery excludes ``tests/live/`` — those tests hit real
+# Default discovery excludes ``tests/live/`` ── those tests hit real
 # provider APIs and are opt-in via ``pytest tests/live/`` explicitly.
 testpaths = ["tests/unit", "tests/integration", "tests/smoke"]
 # Add the repo root to sys.path so test modules can import the shared
 # fixture loader: ``from tests.fixtures import load_fixture``.
 pythonpath = ["."]
 filterwarnings = ["ignore::DeprecationWarning"]
+# Global per-test timeout. 120s covers slow integration tests that
+# fan out across the registry; unit tests should be well under 1s.
+# Any test that exceeds this is hanging on something it shouldn't be
+# touching ── a real subprocess, a network call, an infinite loop.
+# Override per-test with ``@pytest.mark.timeout(N)`` when justified.
+timeout = 120

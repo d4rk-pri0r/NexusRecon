@@ -183,11 +183,17 @@ class TestAgentExecutor:
             {"seeds": ["example.com"], "findings": [{"title": "test"}]},
             "Analyze the data",
         )
+        # Identity preamble (agent=None branch).
         assert "NexusRecon OSINT specialist" in context
+        # Task prompt verbatim.
         assert "Analyze the data" in context
-        assert "seeds" in context
-        assert "findings" in context
-        assert "Instructions" in context
+        # Data sections rendered with ## header per key.
+        assert "## seeds" in context
+        assert "## findings" in context
+        # Post-prompt analysis directive (B25 ordering ── analysis prose
+        # instructions live AFTER the FINDINGS_JSON block, not as
+        # generic "Instructions" boilerplate the old test asserted on).
+        assert "Analysis (write AFTER emitting FINDINGS_JSON):" in context
 
     def test_build_context_skips_completed_phases(self):
         config = MagicMock()

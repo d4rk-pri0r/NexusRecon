@@ -53,12 +53,50 @@ minor bumps (0.x → 0.x+1) may break APIs.
 - `examples/sample_run/README.md`: flagged as a walkthrough only;
   the actual checked-in real-target report run is the v0.6.0
   milestone (see `ROADMAP.md`).
+- `pyproject.toml`: added `pytest-timeout>=2.3.0` to dev deps and
+  set a global `timeout = 120` in `[tool.pytest.ini_options]`. Any
+  unit test that exceeds the timeout is doing something it
+  shouldn't (real subprocess, real network call, infinite loop).
 
 ### Fixed
 
 - `github_recon` and `gitdorker`: replaced blocking `time.sleep(1.1)`
   with `await asyncio.sleep(1.1)` so dork-loop pauses don't block
   the event loop for tools running in parallel.
+- **`graph/nodes.py`**: 19 occurrences of `isinstance(x, Exception)`
+  guarding `asyncio.gather(return_exceptions=True)` results changed
+  to `isinstance(x, BaseException)`. `asyncio.CancelledError` is a
+  `BaseException` subclass in Python 3.8+, not `Exception`, so a
+  cancelled tool task crashed the phase node with `AttributeError:
+  'CancelledError' object has no attribute 'success'`. Same crash
+  fired under `pytest-timeout` (the `_pytest.outcomes.Failed`
+  exception also inherits from `BaseException`), which is how the
+  bug surfaced. Added a regression test
+  (`TestPhase1::test_tool_baseexception_does_not_crash`).
+- **Test suite cleanup, 7 pre-existing failures**:
+  - `test_config.py::test_available_keys_empty` and
+    `test_proxy_defaults` were leaking the developer's local `.env`
+    into the test process (pydantic-settings reads `.env` by
+    default). Fixed with a `clean_env` fixture that clears the
+    relevant env vars and passes `_env_file=None` to
+    `NexusConfig(...)`.
+  - `test_agent_executor.py::test_build_context_with_data` asserted
+    on `"Instructions" in context`, a string the production code
+    stopped emitting several refactors ago. Replaced with assertions
+    against the current B25 "Analysis (write AFTER emitting
+    FINDINGS_JSON):" directive.
+  - `test_nodes.py::TestPhase7` and `TestPhase8` had stub
+    `test_runs_with_minimal_state` tests with no mocks, so they
+    triggered real `nuclei` / `httpx` / LLM API calls and hung or
+    failed depending on what was installed. Replaced with proper
+    `@patch`-based mocks: tool registry returns all-failure, agent
+    executor returns canned responses.
+  - `test_graph.py::TestRunWorkflow` (3 tests) had no mocks for the
+    full-pipeline `run_workflow` call; same root cause as Phase 7/8.
+    Added a `mock_workflow_deps` fixture that patches
+    `nexusrecon.graph.nodes.get_registry` and `_get_executor` for
+    the duration of each test. Unit-suite runtime fell from ~205s
+    (7 failures + 30s+ timeouts) to ~7s (all passing).
 
 ## [0.5.0] - 2026-05-18 - pre-beta
 

@@ -1,4 +1,6 @@
 """Unit tests for LangGraph phase nodes with mocked dependencies."""
+import asyncio
+
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -269,6 +271,38 @@ class TestPhase1:
         result = await phase1_passive_footprinting(state)
         assert "phase1" in result.get("completed_phases", [])
 
+    @pytest.mark.asyncio
+    @patch("nexusrecon.graph.nodes.get_registry")
+    async def test_tool_baseexception_does_not_crash(self, mock_get_registry):
+        """Regression for the ``Failed`` / ``CancelledError`` crash.
+
+        ``asyncio.gather(return_exceptions=True)`` returns BaseException
+        subclasses (asyncio.CancelledError, pytest's _pytest.outcomes.Failed
+        on timeout, etc.) as result items. ``isinstance(x, Exception)``
+        was False for those, so the loop fell through to ``x.success`` and
+        crashed with ``AttributeError: '<X>' object has no attribute
+        'success'``. The fix in graph/nodes.py uses ``BaseException`` for
+        every gather-result guard ── this test pins that.
+        """
+        mock_registry = MagicMock()
+
+        async def _raise_cancelled(tool_name, target, target_type="domain", **kwargs):
+            # CancelledError is a BaseException subclass in Python 3.8+, not
+            # an Exception subclass. asyncio.gather(return_exceptions=True)
+            # will catch and return it as a result item.
+            raise asyncio.CancelledError("simulated task cancellation")
+
+        mock_registry.execute = AsyncMock(side_effect=_raise_cancelled)
+        mock_registry.get.return_value = None
+        mock_registry.available_tools = MagicMock(return_value=[])
+        mock_get_registry.return_value = mock_registry
+
+        state = _make_state()
+        # Must not raise. Pre-fix this crashed with AttributeError at
+        # nexusrecon/graph/nodes.py:79.
+        result = await phase1_passive_footprinting(state)
+        assert "phase1" in result.get("completed_phases", [])
+
 
 # ── Phase 2: Identity and Cloud ──────────────────────────────────────────────
 
@@ -420,7 +454,29 @@ class TestPhase6:
 
 class TestPhase7:
     @pytest.mark.asyncio
-    async def test_runs_with_minimal_state(self):
+    @patch("nexusrecon.graph.nodes._get_executor")
+    @patch("nexusrecon.graph.nodes.get_registry")
+    async def test_runs_with_minimal_state(self, mock_get_registry, mock_get_executor):
+        """Phase 7 with all tools mocked to return failure ── exercises the
+        empty-vuln-intel path and reaches the ``completed_phases`` append.
+
+        Without these mocks the test invoked real ``nuclei`` / ``exploitdb``
+        / NVD HTTP calls, took 30+ seconds, and failed wherever the binary
+        or network was unavailable.
+        """
+        mock_registry = MagicMock()
+
+        async def _all_fail(tool_name, target, target_type="domain", **kwargs):
+            return ToolResult(success=False, source=tool_name, error="mocked: tool not available in unit test")
+
+        mock_registry.execute = AsyncMock(side_effect=_all_fail)
+        mock_registry.available_tools = MagicMock(return_value=[])
+        mock_get_registry.return_value = mock_registry
+
+        mock_exec = MagicMock()
+        mock_exec.run_agent = AsyncMock(return_value={"output": "no vulns surfaced", "agent": "vuln_correlator", "step_count": 0})
+        mock_get_executor.return_value = mock_exec
+
         state = _make_state()
         result = await phase7_vuln_pretext(state)
         assert "phase7" in result.get("completed_phases", [])
@@ -430,7 +486,15 @@ class TestPhase7:
 
 class TestPhase8:
     @pytest.mark.asyncio
-    async def test_runs_with_minimal_state(self):
+    @patch("nexusrecon.graph.nodes._get_executor")
+    async def test_runs_with_minimal_state(self, mock_get_executor):
+        """Phase 8 runs ``score_findings`` synchronously then calls the risk
+        analyst agent. Mock the executor so we don't hit a real LLM API.
+        ``score_findings`` itself has no external dependencies."""
+        mock_exec = MagicMock()
+        mock_exec.run_agent = AsyncMock(return_value={"output": "no threads surfaced", "agent": "risk_analyst", "step_count": 0})
+        mock_get_executor.return_value = mock_exec
+
         state = _make_state()
         result = await phase8_attack_surface(state)
         assert "phase8" in result.get("completed_phases", [])

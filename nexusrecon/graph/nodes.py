@@ -56,6 +56,21 @@ def _get_tools_by_tier(max_tier: str, exclude_categories: set = None) -> List[An
     return tools
 
 
+# Phase nodes use ``asyncio.gather(return_exceptions=True)`` extensively.
+# That call returns BaseException subclasses (e.g. ``asyncio.CancelledError``
+# in 3.8+, pytest's ``_pytest.outcomes.Failed`` on timeout) as result items
+# rather than re-raising them. ``isinstance(x, Exception)`` returns False
+# for those because they inherit from ``BaseException`` directly, so the
+# downstream ``x.success`` access crashed the phase. All gather-result
+# guards in this file use ``BaseException`` for that reason.
+#
+# We intentionally treat BaseException-derived results as "skip and
+# continue" rather than re-raising: the outer campaign runner wraps the
+# workflow and handles aborts at that level, and asyncio's structured
+# concurrency means cancellation still propagates correctly through the
+# enclosing task.
+
+
 # ── Phase 1: Passive Footprinting ─────────────────────────────────────────────
 
 async def phase1_passive_footprinting(state: CampaignGraphState) -> CampaignGraphState:
@@ -76,7 +91,7 @@ async def phase1_passive_footprinting(state: CampaignGraphState) -> CampaignGrap
             return_exceptions=True,
         )
         for result in sub_results:
-            if isinstance(result, Exception) or not result.success:
+            if isinstance(result, BaseException) or not result.success:
                 continue
             for sub in result.data.get("subdomains", []):
                 sub_name = sub.get("subdomain", sub) if isinstance(sub, dict) else sub
@@ -92,11 +107,11 @@ async def phase1_passive_footprinting(state: CampaignGraphState) -> CampaignGrap
             registry.execute("asn_bgp", seed, "domain"),
             return_exceptions=True,
         )
-        if not isinstance(dns_r, Exception) and dns_r.success:
+        if not isinstance(dns_r, BaseException) and dns_r.success:
             domain_intel["dns"] = dns_r.data
-        if not isinstance(whois_r, Exception) and whois_r.success:
+        if not isinstance(whois_r, BaseException) and whois_r.success:
             domain_intel["whois"] = whois_r.data
-        if not isinstance(asn_r, Exception) and asn_r.success:
+        if not isinstance(asn_r, BaseException) and asn_r.success:
             domain_intel["asn"] = asn_r.data
 
     # Agent synthesis: Passive Recon Specialist analyzes the raw data
@@ -141,7 +156,7 @@ async def phase1_passive_footprinting(state: CampaignGraphState) -> CampaignGrap
     dark_results = await asyncio.gather(*dark_tasks, return_exceptions=True)
     seeds_list = state.get("seeds", [])
     for i, result in enumerate(dark_results):
-        if isinstance(result, Exception) or not result.success:
+        if isinstance(result, BaseException) or not result.success:
             continue
         seed = seeds_list[i // 4]
         tool_keys = ["ransomwatch", "ahmia", "pastebin", "certstream"]
@@ -231,7 +246,7 @@ async def phase2_identity_cloud(state: CampaignGraphState) -> CampaignGraphState
             return_exceptions=True,
         )
         for item in holehe_results:
-            if isinstance(item, Exception):
+            if isinstance(item, BaseException):
                 continue
             em, data = item
             if data is not None:
@@ -308,7 +323,7 @@ async def phase3_code_leakage(state: CampaignGraphState) -> CampaignGraphState:
         ])
     code_results = await asyncio.gather(*code_tasks, return_exceptions=True)
     for item in code_results:
-        if isinstance(item, Exception):
+        if isinstance(item, BaseException):
             continue
         key, data = item
         if data is not None:
@@ -465,7 +480,7 @@ async def phase5_light_active(state: CampaignGraphState) -> CampaignGraphState:
         return_exceptions=True,
     )
     for item in probe_results:
-        if isinstance(item, Exception):
+        if isinstance(item, BaseException):
             continue
         sub, data = item
         if data is not None:
@@ -497,7 +512,7 @@ async def phase5_light_active(state: CampaignGraphState) -> CampaignGraphState:
             return_exceptions=True,
         )
         for (_, ip), result in zip(gn_items[:50], gn_results):
-            if not isinstance(result, Exception) and result.success:
+            if not isinstance(result, BaseException) and result.success:
                 infra_intel[f"gn/{ip}"] = result.data
 
     # Agent synthesis: Active Recon Specialist
@@ -593,7 +608,7 @@ async def phase6_active(state: CampaignGraphState) -> CampaignGraphState:
     ]
     port_results = await asyncio.gather(*port_tasks, return_exceptions=True)
     for item in port_results:
-        if isinstance(item, Exception):
+        if isinstance(item, BaseException):
             continue
         sub, _port, data = item
         if data:
@@ -635,7 +650,7 @@ async def phase6_active(state: CampaignGraphState) -> CampaignGraphState:
     ]
     path_results = await asyncio.gather(*path_tasks, return_exceptions=True)
     for item in path_results:
-        if isinstance(item, Exception):
+        if isinstance(item, BaseException):
             continue
         sub, _path, data = item
         if data:
@@ -720,13 +735,13 @@ async def phase7_vuln_pretext(state: CampaignGraphState) -> CampaignGraphState:
         return_exceptions=True,
     )
     for tech, res in zip(list(tech_names)[:5], nvd_results):
-        if not isinstance(res, Exception) and res.success:
+        if not isinstance(res, BaseException) and res.success:
             vuln_intel[f"nvd/{tech}"] = res.data
 
     # Collect all CVE IDs from NVD results
     all_cve_ids: Dict[str, str] = {}  # cve_id → tech_name
     for tech, res in zip(list(tech_names)[:5], nvd_results):
-        if isinstance(res, Exception) or not res.success:
+        if isinstance(res, BaseException) or not res.success:
             continue
         cves = res.data.get("vulnerabilities", res.data.get("cves", []))
         for cve in (cves or []):
@@ -756,7 +771,7 @@ async def phase7_vuln_pretext(state: CampaignGraphState) -> CampaignGraphState:
 
         # EPSS
         epss_r = await registry.execute("epss", cve_id, "cve")
-        if not isinstance(epss_r, Exception) and epss_r.success:
+        if not isinstance(epss_r, BaseException) and epss_r.success:
             enriched["epss"] = epss_r.data.get("epss_score", 0.0)
             enriched["epss_percentile"] = epss_r.data.get("epss_percentile", 0.0)
 
@@ -771,22 +786,22 @@ async def phase7_vuln_pretext(state: CampaignGraphState) -> CampaignGraphState:
         enriched["in_kev"] = cve_id.upper() in kev_ids
 
         # ExploitDB / PoC
-        if not isinstance(exploitdb_r, Exception) and exploitdb_r.success:
+        if not isinstance(exploitdb_r, BaseException) and exploitdb_r.success:
             enriched["has_exploit"] = exploitdb_r.data.get("exploit_count", 0) > 0 or len(exploitdb_r.data.get("github_pocs", [])) > 0
             enriched["has_metasploit"] = exploitdb_r.data.get("has_metasploit", False)
             enriched["sources"].append("exploitdb")
 
         # Vulners Metasploit flag
-        if not isinstance(vulners_r, Exception) and vulners_r.success:
+        if not isinstance(vulners_r, BaseException) and vulners_r.success:
             enriched["has_metasploit"] = enriched.get("has_metasploit") or vulners_r.data.get("has_metasploit", False)
 
         # Nuclei template
-        if not isinstance(template_r, Exception) and template_r.success:
+        if not isinstance(template_r, BaseException) and template_r.success:
             enriched["has_nuclei_template"] = template_r.data.get("has_template", False)
             enriched["nuclei_hint"] = template_r.data.get("nuclei_run_hint", "")
 
         # GHSA package ecosystems
-        if not isinstance(ghsa_r, Exception) and ghsa_r.success:
+        if not isinstance(ghsa_r, BaseException) and ghsa_r.success:
             enriched["affected_packages"] = ghsa_r.data.get("affected_packages", [])
 
         return cve_id, enriched
@@ -797,7 +812,7 @@ async def phase7_vuln_pretext(state: CampaignGraphState) -> CampaignGraphState:
             return_exceptions=True,
         )
         for item in enrich_results:
-            if isinstance(item, Exception):
+            if isinstance(item, BaseException):
                 continue
             cid, enriched = item
             enriched_cves[cid] = enriched

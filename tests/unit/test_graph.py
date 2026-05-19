@@ -1,11 +1,50 @@
-"""Tests for graph/workflow.py and graph/nodes.py — LangGraph workflow."""
+"""Tests for graph/workflow.py and graph/nodes.py ── LangGraph workflow."""
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
+
 from nexusrecon.graph.state import CampaignGraphState
 from nexusrecon.graph.workflow import (
     build_campaign_workflow, PHASE_ORDER, PHASE_TIERS, run_workflow,
 )
 from nexusrecon.graph.nodes import route_to_next_phase
 from nexusrecon.models.campaign import CampaignMode
+from nexusrecon.tools.base import ToolResult
+
+
+@pytest.fixture
+def mock_workflow_deps():
+    """Stub the registry and agent executor used by every phase node.
+
+    Without these mocks ``run_workflow`` runs all 9 phases through to the
+    real tool registry, which means real ``nuclei`` / ``subfinder`` /
+    ``amass`` subprocesses, real LLM API calls, and 90+ second runtimes
+    with no determinism. With them, every tool returns
+    ``ToolResult(success=False, ...)`` and every agent returns a canned
+    response, so the workflow exercises its plumbing (state passing,
+    phase transitions, completion tracking) without leaving the test
+    process.
+    """
+    mock_registry = MagicMock()
+
+    async def _all_fail(tool_name, target, target_type="domain", **kwargs):
+        return ToolResult(success=False, source=tool_name, error="mocked: tool not available in unit test")
+
+    mock_registry.execute = AsyncMock(side_effect=_all_fail)
+    mock_registry.available_tools = MagicMock(return_value=[])
+    mock_registry.get = MagicMock(return_value=None)
+
+    mock_executor = MagicMock()
+    mock_executor.run_agent = AsyncMock(return_value={
+        "output": "no findings (mocked)",
+        "agent": "mocked",
+        "step_count": 0,
+    })
+    mock_executor.audit_findings = MagicMock(return_value=([], []))
+
+    with patch("nexusrecon.graph.nodes.get_registry", return_value=mock_registry), \
+         patch("nexusrecon.graph.nodes._get_executor", return_value=mock_executor):
+        yield {"registry": mock_registry, "executor": mock_executor}
 
 
 class TestPhaseOrder:
@@ -75,7 +114,7 @@ class TestBuildWorkflow:
 
 class TestRunWorkflow:
     @pytest.mark.asyncio
-    async def test_run_workflow_completes(self):
+    async def test_run_workflow_completes(self, mock_workflow_deps):
         state = {
             "campaign_id": "test-campaign",
             "seeds": ["example.com"],
@@ -106,7 +145,7 @@ class TestRunWorkflow:
         assert len(result.get("completed_phases", [])) > 0
 
     @pytest.mark.asyncio
-    async def test_run_workflow_preserves_state(self):
+    async def test_run_workflow_preserves_state(self, mock_workflow_deps):
         state = {
             "campaign_id": "test-002",
             "seeds": ["test.com"],
@@ -136,7 +175,7 @@ class TestRunWorkflow:
         assert len(result.get("completed_phases", [])) >= 1
 
     @pytest.mark.asyncio
-    async def test_run_workflow_all_phases(self):
+    async def test_run_workflow_all_phases(self, mock_workflow_deps):
         """Verify all phases eligible for MEDIUM mode complete in the graph.
 
         MEDIUM mode (tier limit 2) excludes phase6 (tier 3).

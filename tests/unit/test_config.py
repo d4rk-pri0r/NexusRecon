@@ -1,6 +1,34 @@
-"""Tests for core/config.py — NexusConfig."""
+"""Tests for core/config.py ── NexusConfig."""
 import os
+
+import pytest
+
 from nexusrecon.core.config import NexusConfig
+
+
+# Env vars that the "default values" tests assume are not set. A local
+# developer ``.env`` would otherwise win over the field defaults via
+# pydantic-settings' ``env > .env > default`` precedence, masking real
+# default-behavior regressions. Each test that asserts on defaults clears
+# the relevant vars via this fixture AND passes ``_env_file=None`` to
+# NexusConfig so the file isn't read either.
+_DEFAULT_TEST_VARS = (
+    "NEXUS_PROXY_URL", "NEXUS_TOR_PROXY",
+    "SHODAN_API_KEY", "CENSYS_API_ID", "CENSYS_API_SECRET",
+    "VIRUSTOTAL_API_KEY", "GREYNOISE_API_KEY", "HUNTER_API_KEY",
+    "HAVEIBEENPWNED_API_KEY", "GITHUB_TOKEN",
+    "SECURITYTRAILS_API_KEY", "URLSCAN_API_KEY", "ABUSEIPDB_API_KEY",
+    "INTELX_API_KEY", "DEHASHED_API_KEY", "NEWSAPI_API_KEY",
+    "ADZUNA_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY",
+)
+
+
+@pytest.fixture
+def clean_env(monkeypatch):
+    """Strip env vars that would otherwise win over field defaults."""
+    for var in _DEFAULT_TEST_VARS:
+        monkeypatch.delenv(var, raising=False)
+    return monkeypatch
 
 
 class TestNexusConfig:
@@ -18,11 +46,12 @@ class TestNexusConfig:
         assert len(resolvers) >= 2
         assert "1.1.1.1" in resolvers
 
-    def test_available_keys_empty(self):
-        cfg = NexusConfig()
+    def test_available_keys_empty(self, clean_env):
+        # ``_env_file=None`` overrides the model_config's ``env_file=".env"``
+        # so a developer's local .env doesn't leak real keys into the test.
+        cfg = NexusConfig(_env_file=None)
         keys = cfg.available_keys()
         assert isinstance(keys, dict)
-        # All should be False (no env vars set in test)
         assert all(v is False for v in keys.values())
 
     def test_available_keys_with_env(self, monkeypatch):
@@ -47,8 +76,8 @@ class TestNexusConfig:
         assert cfg.ollama_base_url == "http://localhost:11434"
         assert cfg.ollama_model == "llama3.1:8b"
 
-    def test_proxy_defaults(self):
-        cfg = NexusConfig()
+    def test_proxy_defaults(self, clean_env):
+        cfg = NexusConfig(_env_file=None)
         assert cfg.proxy_url is None
         assert cfg.tor_proxy is None
 
