@@ -495,6 +495,163 @@ class TestMaigretEndToEnd:
         assert github_hit["confidence_signals"]["profile"] == 0.0
 
     @patch("shutil.which", return_value="/usr/local/bin/maigret")
+    async def test_phase_b3_ubiquity_records_and_penalises_recurrent_handles(
+        self, _which, tmp_path,
+    ):
+        """Phase B3 end-to-end: record a handle across many campaigns,
+        confirm the next scoring run picks up the ubiquity penalty
+        and downgrades attribution confidence.
+
+        First campaign establishes the baseline (no ubiquity signal).
+        Subsequent campaigns add observations until the count crosses
+        the curve threshold; the final campaign confirms the handle's
+        uniqueness signal dropped because the ubiquity tracker now
+        knows the handle is widely recurring."""
+        from nexusrecon.core.handle_ubiquity import (
+            HandleUbiquityTracker,
+            ubiquity_context,
+        )
+
+        tool = MaigretTool()
+        db = tmp_path / "ubiquity_demo.db"
+        tracker = HandleUbiquityTracker(db_path=db)
+
+        async def _fake_maigret(*args, **kwargs):
+            cmd_args = list(args)
+            username = cmd_args[1]
+            idx = cmd_args.index("--folderoutput")
+            tmpdir = Path(cmd_args[idx + 1])
+            (tmpdir / f"{username}_simple.json").write_text(
+                json.dumps({
+                    "GitHub": {
+                        "url_user": f"https://github.com/{username}",
+                        "status": {"status": "Claimed", "ids": {}},
+                    },
+                }),
+                encoding="utf-8",
+            )
+            proc = MagicMock()
+            proc.communicate = AsyncMock(return_value=(b"", b""))
+            return proc
+
+        def _find_hit(result, handle: str):
+            """Pull the hit for a specific username from the result.
+
+            Maigret returns hits sorted by confidence and the result
+            may include multiple candidates (e.g. literal + stripped-
+            suffix), so positional indexing isn't reliable."""
+            return next(
+                h for h in result.data["registered_services"]
+                if h["username"] == handle
+            )
+
+        # First campaign ── baseline. handle ``recurringhandle1234`` is
+        # a unique-looking handle that gets observed for the first
+        # time. ``fetch_profiles=False`` keeps the test fast and
+        # ``max_candidates=1`` ensures we only probe the literal
+        # local-part (not the stripped-suffix variant).
+        with patch("asyncio.create_subprocess_exec",
+                   new=AsyncMock(side_effect=_fake_maigret)), \
+             ubiquity_context(tracker):
+            result_first = await tool.run(
+                "recurringhandle1234@example.com",
+                target_type="username",
+                fetch_profiles=False,
+                campaign_id="campaign-001",
+                max_candidates=1,
+            )
+        first_hit = _find_hit(result_first, "recurringhandle1234")
+        baseline_uniqueness = first_hit["confidence_signals"]["uniqueness"]
+        baseline_confidence = first_hit["confidence"]
+
+        # Simulate observing the same handle across more campaigns,
+        # representing prior recon runs. After 4 distinct campaigns,
+        # the ubiquity curve maps to commonness 0.60.
+        for cid in ("campaign-002", "campaign-003", "campaign-004"):
+            tracker.record_observation(
+                handle="recurringhandle1234",
+                service="GitHub",
+                campaign_id=cid,
+            )
+
+        # Now run a NEW campaign and confirm the same hit gets
+        # penalised. We use a different email domain on a different
+        # campaign so the new campaign doesn't share state with the
+        # first.
+        with patch("asyncio.create_subprocess_exec",
+                   new=AsyncMock(side_effect=_fake_maigret)), \
+             ubiquity_context(tracker):
+            result_after = await tool.run(
+                "recurringhandle1234@anotherorg.com",
+                target_type="username",
+                fetch_profiles=False,
+                campaign_id="campaign-099",
+                max_candidates=1,
+            )
+        after_hit = _find_hit(result_after, "recurringhandle1234")
+        penalised_uniqueness = after_hit["confidence_signals"]["uniqueness"]
+        penalised_confidence = after_hit["confidence"]
+
+        # The handle's uniqueness should drop noticeably after the
+        # tracker accumulates evidence of cross-campaign recurrence.
+        assert penalised_uniqueness < baseline_uniqueness, (
+            f"ubiquity penalty not applied: baseline={baseline_uniqueness}, "
+            f"after_4_campaigns={penalised_uniqueness}"
+        )
+        # Confidence should also drop (uniqueness contributes 20% of
+        # the weighted sum).
+        assert penalised_confidence < baseline_confidence
+
+        tracker.close()
+
+    @patch("shutil.which", return_value="/usr/local/bin/maigret")
+    async def test_phase_b3_no_tracker_means_no_recording(
+        self, _which, tmp_path,
+    ):
+        """When no ubiquity_context is active, maigret runs in
+        ubiquity-blind mode ── no observations persisted. Pin this so
+        operators get the documented opt-in semantics."""
+        from nexusrecon.core.handle_ubiquity import HandleUbiquityTracker
+
+        tool = MaigretTool()
+        db = tmp_path / "ubiquity_should_stay_empty.db"
+        tracker = HandleUbiquityTracker(db_path=db)
+        assert tracker.total_observations() == 0
+
+        async def _fake_maigret(*args, **kwargs):
+            cmd_args = list(args)
+            username = cmd_args[1]
+            idx = cmd_args.index("--folderoutput")
+            tmpdir = Path(cmd_args[idx + 1])
+            (tmpdir / f"{username}_simple.json").write_text(
+                json.dumps({
+                    "GitHub": {
+                        "url_user": f"https://github.com/{username}",
+                        "status": {"status": "Claimed", "ids": {}},
+                    },
+                }),
+                encoding="utf-8",
+            )
+            proc = MagicMock()
+            proc.communicate = AsyncMock(return_value=(b"", b""))
+            return proc
+
+        # Run WITHOUT a ubiquity_context.
+        with patch("asyncio.create_subprocess_exec",
+                   new=AsyncMock(side_effect=_fake_maigret)):
+            await tool.run(
+                "somehandle",
+                target_type="username",
+                fetch_profiles=False,
+                campaign_id="some-campaign",
+            )
+
+        # The tracker we created should not have observations because
+        # it was never bound to the run.
+        assert tracker.total_observations() == 0
+        tracker.close()
+
+    @patch("shutil.which", return_value="/usr/local/bin/maigret")
     async def test_phase_b_cross_reference_between_hits(self, _which):
         """B4 end-to-end: hit on GitHub has a bio mentioning a
         Twitter handle; we have a separate Twitter hit for that

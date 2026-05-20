@@ -307,21 +307,27 @@ def _uniqueness(handle: str) -> float:
     """Return uniqueness in ``[0, 1]``. Higher = more unique = less
     likely to be a collision.
 
-    Combines two complementary signals:
+    Combines three complementary signals:
 
       - **Curated common-handles list** (Phase A): catches handle
         patterns that don't decompose into name tokens (``jsmith``,
         ``mjohnson``, ``admin``, ``test``). The list lookup gives a
         "common-handle commonness" score per length bucket.
-      - **Census/SSA name frequency** (Phase B): catches handles
+      - **Census/SSA name frequency** (Phase B2): catches handles
         decomposable into common name tokens (``john.smith``,
         ``patterson_dev``, ``smith.engineer``). The frequency lookup
         returns the maximum tier score of any component.
+      - **Cross-campaign ubiquity** (Phase B3): catches handles that
+        passed the previous two checks but recur across many of the
+        operator's unrelated campaigns (statistically common in the
+        operator's domain even if not on the curated list). Only
+        active when a tracker is bound via ``ubiquity_context``;
+        otherwise contributes 0 commonness.
 
-    Final uniqueness = ``1.0 - max(curated_commonness, name_freq_commonness)``,
-    with a small length bonus for very long handles that survive both
-    checks. The ``max`` takes the more pessimistic signal: a handle is
-    only unique if BOTH checks agree it isn't common.
+    Final uniqueness = ``1.0 - max(curated, name_freq, ubiquity)``,
+    with a small length bonus for very long handles that survive all
+    three checks. The ``max`` takes the most pessimistic signal: a
+    handle is only "unique" when ALL signals agree it isn't common.
     """
     handle = handle.strip().lower()
     if not handle:
@@ -339,15 +345,24 @@ def _uniqueness(handle: str) -> float:
     else:
         curated_commonness = 0.65   # longer variant still somewhat common
 
-    # Phase B: census/SSA name-frequency commonness.
+    # Phase B2: census/SSA name-frequency commonness.
     name_freq_commonness = handle_commonness(handle)
 
-    # Take the worse (higher) commonness score so a handle gets the
-    # benefit of the doubt only when BOTH signals agree it's unique.
-    commonness = max(curated_commonness, name_freq_commonness)
+    # Phase B3: cross-campaign ubiquity (opt-in via ubiquity_context).
+    # Lazy-import to avoid pulling sqlite3 at module-load time for
+    # operators who never opt in.
+    ubiquity_commonness = 0.0
+    from nexusrecon.core.handle_ubiquity import get_current_tracker
+    tracker = get_current_tracker()
+    if tracker is not None:
+        ubiquity_commonness = tracker.commonness_score(handle)
+
+    # Take the worst (highest) commonness so a handle gets the benefit
+    # of the doubt only when ALL three signals agree it's unique.
+    commonness = max(curated_commonness, name_freq_commonness, ubiquity_commonness)
     base = max(0.0, 1.0 - commonness)
 
-    # Length bonus for very long handles that pass both common-checks
+    # Length bonus for very long handles that pass all common-checks
     # ── statistical uniqueness scales with length.
     if commonness == 0.0 and length >= 12:
         base = min(1.0, base + 0.05)

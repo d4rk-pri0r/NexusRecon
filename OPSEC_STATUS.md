@@ -108,25 +108,64 @@ registry.set_campaign_context(
 
 This is a small wire-up but it crosses several modules. Separate PR.
 
-### Cross-campaign handle ubiquity tracking (Phase B item, deferred)
+### Cross-campaign handle ubiquity tracking (Phase B item B3)
 
-Phase B's attribution work added per-hit confidence scoring (Phase A
-basics + name-frequency + fetched profiles + linked-account graph).
-The fourth Phase B item ── tracking handle ubiquity across multiple
-campaigns to identify handles that recur on every campaign you run
-(strong "this is a common name, not your target" signal) ── is
-deliberately deferred from this PR because it requires:
+Now landed (`nexusrecon/core/handle_ubiquity.py`). Tracks which handles
+appear across multiple unrelated campaigns and contributes a uniqueness
+penalty proportional to the cross-campaign count. Catches the long-tail
+collisions that pass both the Phase A curated common-handles list and
+the Phase B census/SSA frequency tables but recur across the operator's
+unrelated campaigns (e.g. a niche-but-popular gamer handle that hits on
+every campaign you run).
 
-  - Persistent storage schema decisions (sqlite extension to the
-    audit DB? separate jsonl? what data model?)
-  - A privacy review (handles seen across campaigns is sensitive
-    data; need to confirm it can't leak between unrelated
-    engagements)
-  - A migration story for existing installs (back-fill or start fresh?)
+**Privacy properties:**
 
-Tracked for a separate session. The Phase A common-handles list +
-Phase B census/SSA frequency data already catch the most pathological
-cases; cross-campaign ubiquity is a long-tail refinement.
+  - **Opt-in by default.** The framework ships with no tracker bound.
+    A campaign records observations only when a tracker is explicitly
+    set via `ubiquity_context(tracker)` ── operators who don't opt in
+    get no persistence and no signal contribution.
+  - **Salted SHA-256 hashing.** Only hashes of handles are stored,
+    never plaintext. The salt is generated on first DB init and
+    stored alongside the data. Same handle within an install hashes
+    to the same value (so counting works); different installs use
+    different salts (so leaked DBs from two operators can't be
+    combined to confirm shared targets).
+  - **Default storage** at `~/.nexusrecon/handle_ubiquity.db` with
+    mode 0o700 on the parent directory. Override via the
+    `NEXUS_UBIQUITY_DB_PATH` env var or by passing a `db_path` to
+    the tracker constructor.
+
+**Commonness curve:**
+
+| Distinct campaigns | Commonness | Effect on uniqueness signal |
+|---|---|---|
+| 0-1 | 0.00 | No penalty (could be the first sighting of what becomes common) |
+| 2-3 | 0.30 | Mild penalty (~0.30 drop in uniqueness) |
+| 4-10 | 0.60 | Strong penalty (~0.60 drop) |
+| 11+ | 0.85 | Treated as a documented common handle |
+
+The attribution scorer combines this with the curated-list and name-
+frequency signals via `max()` so a handle is "unique" only when all
+three sources agree.
+
+**To opt in** from the campaign runner:
+
+```python
+from nexusrecon.core.handle_ubiquity import (
+    HandleUbiquityTracker, ubiquity_context,
+)
+
+tracker = HandleUbiquityTracker()  # default path
+with ubiquity_context(tracker):
+    await run_workflow(state)
+tracker.close()
+```
+
+Verified by `tests/unit/test_handle_ubiquity.py` (27 tests covering
+recording, hashing/salting, commonness curve, DB path resolution,
+context-var binding, robustness) plus
+`tests/integration/test_maigret_tool.py::test_phase_b3_*` for the
+end-to-end maigret-rescore loop.
 
 ### TLS / JA3 fingerprinting
 

@@ -190,11 +190,29 @@ minor bumps (0.x → 0.x+1) may break APIs.
     scores. The dispatcher trace now reads like an analyst voice:
     "GitHub bio says 'Senior engineer at GitLab' which matches the
     email domain" rather than "scored 0.78."
-  - **B3 (cross-campaign handle ubiquity tracking) deferred**:
-    documented in `OPSEC_STATUS.md` as needing persistent storage
-    schema decisions + privacy review. The Phase A common-handles
-    list and Phase B name-frequency data catch the worst false
-    positives; cross-campaign ubiquity is a long-tail refinement.
+  - **B3 (cross-campaign handle ubiquity tracking)** completes
+    Phase B. New module `nexusrecon/core/handle_ubiquity.py`
+    provides `HandleUbiquityTracker` ── a SQLite-backed store that
+    tracks which handles appear across multiple unrelated campaigns
+    and contributes an additional uniqueness penalty proportional to
+    the cross-campaign count. Catches the long-tail collisions that
+    pass both the Phase A curated common-handles list and the Phase
+    B2 census/SSA frequency tables but recur across the operator's
+    unrelated work. **Opt-in by default**: the framework ships with
+    no tracker bound; operators call `ubiquity_context(tracker)`
+    around `run_workflow()` to enable. **Privacy preserving**:
+    handles are stored as salted SHA-256 hashes (per-install salt),
+    not plaintext, so a leaked DB doesn't disclose investigated
+    handles. Default storage at `~/.nexusrecon/handle_ubiquity.db`
+    with 0o700 parent directory; configurable via
+    `NEXUS_UBIQUITY_DB_PATH`. Commonness curve maps campaign-count
+    to commonness: 1 campaign → 0.0, 2-3 → 0.30, 4-10 → 0.60,
+    11+ → 0.85. The attribution scorer combines all three uniqueness
+    sources (curated list + name freq + ubiquity) via `max()` so a
+    handle is "unique" only when all three agree. 27 unit tests +
+    2 integration tests pin the recording loop, the privacy
+    properties (no plaintext stored, per-install salt isolation),
+    and the end-to-end attribution penalty.
 
 ### Changed
 

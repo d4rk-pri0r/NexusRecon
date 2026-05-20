@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from nexusrecon.core.attribution import score_handle_attribution
+from nexusrecon.core.handle_ubiquity import get_current_tracker
 from nexusrecon.core.linked_accounts import (
     cross_reference_with_hits,
     extract_linked_accounts,
@@ -239,6 +240,27 @@ class MaigretTool(OSINTTool):
                         # No fetch but cross-referenced ── still bump
                         # the score via the cross-ref signal.
                         _rescore(hit, hit.get("profile", {}), cross_ref=True)
+
+        # Phase B3: record observations to the cross-campaign ubiquity
+        # tracker (when one is bound via ``ubiquity_context``). Recording
+        # happens AFTER scoring so the campaign that introduces a
+        # handle doesn't penalise itself for it ── only future
+        # campaigns see the elevated ubiquity. Recording is
+        # opportunistic: no tracker bound = nothing persists. We
+        # record EVERY hit, not just actionable ones, because the
+        # purpose is statistical cross-campaign learning.
+        tracker = get_current_tracker()
+        if tracker is not None:
+            campaign_id = kwargs.get("campaign_id") or "unknown"
+            engagement_id = kwargs.get("engagement_id")
+            for hit in deduped:
+                tracker.record_observation(
+                    handle=hit.get("username", ""),
+                    service=hit.get("service", ""),
+                    campaign_id=campaign_id,
+                    engagement_id=engagement_id,
+                    confidence=hit.get("confidence"),
+                )
 
         # Sort by (possibly updated) confidence descending so the most
         # credible hits are at the top of the result list ── important
