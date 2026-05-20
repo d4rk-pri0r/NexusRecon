@@ -92,6 +92,14 @@ dev = [
     "mypy>=1.10.0",
     "respx>=0.21.0",
 ]
+# Phase C avatar similarity hashing. Listed as an extra so installs
+# without it still work ── the avatar_hash module degrades to no-op
+# when these aren't importable. Operators wanting cross-service
+# avatar matching install via ``pip install nexusrecon[avatar]``.
+avatar = [
+    "Pillow>=10.0.0",
+    "imagehash>=4.3.0",
+]
 neo4j = ["neo4j>=5.20.0"]
 censys = ["censys>=2.2.0"]
 pdf = ["weasyprint>=62.0"]

@@ -437,23 +437,36 @@ def _profile_coherence(
         @gitlab.com): strong signal
       - Profile name field matches a harvested name: strong signal
       - Linked-account cross-reference from a separate service
-        confirms this account: very strong signal (B4)
+        confirms this account: very strong signal (B4 + C1 ──
+        linked-account graph and cross-service avatar match both
+        feed this flag)
+      - Service reputation/karma/followers indicate a real engaged
+        human (C3): adds up to 0.30
       - Any identifying metadata present at all: weak baseline
 
     Phase A returned 0.0 for almost every hit because maigret didn't
     expose bio text. Phase B added :mod:`profile_fetcher` which pulls
     real bio data from GitHub/GitLab/Reddit/StackOverflow APIs plus a
-    generic HTML fallback, so this signal now carries real weight.
+    generic HTML fallback. Phase C adds avatar similarity (C1, via
+    cross_referenced) and reputation-weighted scoring (C3).
     """
     blob = _build_profile_blob(profile_data)
 
     score = 0.0
 
-    # B4: cross-reference confirmation. When a separate service's
-    # profile already named this exact (service, handle) pair, the
-    # attribution graph closes. Strongest non-bio signal available.
+    # B4 + C1: cross-reference confirmation. When a separate service's
+    # profile already named this exact (service, handle) pair (B4) or
+    # the avatar hashing clustered this account with another service's
+    # account (C1), the attribution graph closes. Strongest non-bio
+    # signal available.
     if cross_referenced:
         score += 0.6
+
+    # C3: reputation boost. A real engaged human on the service adds
+    # up to 0.30 to the coherence signal. Lazy-import to keep the
+    # dependency surface small.
+    from nexusrecon.core.reputation import boost_for_profile
+    score += boost_for_profile(profile_data)
 
     if not blob:
         return min(1.0, score)

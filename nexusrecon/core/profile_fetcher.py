@@ -70,12 +70,21 @@ class ProfileData:
     blog_url: Optional[str] = None
     email: Optional[str] = None  # sometimes exposed by GitHub/GitLab
 
-    # Temporal signals (Phase B foundation; minimally used today).
+    # Temporal signals (Phase C2 ── timeline clustering).
     created_at: Optional[str] = None
     last_active: Optional[str] = None
 
+    # Reputation / activity signals (Phase C3 ── reputation-weighted
+    # scoring). Per-service interpretation lives in the attribution
+    # scorer; this field just carries the raw numbers across.
+    reputation: Optional[float] = None         # SO rep, Reddit karma, etc.
+    follower_count: Optional[int] = None       # GitHub followers, etc.
+
     # Linked-account references extracted from bio/blog (B4).
     linked_accounts: List[Dict[str, str]] = field(default_factory=list)
+
+    # Avatar URL for Phase C1 cross-service image hashing.
+    avatar_url: Optional[str] = None
 
     # Service-specific raw blob for the agent to read when needed.
     raw_extras: Dict[str, Any] = field(default_factory=dict)
@@ -98,6 +107,9 @@ class ProfileData:
             "email": self.email,
             "created_at": self.created_at,
             "last_active": self.last_active,
+            "reputation": self.reputation,
+            "follower_count": self.follower_count,
+            "avatar_url": self.avatar_url,
             "linked_accounts": self.linked_accounts,
             "raw_extras": self.raw_extras,
             "fetched": self.fetched,
@@ -195,6 +207,10 @@ async def _fetch_github(username: str) -> ProfileData:
         email=data.get("email"),
         created_at=data.get("created_at"),
         last_active=data.get("updated_at"),
+        # Phase C: GitHub followers is the reputation proxy ── high
+        # follower count signals real-engineer activity.
+        follower_count=data.get("followers"),
+        avatar_url=data.get("avatar_url"),
         raw_extras={
             "public_repos": data.get("public_repos"),
             "followers": data.get("followers"),
@@ -226,6 +242,7 @@ async def _fetch_gitlab(username: str) -> ProfileData:
         blog_url=entry.get("website_url"),
         email=entry.get("public_email"),
         created_at=entry.get("created_at"),
+        avatar_url=entry.get("avatar_url"),
         raw_extras={
             "job_title": entry.get("job_title"),
             "linkedin": entry.get("linkedin"),
@@ -248,6 +265,18 @@ async def _fetch_reddit(username: str) -> ProfileData:
             error="Reddit returned non-200, empty, or 429",
         )
     entry = data["data"]
+    # Reddit reputation: comment + link karma combined is the
+    # standard "old-Reddit" reputation proxy. Treat as a single
+    # number for cross-service comparison.
+    total_karma = (entry.get("comment_karma") or 0) + (entry.get("link_karma") or 0)
+    # Reddit's avatar lives under subreddit.icon_img usually, sometimes
+    # at top-level icon_img. Many users keep the default snoo which
+    # gets caught by the identicon filter.
+    avatar = (
+        entry.get("subreddit", {}).get("icon_img")
+        or entry.get("icon_img")
+        or entry.get("snoovatar_img")
+    )
     return ProfileData(
         service="Reddit",
         username=username,
@@ -255,6 +284,8 @@ async def _fetch_reddit(username: str) -> ProfileData:
         display_name=entry.get("subreddit", {}).get("title"),
         bio=entry.get("subreddit", {}).get("public_description"),
         created_at=str(entry.get("created_utc")) if entry.get("created_utc") else None,
+        reputation=float(total_karma) if total_karma else None,
+        avatar_url=avatar,
         raw_extras={
             "comment_karma": entry.get("comment_karma"),
             "link_karma": entry.get("link_karma"),
@@ -291,6 +322,10 @@ async def _fetch_stack_exchange(username: str) -> ProfileData:
         blog_url=entry.get("website_url"),
         created_at=str(entry.get("creation_date")) if entry.get("creation_date") else None,
         last_active=str(entry.get("last_access_date")) if entry.get("last_access_date") else None,
+        # Stack Exchange reputation is the canonical signal here ──
+        # >1k rep is a real engineer, >10k is significant activity.
+        reputation=float(entry.get("reputation") or 0) or None,
+        avatar_url=entry.get("profile_image"),
         raw_extras={
             "reputation": entry.get("reputation"),
             "account_id": entry.get("account_id"),  # cross-SE identity key
@@ -313,6 +348,10 @@ _OG_DESC_RE = re.compile(
 )
 _OG_TITLE_RE = re.compile(
     r'<meta\s+[^>]*property=["\']og:title["\'][^>]*content=["\']([^"\']+)["\']',
+    re.IGNORECASE,
+)
+_OG_IMAGE_RE = re.compile(
+    r'<meta\s+[^>]*property=["\']og:image["\'][^>]*content=["\']([^"\']+)["\']',
     re.IGNORECASE,
 )
 
@@ -350,12 +389,20 @@ async def _fetch_generic(service: str, username: str, url: str) -> ProfileData:
     if title_match:
         display_name = title_match.group(1).strip()
 
+    # Try og:image for avatar (Phase C1). Many services use og:image
+    # for the profile photo on the user's page.
+    avatar = None
+    image_match = _OG_IMAGE_RE.search(text)
+    if image_match:
+        avatar = image_match.group(1).strip()
+
     return ProfileData(
         service=service,
         username=username,
         url=url,
         display_name=display_name,
         bio=bio,
+        avatar_url=avatar,
         fetched=True,
     )
 

@@ -388,6 +388,16 @@ async def phase2_identity_cloud(state: CampaignGraphState) -> CampaignGraphState
             cross_refs = hit.get("cross_referenced_from")
             if cross_refs:
                 entry["cross_referenced_from"] = cross_refs
+            # Phase C1: avatar cluster membership ── the framework
+            # identified the same image on multiple services.
+            if hit.get("avatar_cluster_size", 1) >= 2:
+                entry["avatar_cluster_size"] = hit.get("avatar_cluster_size")
+                entry["avatar_cluster_id"] = hit.get("avatar_cluster_id")
+            # Phase C2: timeline cluster ── accounts created within
+            # the same window.
+            if hit.get("timeline_cluster_size", 1) >= 2:
+                entry["timeline_cluster_size"] = hit.get("timeline_cluster_size")
+                entry["timeline_cluster_id"] = hit.get("timeline_cluster_id")
             account_summary["actionable_accounts"].append(entry)
 
     # Sort actionable accounts by confidence descending for the agent.
@@ -436,6 +446,15 @@ async def phase2_identity_cloud(state: CampaignGraphState) -> CampaignGraphState
                         "available identity evidence short of explicit auth. Cite it: 'the GitHub "
                         "profile under jane.doe linked to twitter.com/janedoe in its bio, which "
                         "matches the maigret hit on Twitter.' "
+                        "If an entry has ``avatar_cluster_size >= 2``, the framework's perceptual "
+                        "avatar hashing found the SAME image on multiple services for this account "
+                        "── another strong identity confirmation (Phase C1). Cite it: 'the avatar "
+                        "on jane's GitHub and Twitter accounts is the same image (cluster id N).' "
+                        "If an entry has ``timeline_cluster_size >= 2``, this account was created "
+                        "within ~30 days of N-1 other discovered accounts ── consistent with one "
+                        "person setting up their professional online presence at a single moment "
+                        "(Phase C2). Statistical signal, not certainty: cite as 'jane's GitHub, "
+                        "Twitter, and Mastodon accounts were all created within the same month.' "
                         "For each high-band actionable account, cite the rationale + specific "
                         "evidence and recommend a follow-up dispatch (e.g. hibp/intelx/dehashed "
                         "against the confirmed handle as a separate query from the email). For "

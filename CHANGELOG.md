@@ -190,6 +190,50 @@ minor bumps (0.x → 0.x+1) may break APIs.
     scores. The dispatcher trace now reads like an analyst voice:
     "GitHub bio says 'Senior engineer at GitLab' which matches the
     email domain" rather than "scored 0.78."
+  - **Phase C: avatar similarity, timeline clustering, reputation scoring**:
+    - **C1 ── Cross-service avatar similarity hashing**
+      (`nexusrecon/core/avatar_hash.py`): downloads profile avatars
+      for HIGH/MEDIUM band hits, computes 64-bit dHash perceptual
+      hashes via the `imagehash` library, clusters images within
+      Hamming distance 8 (catches cropping/recompression). Hits in
+      a multi-service cluster get treated as cross-referenced
+      (same +0.6 boost as B4 linked-account graph). Identicon
+      heuristic filters Gravatar/GitHub/Reddit auto-generated
+      avatars so default-avatar users don't false-cluster. Optional
+      dependency (`pip install nexusrecon[avatar]`); the module
+      gracefully no-ops without Pillow + imagehash. 31 unit tests.
+    - **C2 ── Account-creation timeline clustering**
+      (`nexusrecon/core/timeline_cluster.py`): parses creation
+      timestamps from GitHub/GitLab/Reddit/Stack Exchange across
+      ISO 8601, Unix epoch seconds, Unix epoch milliseconds, and
+      bare-date formats. Clusters accounts created within a
+      configurable window (default 30 days). Surfaces clusters of
+      size ≥2 to the agent as "these N accounts were created in
+      the same window ── consistent with one person setting up
+      their presence at one event." 24 unit tests.
+    - **C3 ── Reputation-weighted scoring**
+      (`nexusrecon/core/reputation.py`): per-service threshold tables
+      for GitHub follower count, StackOverflow reputation, Reddit
+      karma, GitLab project count. High-rep accounts add up to
+      +0.30 to the profile coherence signal ── recognises that a
+      real engaged human's account carries more identity evidence
+      than a brand-new placeholder account on the same service.
+      Per-service thresholds (e.g. SO rep > 1000 = real engineer,
+      Reddit karma > 1000 = active user) keep cross-service
+      comparisons meaningful. 23 unit tests.
+    - **`profile_fetcher.ProfileData` extended** with `avatar_url`,
+      `reputation`, `follower_count` fields. All four per-service
+      fetchers (GitHub/GitLab/Reddit/Stack Exchange) capture these
+      where available; generic HTML fallback reads `<meta og:image>`.
+    - **Maigret rescore loop extended** to fetch + hash avatars and
+      compute timeline clusters AFTER the Phase B profile-fetch
+      pass. Both signals surface in the `account_associations`
+      payload as `avatar_cluster_size`/`avatar_cluster_id` and
+      `timeline_cluster_size`/`timeline_cluster_id`.
+    - **`cloud_identity` agent prompt extended** to cite avatar
+      cluster membership ("same image on GitHub and Twitter") and
+      timeline cluster ("three accounts created within the same
+      month") as concrete identity evidence.
   - **B3 (cross-campaign handle ubiquity tracking)** completes
     Phase B. New module `nexusrecon/core/handle_ubiquity.py`
     provides `HandleUbiquityTracker` ── a SQLite-backed store that

@@ -495,6 +495,172 @@ class TestMaigretEndToEnd:
         assert github_hit["confidence_signals"]["profile"] == 0.0
 
     @patch("shutil.which", return_value="/usr/local/bin/maigret")
+    async def test_phase_c_timeline_clusters_emerge_when_accounts_created_close_in_time(
+        self, _which,
+    ):
+        """Phase C2 end-to-end: two hits both have created_at
+        timestamps within the default 30-day window. After the
+        rescore loop, both should carry a ``timeline_cluster_size``
+        annotation."""
+        import respx
+        from httpx import Response
+
+        tool = MaigretTool()
+
+        async def _fake_maigret(*args, **kwargs):
+            cmd_args = list(args)
+            username = cmd_args[1]
+            idx = cmd_args.index("--folderoutput")
+            tmpdir = Path(cmd_args[idx + 1])
+            (tmpdir / f"{username}_simple.json").write_text(
+                json.dumps({
+                    "GitHub": {
+                        "url_user": f"https://github.com/{username}",
+                        "status": {"status": "Claimed", "ids": {}},
+                    },
+                    "Reddit": {
+                        "url_user": f"https://reddit.com/u/{username}",
+                        "status": {"status": "Claimed", "ids": {}},
+                    },
+                }),
+                encoding="utf-8",
+            )
+            proc = MagicMock()
+            proc.communicate = AsyncMock(return_value=(b"", b""))
+            return proc
+
+        with patch("asyncio.create_subprocess_exec",
+                   new=AsyncMock(side_effect=_fake_maigret)), \
+             respx.mock:
+            # Both profiles created in March 2014, within the
+            # 30-day default cluster window.
+            respx.get("https://api.github.com/users/janedoe").mock(
+                return_value=Response(200, json={
+                    "login": "janedoe",
+                    "html_url": "https://github.com/janedoe",
+                    "created_at": "2014-03-05T12:00:00Z",
+                }),
+            )
+            respx.get("https://www.reddit.com/user/janedoe/about.json").mock(
+                return_value=Response(200, json={
+                    "data": {
+                        # Unix timestamp for 2014-03-15.
+                        "created_utc": 1394841600,
+                        "subreddit": {},
+                    },
+                }),
+            )
+
+            result = await tool.run(
+                "janedoe@example.com",
+                target_type="email",
+                max_candidates=1,
+                fetch_profiles=True,
+                fetch_avatars=False,  # skip avatar fetch in this test
+            )
+
+        github_hit = next(
+            h for h in result.data["registered_services"]
+            if h["service"] == "GitHub"
+        )
+        reddit_hit = next(
+            h for h in result.data["registered_services"]
+            if h["service"] == "Reddit"
+        )
+        # Both should land in the same timeline cluster.
+        assert github_hit.get("timeline_cluster_size") == 2
+        assert reddit_hit.get("timeline_cluster_size") == 2
+        assert github_hit["timeline_cluster_id"] == reddit_hit["timeline_cluster_id"]
+
+    @patch("shutil.which", return_value="/usr/local/bin/maigret")
+    async def test_phase_c_reputation_boost_lifts_attribution(self, _which):
+        """Phase C3 end-to-end: a Stack Overflow hit with high
+        reputation should score higher than the same hit without
+        reputation data."""
+        import respx
+        from httpx import Response
+
+        tool = MaigretTool()
+
+        async def _fake_maigret(*args, **kwargs):
+            cmd_args = list(args)
+            username = cmd_args[1]
+            idx = cmd_args.index("--folderoutput")
+            tmpdir = Path(cmd_args[idx + 1])
+            (tmpdir / f"{username}_simple.json").write_text(
+                json.dumps({
+                    "StackOverflow": {
+                        "url_user": f"https://stackoverflow.com/users/123/{username}",
+                        "status": {"status": "Claimed", "ids": {}},
+                    },
+                }),
+                encoding="utf-8",
+            )
+            proc = MagicMock()
+            proc.communicate = AsyncMock(return_value=(b"", b""))
+            return proc
+
+        # High-rep run.
+        with patch("asyncio.create_subprocess_exec",
+                   new=AsyncMock(side_effect=_fake_maigret)), \
+             respx.mock:
+            respx.get("https://api.stackexchange.com/2.3/users").mock(
+                return_value=Response(200, json={
+                    "items": [{
+                        "display_name": "janedoe",
+                        "reputation": 12450,
+                        "link": "https://stackoverflow.com/users/123/janedoe",
+                        "creation_date": 1395849600,
+                    }],
+                }),
+            )
+            high_rep_result = await tool.run(
+                "janedoe@example.com",
+                target_type="email",
+                max_candidates=1,
+                fetch_profiles=True,
+                fetch_avatars=False,
+            )
+
+        # Low-rep run.
+        with patch("asyncio.create_subprocess_exec",
+                   new=AsyncMock(side_effect=_fake_maigret)), \
+             respx.mock:
+            respx.get("https://api.stackexchange.com/2.3/users").mock(
+                return_value=Response(200, json={
+                    "items": [{
+                        "display_name": "janedoe",
+                        "reputation": 1,  # brand-new account
+                        "link": "https://stackoverflow.com/users/123/janedoe",
+                        "creation_date": 1395849600,
+                    }],
+                }),
+            )
+            low_rep_result = await tool.run(
+                "janedoe@example.com",
+                target_type="email",
+                max_candidates=1,
+                fetch_profiles=True,
+                fetch_avatars=False,
+            )
+
+        high_hit = next(
+            h for h in high_rep_result.data["registered_services"]
+            if h["service"] == "StackOverflow"
+        )
+        low_hit = next(
+            h for h in low_rep_result.data["registered_services"]
+            if h["service"] == "StackOverflow"
+        )
+
+        # The high-rep account scores higher than the low-rep one.
+        assert high_hit["confidence"] > low_hit["confidence"]
+        assert (
+            high_hit["confidence_signals"]["profile"]
+            > low_hit["confidence_signals"]["profile"]
+        )
+
+    @patch("shutil.which", return_value="/usr/local/bin/maigret")
     async def test_phase_b3_ubiquity_records_and_penalises_recurrent_handles(
         self, _which, tmp_path,
     ):

@@ -29,12 +29,23 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from nexusrecon.core.attribution import score_handle_attribution
+from nexusrecon.core.avatar_hash import (
+    annotate_hits_with_avatar_clusters,
+    avatar_hash_available,
+    fetch_and_hash_batch,
+    find_avatar_clusters,
+)
 from nexusrecon.core.handle_ubiquity import get_current_tracker
 from nexusrecon.core.linked_accounts import (
     cross_reference_with_hits,
     extract_linked_accounts,
 )
 from nexusrecon.core.profile_fetcher import fetch_profiles_batch
+from nexusrecon.core.timeline_cluster import (
+    annotate_hits_with_cluster_ids,
+    extract_timestamps_from_hits,
+    find_timeline_clusters,
+)
 from nexusrecon.core.username_derivation import derive_usernames
 from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
@@ -240,6 +251,69 @@ class MaigretTool(OSINTTool):
                         # No fetch but cross-referenced ── still bump
                         # the score via the cross-ref signal.
                         _rescore(hit, hit.get("profile", {}), cross_ref=True)
+
+                # Phase C1: cross-service avatar similarity hashing.
+                # Fetch every successful profile's avatar, compute
+                # perceptual hashes, cluster by image similarity. A
+                # hit appearing in a multi-service cluster gets
+                # treated as cross-referenced (closes the identity
+                # loop via "same image on multiple services").
+                fetch_avatars = kwargs.get("fetch_avatars", True)
+                if fetch_avatars and avatar_hash_available():
+                    avatar_batch = [
+                        (profile.service, profile.username, profile.avatar_url or "")
+                        for profile in fetched_profiles
+                        if profile.fetched and profile.avatar_url
+                    ]
+                    if len(avatar_batch) >= 2:
+                        try:
+                            fingerprints = await fetch_and_hash_batch(
+                                avatar_batch,
+                                max_concurrent=kwargs.get("avatar_fetch_concurrency", 5),
+                            )
+                        except Exception:
+                            fingerprints = []
+                        clusters = find_avatar_clusters(
+                            fingerprints,
+                            threshold=int(kwargs.get("avatar_threshold", 8)),
+                        )
+                        if clusters:
+                            annotate_hits_with_avatar_clusters(deduped, clusters)
+                            # Hits with an avatar cluster get a
+                            # cross-reference-equivalent boost. We
+                            # bump their cross_referenced_from entry
+                            # so the same downstream code path applies.
+                            for hit in deduped:
+                                if hit.get("avatar_cluster_size", 1) >= 2:
+                                    hit.setdefault("cross_referenced_from", []).append({
+                                        "source_service": "avatar-match-cluster",
+                                        "raw_match": (
+                                            f"avatar matches "
+                                            f"{hit['avatar_cluster_size'] - 1} "
+                                            f"other service(s) in cluster"
+                                        ),
+                                    })
+                                    # Re-score to incorporate the new
+                                    # cross_referenced flag.
+                                    profile_payload = (
+                                        hit.get("fetched_profile")
+                                        or hit.get("profile", {})
+                                    )
+                                    _rescore(hit, profile_payload, cross_ref=True)
+
+                # Phase C2: account-creation timeline clustering.
+                # Run AFTER avatar clustering so timeline annotations
+                # can stack on top of the avatar evidence.
+                if kwargs.get("timeline_cluster", True):
+                    timestamps = extract_timestamps_from_hits(deduped)
+                    if len(timestamps) >= 2:
+                        timeline_clusters = find_timeline_clusters(
+                            timestamps,
+                            window_days=int(kwargs.get("timeline_window_days", 30)),
+                            min_cluster_size=2,
+                        )
+                        if timeline_clusters:
+                            annotate_hits_with_cluster_ids(deduped, timeline_clusters)
 
         # Phase B3: record observations to the cross-campaign ubiquity
         # tracker (when one is bound via ``ubiquity_context``). Recording
