@@ -16,6 +16,11 @@ reports/
 artifacts/
 *.audit.jsonl
 
+# Exception: the demo's curated + redacted report set IS checked in
+# so the public sample_run is reproducible.
+!examples/sample_run/reports/
+!examples/sample_run/reports/**
+
 # ── Python build artifacts ──────────────────────────────────
 venv/
 .venv/

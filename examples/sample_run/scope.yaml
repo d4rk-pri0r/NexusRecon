@@ -1,0 +1,94 @@
+# NexusRecon demo campaign — GitLab via HackerOne public bug bounty program
+#
+# Authorization: GitLab's HackerOne program is a public bug bounty with
+# explicit safe-harbor for security research within the documented scope.
+# Reading the program page at https://hackerone.com/gitlab and following
+# its rules constitutes the authorization for this campaign.
+#
+# This file is the scope of record. Every tool invocation in the campaign
+# passes through ScopeGuard against this file. The scope_hash (sha256 of
+# this file's raw bytes) is embedded in every output artifact for the
+# evidence chain.
+#
+# Important demo-specific narrowing:
+#   - max_tier: T2 means no T3 (no nuclei active scans against gitlab.com).
+#     We do passive recon + light HTTP probing only.
+#   - stealth_profile: high means 1-3s delays between requests, polite
+#     rate limit, no parallel bursts.
+#   - allow_breach_db_lookup: True (the keyless breach checkers ── hudsonrock,
+#     emailrep ── will fire against harvested employee emails for the
+#     aggregate-only published report; per-employee credential findings stay
+#     in the unpublished campaign dir).
+#   - max_llm_cost_usd: 10.0 caps the LLM spend so a runaway dispatcher
+#     can't burn the budget.
+
+engagement:
+  client: "GitLab Inc."
+  engagement_id: "NEXUSRECON-DEMO-GITLAB"
+  authorized_by: "GitLab HackerOne public bug bounty program"
+  authorization_date: "2026-05-20"
+  start_date: "2026-05-20"
+  end_date: "2026-05-21"
+  # SHA-256 of the authorization URL string. The hackerone.com/gitlab
+  # program page is the SOW-equivalent for this engagement.
+  signed_sow_hash: "sha256:11fb4dcd46f4d597a600a3b3821b2c2e8a6fb91bf637823ffb901cbf40882fda"
+  engagement_type: "bug_bounty"
+  rules_of_engagement_doc: "https://hackerone.com/gitlab"
+
+scope:
+  in_scope:
+    # Per HackerOne program asset list. Verify against the current
+    # program page before running.
+    domains:
+      - gitlab.com
+      - about.gitlab.com
+    # GitLab's main GitHub presence ── relevant for code-leakage recon
+    # since they engineer in the open and use GitHub for some mirrors.
+    github_orgs:
+      - gitlab-org
+    # Email harvesting will target gitlab.com employee addresses
+    # surfaced via theharvester / hunter / public sources.
+    email_domains:
+      - gitlab.com
+  out_of_scope:
+    # Third-party services GitLab uses but that aren't theirs to grant
+    # authorization for. Skip these even if recon surfaces them.
+    domains:
+      - "*.zendesk.com"        # support
+      - "*.statuspage.io"      # status pages
+      - "*.workday.com"        # HR
+      - "*.greenhouse.io"      # recruiting
+      - "*.sendgrid.net"       # email delivery
+      - "*.salesforce.com"     # CRM
+      - "*.aws.amazon.com"     # AWS edge (not GitLab infra)
+      - "*.cloudfront.net"
+      - "*.azure.com"
+      - "*.cloudflare.com"
+      - "*.fastly.net"
+      - "*.akamai.net"
+
+constraints:
+  # T2 = light active (HTTP probes, screenshots). NO T3 active scans
+  # (no nuclei against gitlab.com endpoints).
+  max_tier: "T2"
+
+  # 1-3s delays between requests per source. Polite for a public
+  # bounty program.
+  stealth_profile: "high"
+
+  # Breach DB lookups permitted ── only the keyless ones (hudsonrock,
+  # emailrep) will fire since HIBP/IntelX/LeakCheck keys aren't
+  # configured. Per-employee credential findings stay in the
+  # unpublished campaign dir per the demo publishing rules.
+  allow_breach_db_lookup: true
+
+  # Paid APIs (Shodan/VirusTotal/Hunter) fire when their keys are
+  # present in the .env.
+  allow_paid_apis: true
+
+  # Hard cap on LLM spend. The framework's cost tracker should never
+  # cross this; if it gets close, the dispatcher aborts.
+  max_llm_cost_usd: 10.0
+
+  # Two-hour wall-clock cap on the campaign as a safety net.
+  max_runtime_hours: 2.0
