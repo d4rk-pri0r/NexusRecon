@@ -59,6 +59,8 @@ class NexusConfig(BaseSettings):
     haveibeenpwned_api_key: Optional[SecretStr] = Field(default=None, alias="HAVEIBEENPWNED_API_KEY")
     dehashed_username: Optional[str] = Field(default=None, alias="DEHASHED_USERNAME")
     dehashed_api_key: Optional[SecretStr] = Field(default=None, alias="DEHASHED_API_KEY")
+    # HudsonRock Cavalier — optional; unlocks full credential detail (D6)
+    hudsonrock_api_key: Optional[SecretStr] = Field(default=None, alias="HUDSONROCK_API_KEY")
     intelx_api_key: Optional[SecretStr] = Field(default=None, alias="INTELX_API_KEY")
     emailrep_api_key: Optional[SecretStr] = Field(default=None, alias="EMAILREP_API_KEY")
     newsapi_api_key: Optional[SecretStr] = Field(default=None, alias="NEWSAPI_API_KEY")

@@ -201,23 +201,29 @@ runs marathons), and surface credential-exposure paths via breach data.
       (Reddit, Discord, gaming, dating, hobby forums), runs HIBP /
       IntelX / DeHashed against personal email candidates, extends
       the identity graph.
-- [ ] **D4** `nexusrecon/core/credential_correlation.py` — takes the
+- [x] **D4** `nexusrecon/core/credential_correlation.py` — takes the
       identity graph + breach hits and produces ranked credential-
       spray candidates. Output is the "hail mary punch list" with
       explicit risk warnings (account lockout risk, IDS noise,
-      engagement-scope flags).
-- [ ] **D5** `nexusrecon/tools/intel/dehashed_tool.py` — real
+      engagement-scope flags). 46 unit tests. MITRE T1110.003/T1110.002/
+      T1550.002/T1078/T1589.002 mapping. Never auto-executes.
+- [x] **D5** `nexusrecon/tools/intel/dehashed_tool.py` — real
       DeHashed integration (paid API key). Returns password-bearing
-      breach hits with cleartext/hashed credentials.
-- [ ] **D6** Enhanced `nexusrecon/tools/identity/hudsonrock_tool.py`
+      breach hits with cleartext/hashed credentials. HTTP Basic Auth
+      with DEHASHED_USERNAME:DEHASHED_API_KEY. 10 integration tests.
+- [x] **D6** Enhanced `nexusrecon/tools/identity/hudsonrock_tool.py`
       — today reports only "compromised yes/no". Surface real
       Cavalier data: captured URLs (which services the infostealer
       logged into), passwords, cookies, system fingerprint.
-- [ ] **D7** New Phase 2.5 wiring in `nexusrecon/graph/nodes.py` +
+      Optional HUDSONROCK_API_KEY unlocks full credential detail.
+      Backward-compatible (community tier unchanged). 9 integration tests.
+- [x] **D7** New Phase 2.5 wiring in `nexusrecon/graph/nodes.py` +
       new deliverable `credential_exposure_paths.md`. Phase 2.5 runs
       AFTER corp identity confirmed (Phase 2), BEFORE code-leakage /
       vuln correlation (Phase 3+) so the credential exposure paths
-      are available to the risk_analyst in Phase 8.
+      are available to the risk_analyst in Phase 8. Generates both
+      `credential_exposure_paths.md` (operator punch list) and
+      `credential_punch_list.json` (machine-readable).
 
 ### Phase E — Relationship graph + pretext scoring
 

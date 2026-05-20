@@ -1049,6 +1049,146 @@ async def phase7_vuln_pretext(state: CampaignGraphState) -> CampaignGraphState:
     return state
 
 
+# ── Phase 2.5: Personal Identity Pivot ───────────────────────────────────────
+
+
+async def phase2_5_personal_identity_pivot(state: CampaignGraphState) -> CampaignGraphState:
+    """Bridge corporate identities to personal identity + breach credential exposure.
+
+    Runs after Phase 2 (which builds ``email_intel``) and before Phase 3.
+
+    Steps:
+      1. Build an IdentityGraph from Phase 2's ``email_intel``.
+      2. For each identity with a name, execute the personal_pivot tool
+         (D3) via the registry (OPSEC stack applies: rate limiting, proxy,
+         audit log).
+      3. Extend the graph with discovered personal identifiers +
+         credential exposures.
+      4. Run the D4 credential correlation engine against the graph +
+         cloud_intel to produce the operator punch list.
+      5. Commit the graph + punch list to state for Phase 8/9 consumers.
+
+    Wall-clock budget: Semaphore(3) caps concurrent pivot calls.
+    At most 20 identities are pivoted to bound campaign runtime.
+    """
+    log.info("Phase 2.5: Personal identity pivot")
+    state["current_phase"] = "phase2_5"
+
+    from nexusrecon.core.identity_graph import (
+        IdentifierType,
+        build_from_email_intel,
+    )
+    from nexusrecon.core.credential_correlation import correlate_credentials
+    from nexusrecon.tools.identity.personal_pivot_tool import apply_extensions_to_graph
+
+    registry = get_registry()
+    email_intel: Dict[str, Any] = state.get("email_intel") or {}
+    cloud_intel: Dict[str, Any] = state.get("cloud_intel") or {}
+
+    # Build the graph from Phase 2 output.
+    graph = build_from_email_intel(email_intel)
+
+    if not graph.all():
+        log.info("Phase 2.5: no identities in graph, skipping pivot")
+        state["identity_graph"] = graph.to_dict()
+        state["credential_punch_list"] = []
+        state["completed_phases"] = list(state.get("completed_phases", [])) + ["phase2_5"]
+        return state
+
+    pivot_sem = asyncio.Semaphore(3)
+    pivot_results: Dict[str, Any] = {}  # identity_id → pivot ToolResult.data
+
+    async def _pivot_one(identity: Any) -> None:
+        corp_id = identity.best_identifier_for(IdentifierType.CORP_EMAIL)
+        if not corp_id:
+            return
+
+        email = corp_id.value
+        name_id = identity.best_identifier_for(IdentifierType.REAL_NAME)
+        name = name_id.value if name_id else None
+
+        if not name:
+            # derive_personal_handles requires first + last name.
+            log.debug(
+                "Phase 2.5: no name for identity, skipping pivot",
+                identity_id=identity.identity_id,
+            )
+            return
+
+        async with pivot_sem:
+            result = await registry.execute(
+                "personal_pivot",
+                email,
+                "identity",
+                name=name,
+                age_range=identity.metadata.get("age_range"),
+                interests=identity.metadata.get("interests"),
+                location=identity.metadata.get("location"),
+            )
+
+        if result.success and result.data:
+            pivot_results[identity.identity_id] = result.data
+            apply_extensions_to_graph(graph, identity.identity_id, result.data)
+
+    # Cap at 20 identities to bound wall-clock.
+    await asyncio.gather(
+        *(_pivot_one(i) for i in graph.all()[:20]),
+        return_exceptions=True,
+    )
+
+    # D4 correlation — pure function, no network.
+    punch_list = correlate_credentials(graph, cloud_intel)
+
+    # Agent synthesis — summarise for report narrative.
+    pivot_summary = {
+        "identities_pivoted": len(pivot_results),
+        "identities_total": len(graph.all()),
+        "credential_candidates": len(punch_list),
+        "identities_with_credentials": len(graph.identities_with_credentials()),
+        "identities_with_personal_email": len(graph.identities_with_personal_email()),
+    }
+    executor = _get_executor()
+    try:
+        agent_result = await executor.run_agent(
+            "correlation",
+            task_data={
+                "pivot_summary": pivot_summary,
+                "top_candidates": [c.to_dict() for c in punch_list[:5]],
+                "endpoint_types": list({c.endpoint_type for c in punch_list}),
+            },
+            task_prompt=(
+                "Analyze the personal identity pivot results. "
+                "The framework correlated corporate identities with personal accounts and "
+                "surfaced credential exposures from breach databases and infostealer logs. "
+                "Key questions: "
+                "1. Which identities have the strongest credential exposure paths? "
+                "2. Which auth endpoints are most targetable given the MFA + lockout signals? "
+                "3. Are there breach patterns (same source hitting multiple identities)? "
+                "4. What does MFA coverage look like across discovered endpoints? "
+                "Produce a brief summary for the credential exposure report. "
+                "DO NOT recommend executing any credential tests automatically — "
+                "the operator reviews and decides."
+            ),
+            state=state,
+        )
+        state.setdefault("agent_messages", []).append({
+            "phase": "phase2_5",
+            "agent": "correlation",
+            "analysis": agent_result.get("output", ""),
+            "timestamp": datetime.utcnow().isoformat(),
+        })
+    except Exception as e:
+        log.warning("Agent synthesis failed", phase="phase2_5", error=str(e))
+
+    # Commit to state.  Credentials are redacted in the serialised graph;
+    # unredacted values stay in memory only within the current session.
+    state["identity_graph"] = graph.to_dict(redact_credentials=True)
+    state["credential_punch_list"] = [c.to_dict() for c in punch_list]
+    state["personal_pivot_results"] = pivot_results
+    state["completed_phases"] = list(state.get("completed_phases", [])) + ["phase2_5"]
+    return state
+
+
 # ── Phase 7.5: Credential Harvest ────────────────────────────────────────────
 
 async def phase7_5_harvest(state: CampaignGraphState) -> CampaignGraphState:
@@ -1242,7 +1382,7 @@ def route_to_next_phase(state: CampaignGraphState) -> str:
     """Determine the next phase based on current state."""
     completed = set(state.get("completed_phases", []))
     phase_order = [
-        "phase1", "phase2", "phase3", "phase4",
+        "phase1", "phase2", "phase2_5", "phase3", "phase4",
         "phase5", "phase6", "phase7", "phase7_5", "phase8", "phase9",
     ]
 

@@ -14,6 +14,7 @@ from langgraph.graph import END, StateGraph
 from nexusrecon.graph.nodes import (
     phase1_passive_footprinting,
     phase2_identity_cloud,
+    phase2_5_personal_identity_pivot,
     phase3_code_leakage,
     phase4_correlation,
     phase5_light_active,
@@ -28,13 +29,13 @@ from nexusrecon.graph.state import CampaignGraphState
 from nexusrecon.models.campaign import CampaignMode
 
 PHASE_ORDER: List[str] = [
-    "phase1", "phase2", "phase3", "phase4",
+    "phase1", "phase2", "phase2_5", "phase3", "phase4",
     "phase5", "phase6", "phase7", "phase7_5", "phase8", "phase9",
 ]
 
 # Minimum tier required to run each phase (F-009)
 PHASE_TIERS: Dict[str, int] = {
-    "phase1": 0, "phase2": 0, "phase3": 0, "phase4": 0,
+    "phase1": 0, "phase2": 0, "phase2_5": 0, "phase3": 0, "phase4": 0,
     "phase5": 2, "phase6": 3, "phase7": 0, "phase7_5": 0, "phase8": 0, "phase9": 0,
 }
 
@@ -49,6 +50,7 @@ MODE_TIER_LIMITS: Dict[CampaignMode, int] = {
 PHASE_NODES = {
     "phase1": phase1_passive_footprinting,
     "phase2": phase2_identity_cloud,
+    "phase2_5": phase2_5_personal_identity_pivot,
     "phase3": phase3_code_leakage,
     "phase4": phase4_correlation,
     "phase5": phase5_light_active,

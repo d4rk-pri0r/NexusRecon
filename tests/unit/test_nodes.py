@@ -118,15 +118,17 @@ class TestRouteToNextPhase:
 
     def test_routes_to_end_when_all_complete(self):
         state = _make_state({
-            "completed_phases": ["phase1", "phase2", "phase3", "phase4",
+            # All phases including phase2_5 (D7)
+            "completed_phases": ["phase1", "phase2", "phase2_5", "phase3", "phase4",
                                 "phase5", "phase6", "phase7", "phase7_5", "phase8", "phase9"],
             "current_phase": "phase9",
         })
         assert route_to_next_phase(state) == "__end__"
 
     def test_skips_completed_phases(self):
+        # phase2_5 is between phase2 and phase3 now
         state = _make_state({
-            "completed_phases": ["phase1", "phase2", "phase3"],
+            "completed_phases": ["phase1", "phase2", "phase2_5", "phase3"],
             "current_phase": "phase3",
         })
         assert route_to_next_phase(state) == "phase4"
