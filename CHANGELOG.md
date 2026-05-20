@@ -145,6 +145,56 @@ minor bumps (0.x → 0.x+1) may break APIs.
   defensible: "this handle scored 0.78 because exact-derivation +
   Tier 1 service + bio mentions employer" instead of "this
   handle hit on 24 services."
+- **Phase B attribution improvements**:
+  - **Census/SSA name frequency** (`nexusrecon/core/name_frequency.py`):
+    tiered bundled data from US Census Bureau decennial surname
+    frequencies + SSA top-1000 baby names. Tier A (top 50 per
+    category) commonness 0.95; Tier B (51-200) commonness 0.70;
+    Tier C (201-1000, surnames) commonness 0.20. `handle_commonness`
+    tokenises a handle and returns the max-component commonness ──
+    catches handles like `mjohnson` (Johnson is Tier A) that the
+    Phase A curated-list lookup missed. Attribution's uniqueness
+    signal now combines the curated list with the name-frequency
+    lookup via `max(curated_commonness, name_freq_commonness)` so
+    a handle is only "unique" when both signals agree. 23 unit tests.
+  - **Profile fetching** (`nexusrecon/core/profile_fetcher.py`):
+    fetches real bio/location/company/blog data from GitHub
+    (`api.github.com/users/{login}`), GitLab (`gitlab.com/api/v4`),
+    Reddit (`/user/{name}/about.json`), and Stack Exchange
+    (`api.stackexchange.com/2.3`) APIs, plus a generic HTML +
+    `<meta og:description>` fallback for any other service. All
+    fetches go through the campaign proxy via
+    `opsec.context.proxy_kwargs`. Per-fetch UA rotation. Errors
+    return a `ProfileData` with `.error` set rather than raising,
+    so one failed fetch can't crash the batch. 23 unit tests.
+  - **Linked-account graph** (`nexusrecon/core/linked_accounts.py`):
+    regex extraction of cross-service references from bio text +
+    blog URLs. Covers 14 services via URL patterns (GitHub, GitLab,
+    Twitter/X, Mastodon, Bluesky, LinkedIn, Reddit, Stack Overflow,
+    Instagram, Keybase, Dev.to, Medium, Twitch, YouTube) plus
+    labelled-mention patterns (`"Twitter: @handle"`, `"GitHub: x"`)
+    for cases without a URL. Self-references skipped (a GitHub
+    profile mentioning its own canonical URL doesn't count). Prose
+    false-positive filter via stop-word list. 22 unit tests.
+  - **Maigret rescore loop**: after the initial Phase A scoring,
+    every hit at confidence >= 0.4 has its profile fetched via the
+    fetcher, the linked-account extractor runs on the bio, and the
+    attribution scorer is re-invoked with the richer profile data
+    + a `cross_referenced` flag when another service's bio named
+    this exact `(service, handle)` pair. The cross-reference signal
+    contributes +0.6 to the profile-coherence sub-score on its own.
+    Tunable via `fetch_profiles`, `rescore_floor`, and
+    `profile_fetch_concurrency` kwargs. 3 new integration tests.
+  - **`cloud_identity` agent prompt extended** to cite specific bio
+    text and cross-references in its analysis, not just numeric
+    scores. The dispatcher trace now reads like an analyst voice:
+    "GitHub bio says 'Senior engineer at GitLab' which matches the
+    email domain" rather than "scored 0.78."
+  - **B3 (cross-campaign handle ubiquity tracking) deferred**:
+    documented in `OPSEC_STATUS.md` as needing persistent storage
+    schema decisions + privacy review. The Phase A common-handles
+    list and Phase B name-frequency data catch the worst false
+    positives; cross-campaign ubiquity is a long-tail refinement.
 
 ### Changed
 

@@ -356,9 +356,10 @@ async def phase2_identity_cloud(state: CampaignGraphState) -> CampaignGraphState
             }
 
         # Build the per-account "actionable" record carrying enough
-        # evidence for the agent to cite (rationale + signals + url).
+        # evidence for the agent to cite (rationale + signals + url +
+        # Phase B fetched profile + linked-account cross-references).
         for hit in actionable_maigret:
-            account_summary["actionable_accounts"].append({
+            entry = {
                 "email": em,
                 "handle": hit.get("username"),
                 "service": hit.get("service"),
@@ -367,7 +368,27 @@ async def phase2_identity_cloud(state: CampaignGraphState) -> CampaignGraphState
                 "confidence_band": hit.get("confidence_band"),
                 "rationale": hit.get("confidence_rationale"),
                 "signals": hit.get("confidence_signals"),
-            })
+            }
+            # Phase B: attach the fetched profile snapshot when
+            # available. Includes bio, location, company ── exactly
+            # the fields the agent needs to cite for "this looks like
+            # the same person because bio mentions X".
+            fetched = hit.get("fetched_profile")
+            if fetched and fetched.get("fetched"):
+                entry["profile"] = {
+                    "display_name": fetched.get("display_name"),
+                    "bio": fetched.get("bio"),
+                    "location": fetched.get("location"),
+                    "company": fetched.get("company"),
+                    "blog_url": fetched.get("blog_url"),
+                    "linked_accounts": fetched.get("linked_accounts", []),
+                }
+            # Phase B/B4: surface any cross-references that named this
+            # account from another service's bio.
+            cross_refs = hit.get("cross_referenced_from")
+            if cross_refs:
+                entry["cross_referenced_from"] = cross_refs
+            account_summary["actionable_accounts"].append(entry)
 
     # Sort actionable accounts by confidence descending for the agent.
     account_summary["actionable_accounts"].sort(
@@ -401,16 +422,29 @@ async def phase2_identity_cloud(state: CampaignGraphState) -> CampaignGraphState
                         "6. Account-association analysis. The ``account_associations.actionable_accounts`` "
                         "list contains maigret hits that scored >= 0.6 attribution confidence after "
                         "applying derivation-rank + handle-uniqueness + service-tier + profile-coherence "
-                        "scoring. Each entry carries its score, confidence_band (high/medium), and a "
-                        "rationale string. The ``filtered_noise_count`` field reports how many hits "
-                        "the scorer rejected as collisions ── DO NOT speculate about those; they are "
-                        "common-name false positives (john.smith on Reddit, admin on a forum, etc.). "
-                        "For each high-band actionable account, cite the rationale and recommend a "
-                        "follow-up dispatch (e.g. hibp/intelx/dehashed against the confirmed handle "
-                        "as a separate query from the email). For medium-band accounts, flag them as "
-                        "tentative and suggest profile-page verification before action. Never claim a "
-                        "handle belongs to the email's owner without citing at least one strong signal "
-                        "from the rationale (exact derivation, Tier 1 service, or profile corroboration).",
+                        "scoring. Each entry carries its score, confidence_band (high/medium), a "
+                        "rationale string, and (when available from Phase B profile fetching) a "
+                        "``profile`` field with the actual bio/location/company text from the service. "
+                        "Use the bio text to cite SPECIFIC evidence: 'jane.doe on GitHub scored 0.78 "
+                        "and the bio says \"Senior engineer at GitLab\" ── that matches the email "
+                        "domain.' Don't just restate the score. The ``filtered_noise_count`` field "
+                        "reports how many hits the scorer rejected as collisions ── DO NOT speculate "
+                        "about those; they are common-name false positives (john.smith on Reddit, "
+                        "admin on a forum, etc.). "
+                        "If an entry has a ``cross_referenced_from`` field, a SEPARATE service's "
+                        "profile bio explicitly mentioned this account ── that's the strongest "
+                        "available identity evidence short of explicit auth. Cite it: 'the GitHub "
+                        "profile under jane.doe linked to twitter.com/janedoe in its bio, which "
+                        "matches the maigret hit on Twitter.' "
+                        "For each high-band actionable account, cite the rationale + specific "
+                        "evidence and recommend a follow-up dispatch (e.g. hibp/intelx/dehashed "
+                        "against the confirmed handle as a separate query from the email). For "
+                        "medium-band accounts, flag them as tentative. If a medium-band account has "
+                        "a fetched profile that confirms identity via bio text, upgrade your "
+                        "confidence verbally even though the numeric score doesn't move. Never "
+                        "claim a handle belongs to the email's owner without citing at least one "
+                        "concrete piece of evidence: exact derivation, Tier 1 service, fetched bio "
+                        "text, or a linked-account cross-reference.",
             state=state,
         )
         state.setdefault("agent_messages", []).append({

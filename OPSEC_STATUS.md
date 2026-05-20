@@ -108,6 +108,26 @@ registry.set_campaign_context(
 
 This is a small wire-up but it crosses several modules. Separate PR.
 
+### Cross-campaign handle ubiquity tracking (Phase B item, deferred)
+
+Phase B's attribution work added per-hit confidence scoring (Phase A
+basics + name-frequency + fetched profiles + linked-account graph).
+The fourth Phase B item ── tracking handle ubiquity across multiple
+campaigns to identify handles that recur on every campaign you run
+(strong "this is a common name, not your target" signal) ── is
+deliberately deferred from this PR because it requires:
+
+  - Persistent storage schema decisions (sqlite extension to the
+    audit DB? separate jsonl? what data model?)
+  - A privacy review (handles seen across campaigns is sensitive
+    data; need to confirm it can't leak between unrelated
+    engagements)
+  - A migration story for existing installs (back-fill or start fresh?)
+
+Tracked for a separate session. The Phase A common-handles list +
+Phase B census/SSA frequency data already catch the most pathological
+cases; cross-campaign ubiquity is a long-tail refinement.
+
 ### TLS / JA3 fingerprinting
 
 Python's `httpx` (via `httpcore` + `h11`) presents a recognisable TLS

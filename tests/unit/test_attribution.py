@@ -199,12 +199,31 @@ class TestUniquenessSignal:
         assert result.signals["uniqueness"] <= 0.15
 
     def test_long_uncommon_handle_scores_max(self):
+        """Truly-unique handle: all components are absent from Census +
+        SSA bundled data. Phase B's name-frequency integration applies
+        a uniqueness penalty for handles whose components ARE in the
+        bundled data (even at Tier C); this test deliberately uses
+        gibberish to exercise the no-penalty path."""
         result = score_handle_attribution(
             email="someone@example.com",
-            handle="xochitl-vukovic-1984",
+            handle="zoxqwt-flornicus-9442",
             service="GitHub",
         )
         assert result.signals["uniqueness"] >= 0.9
+
+    def test_recognisable_surname_handle_still_gets_modest_penalty(self):
+        """Phase B intentionally penalises handles containing
+        bundled-data surnames even from Tier C. ``vukovic`` is a real
+        US Census surname (~thousands of bearers), so a handle
+        containing it should be penalised vs. a truly-unique handle.
+
+        Expected: ~0.80 uniqueness ── still high, but not maximum."""
+        result = score_handle_attribution(
+            email="xochitl-vukovic@example.com",
+            handle="xochitl-vukovic-1984",
+            service="GitHub",
+        )
+        assert 0.7 <= result.signals["uniqueness"] <= 0.85
 
     def test_dotted_corp_handle_is_distinctive(self):
         result = score_handle_attribution(

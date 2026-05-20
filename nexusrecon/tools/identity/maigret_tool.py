@@ -29,6 +29,11 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from nexusrecon.core.attribution import score_handle_attribution
+from nexusrecon.core.linked_accounts import (
+    cross_reference_with_hits,
+    extract_linked_accounts,
+)
+from nexusrecon.core.profile_fetcher import fetch_profiles_batch
 from nexusrecon.core.username_derivation import derive_usernames
 from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
@@ -140,31 +145,105 @@ class MaigretTool(OSINTTool):
             seen.add(key)
             deduped.append(hit)
 
-        # Score each hit's attribution confidence. We pass the
-        # original target (which may be an email) plus harvested names
-        # so the scorer can apply derivation rank + profile coherence
-        # signals. Hits below the actionable threshold stay in the
-        # result set ── filtering is the caller's responsibility ──
-        # but every hit carries its confidence + signal breakdown so
-        # downstream consumers can threshold consistently.
+        # Phase A: initial confidence scoring on the raw maigret data.
+        # We pass the original target (which may be an email) plus
+        # harvested names so the scorer can apply derivation rank +
+        # uniqueness + service tier. Profile-coherence at this stage
+        # is mostly 0.0 because maigret's ``profile`` dict is sparse;
+        # Phase B re-scores after fetching real bios.
         email_anchor = target if "@" in target else None
         harvested_names = kwargs.get("names") or []
-        for hit in deduped:
+
+        def _rescore(hit: Dict[str, Any], profile_payload: Any, cross_ref: bool) -> None:
             attribution = score_handle_attribution(
                 email=email_anchor,
                 handle=hit.get("username", ""),
                 service=hit.get("service", ""),
-                profile_data=hit.get("profile", {}),
+                profile_data=profile_payload,
                 harvested_names=harvested_names,
+                cross_referenced=cross_ref,
             )
             hit["confidence"] = attribution.score
             hit["confidence_band"] = attribution.confidence_band
             hit["confidence_signals"] = attribution.signals
             hit["confidence_rationale"] = attribution.rationale
 
-        # Sort by confidence descending so the most credible hits are
-        # at the top of the result list ── important for downstream
-        # truncation (the agent only sees the first N entries).
+        for hit in deduped:
+            _rescore(hit, hit.get("profile", {}), cross_ref=False)
+
+        # Phase B: for hits above the initial-score floor, fetch real
+        # profile data and re-score with the richer evidence. Skip the
+        # fetch when:
+        #   - ``fetch_profiles=False`` is passed (test mode, fast
+        #     runs, or operator preference)
+        #   - The initial score is already below ``rescore_floor``
+        #     (default 0.4) ── noise stays noise even with a bio
+        # Concurrency capped at ``profile_fetch_concurrency`` (default 5)
+        # to be polite to GitHub / Reddit / etc. APIs.
+        fetch_profiles = kwargs.get("fetch_profiles", True)
+        rescore_floor = float(kwargs.get("rescore_floor", 0.4))
+        profile_fetch_concurrency = int(kwargs.get("profile_fetch_concurrency", 5))
+
+        if fetch_profiles:
+            candidates_to_fetch = [
+                h for h in deduped if h.get("confidence", 0.0) >= rescore_floor
+            ]
+            if candidates_to_fetch:
+                try:
+                    fetched_profiles = await fetch_profiles_batch(
+                        candidates_to_fetch,
+                        max_concurrent=profile_fetch_concurrency,
+                    )
+                except Exception:
+                    # Profile fetching is a best-effort enrichment ──
+                    # if the batch crashes (network meltdown, etc.) we
+                    # carry on with the initial scoring.
+                    fetched_profiles = []
+
+                # B4: extract linked-account references from each
+                # fetched bio. We accumulate all references across
+                # all hits, then cross-reference once at the end so
+                # one service's profile claiming another service's
+                # handle can flag that other hit.
+                all_linked_refs = []
+                profile_by_hit_id: Dict[int, Any] = {}
+                for hit, profile in zip(candidates_to_fetch, fetched_profiles):
+                    profile_by_hit_id[id(hit)] = profile
+                    if profile.fetched:
+                        refs = extract_linked_accounts(
+                            source_service=profile.service,
+                            profile_text=profile.bio or "",
+                            profile_blog=profile.blog_url or "",
+                        )
+                        profile.linked_accounts = [r.to_dict() for r in refs]
+                        all_linked_refs.extend(refs)
+
+                # Cross-reference extracted links against ALL deduped
+                # hits (not just the fetch candidates) ── a high-band
+                # hit may have a bio that confirms a medium-band hit
+                # elsewhere.
+                if all_linked_refs:
+                    cross_reference_with_hits(all_linked_refs, deduped)
+
+                # Re-score every fetch candidate with the richer
+                # profile data + cross-reference flag.
+                for hit in candidates_to_fetch:
+                    profile = profile_by_hit_id[id(hit)]
+                    cross_ref = bool(hit.get("cross_referenced_from"))
+                    if profile.fetched:
+                        # Attach a JSON-safe profile snapshot for the
+                        # agent to read alongside the rationale.
+                        hit["fetched_profile"] = profile.to_dict()
+                        _rescore(hit, profile, cross_ref=cross_ref)
+                    elif cross_ref:
+                        # No fetch but cross-referenced ── still bump
+                        # the score via the cross-ref signal.
+                        _rescore(hit, hit.get("profile", {}), cross_ref=True)
+
+        # Sort by (possibly updated) confidence descending so the most
+        # credible hits are at the top of the result list ── important
+        # for downstream truncation (the agent only sees the first N
+        # entries).
         deduped.sort(key=lambda h: -h.get("confidence", 0.0))
 
         # Aggregate counts by confidence band so the caller knows what

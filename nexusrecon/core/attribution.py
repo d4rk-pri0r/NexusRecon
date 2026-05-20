@@ -40,6 +40,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Sequence
 
+from nexusrecon.core.name_frequency import handle_commonness
+
 
 # ── Weights ──────────────────────────────────────────────────────────
 # Tunable. Sum to 1.0 so the final score stays in [0, 1].
@@ -305,35 +307,49 @@ def _uniqueness(handle: str) -> float:
     """Return uniqueness in ``[0, 1]``. Higher = more unique = less
     likely to be a collision.
 
-    Logic:
-      - 1.0 if handle is not in the common-handles list
-      - 0.3 if on the list, length > 10 (longer variants still
-        somewhat distinctive)
-      - 0.1 if on the list, length 6-10 (common ground)
-      - 0.05 if on the list, length <= 5 (very generic)
+    Combines two complementary signals:
 
-    Plus a length bonus: handles >= 12 chars get a small uniqueness
-    boost regardless of list membership (long strings collide less).
+      - **Curated common-handles list** (Phase A): catches handle
+        patterns that don't decompose into name tokens (``jsmith``,
+        ``mjohnson``, ``admin``, ``test``). The list lookup gives a
+        "common-handle commonness" score per length bucket.
+      - **Census/SSA name frequency** (Phase B): catches handles
+        decomposable into common name tokens (``john.smith``,
+        ``patterson_dev``, ``smith.engineer``). The frequency lookup
+        returns the maximum tier score of any component.
+
+    Final uniqueness = ``1.0 - max(curated_commonness, name_freq_commonness)``,
+    with a small length bonus for very long handles that survive both
+    checks. The ``max`` takes the more pessimistic signal: a handle is
+    only unique if BOTH checks agree it isn't common.
     """
     handle = handle.strip().lower()
     if not handle:
         return 0.0
 
-    is_common = handle in _COMMON_HANDLES
+    # Phase A: curated common-handles list commonness.
+    is_curated_common = handle in _COMMON_HANDLES
     length = len(handle)
-
-    if not is_common:
-        base = 1.0
-    elif length > 10:
-        base = 0.3
-    elif length >= 6:
-        base = 0.1
+    if not is_curated_common:
+        curated_commonness = 0.0
+    elif length <= 5:
+        curated_commonness = 0.95   # very generic (john, smith, admin)
+    elif length <= 10:
+        curated_commonness = 0.90   # common-ground (jsmith, msmith)
     else:
-        base = 0.05
+        curated_commonness = 0.65   # longer variant still somewhat common
 
-    # Length bonus for very long handles that aren't on the common
-    # list ── these are statistically near-unique.
-    if not is_common and length >= 12:
+    # Phase B: census/SSA name-frequency commonness.
+    name_freq_commonness = handle_commonness(handle)
+
+    # Take the worse (higher) commonness score so a handle gets the
+    # benefit of the doubt only when BOTH signals agree it's unique.
+    commonness = max(curated_commonness, name_freq_commonness)
+    base = max(0.0, 1.0 - commonness)
+
+    # Length bonus for very long handles that pass both common-checks
+    # ── statistical uniqueness scales with length.
+    if commonness == 0.0 and length >= 12:
         base = min(1.0, base + 0.05)
 
     return base
@@ -365,10 +381,39 @@ def _service_tier(service: str) -> float:
 # ──────────────────────────────────────────────────────────────────────
 
 
+def _build_profile_blob(profile_data: Any) -> str:
+    """Normalise a profile_data argument into a lowercased text blob
+    for keyword scanning.
+
+    Accepts:
+      - ``None`` → empty string
+      - ``str`` → returned as-is (lowercased) ── for callers that
+        pre-built the blob (e.g. via ``ProfileData.coherence_blob``)
+      - ``dict`` → concatenate all string/numeric values
+      - Anything with a ``coherence_blob()`` method → call it (covers
+        ``profile_fetcher.ProfileData``)
+    """
+    if profile_data is None:
+        return ""
+    if isinstance(profile_data, str):
+        return profile_data.lower()
+    # Duck-type: anything that supplies coherence_blob() wins.
+    blob_method = getattr(profile_data, "coherence_blob", None)
+    if callable(blob_method):
+        return blob_method()
+    if isinstance(profile_data, dict):
+        return " ".join(
+            str(v).lower() for v in profile_data.values()
+            if isinstance(v, (str, int, float))
+        )
+    return ""
+
+
 def _profile_coherence(
     email: Optional[str],
-    profile_data: Optional[Dict[str, Any]],
+    profile_data: Any,
     harvested_names: Optional[Sequence[str]],
+    cross_referenced: bool = False,
 ) -> float:
     """Return profile-coherence signal in ``[0, 1]``.
 
@@ -376,25 +421,27 @@ def _profile_coherence(
       - Bio text mentions the email's domain stem (gitlab from
         @gitlab.com): strong signal
       - Profile name field matches a harvested name: strong signal
+      - Linked-account cross-reference from a separate service
+        confirms this account: very strong signal (B4)
       - Any identifying metadata present at all: weak baseline
 
-    Maigret rarely exposes bio text directly ── most hits have only a
-    ``{"username": handle}`` profile dict ── so this signal returns 0.0
-    for the majority of hits today. Phase B will improve coverage by
-    fetching profile pages and extracting bios.
+    Phase A returned 0.0 for almost every hit because maigret didn't
+    expose bio text. Phase B added :mod:`profile_fetcher` which pulls
+    real bio data from GitHub/GitLab/Reddit/StackOverflow APIs plus a
+    generic HTML fallback, so this signal now carries real weight.
     """
-    if not profile_data:
-        return 0.0
+    blob = _build_profile_blob(profile_data)
 
     score = 0.0
 
-    # Concatenate any string-valued profile fields for keyword scan.
-    blob = " ".join(
-        str(v).lower() for v in profile_data.values()
-        if isinstance(v, (str, int, float))
-    )
+    # B4: cross-reference confirmation. When a separate service's
+    # profile already named this exact (service, handle) pair, the
+    # attribution graph closes. Strongest non-bio signal available.
+    if cross_referenced:
+        score += 0.6
+
     if not blob:
-        return 0.0
+        return min(1.0, score)
 
     # Baseline: any string content at all suggests a real profile vs.
     # a placeholder.
@@ -459,8 +506,9 @@ def score_handle_attribution(
     email: Optional[str],
     handle: str,
     service: str,
-    profile_data: Optional[Dict[str, Any]] = None,
+    profile_data: Any = None,
     harvested_names: Optional[Sequence[str]] = None,
+    cross_referenced: bool = False,
 ) -> AttributionScore:
     """Compute multi-signal attribution confidence for a maigret hit.
 
@@ -473,12 +521,24 @@ def score_handle_attribution(
             ``"Reddit"``). Matched case-insensitively against the
             bundled tier maps; unknown services fall back to a
             neutral 0.5.
-        profile_data: Optional ``{"username": str, "image": url, ...}``
-            metadata maigret extracted. Mostly empty in the current
-            implementation.
+        profile_data: Profile metadata for coherence scoring. Accepts
+            three shapes for backward compatibility and Phase B
+            integration:
+
+              - ``None``: no profile signal (Phase A baseline).
+              - ``dict``: maigret's ``ids`` block as before; the
+                builder concatenates string values into a blob.
+              - ``ProfileData`` (from :mod:`profile_fetcher`): the
+                richer post-fetch object. Its ``coherence_blob()``
+                method is called to extract the keyword-scan string.
+              - ``str``: pre-built blob (advanced callers).
+
         harvested_names: Optional list of human names harvested in
             this campaign (e.g. via hunter.io). Used by the profile-
             coherence signal.
+        cross_referenced: True when a separate maigret hit's bio
+            mentioned this exact ``(service, handle)`` pair, closing
+            the linked-account graph. Boosts the profile signal.
 
     Returns:
         :class:`AttributionScore` with the final ``score`` plus
@@ -498,7 +558,7 @@ def score_handle_attribution(
     deriv = _derivation_rank(email, handle)
     uniq = _uniqueness(handle)
     tier = _service_tier(service)
-    prof = _profile_coherence(email, profile_data, harvested_names)
+    prof = _profile_coherence(email, profile_data, harvested_names, cross_referenced)
 
     final = (
         deriv * _WEIGHT_DERIVATION

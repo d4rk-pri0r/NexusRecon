@@ -379,6 +379,185 @@ class TestMaigretEndToEnd:
         assert services_in_order.index("GitHub") < services_in_order.index("OkCupid")
 
     @patch("shutil.which", return_value="/usr/local/bin/maigret")
+    async def test_phase_b_rescore_fetches_profile_and_boosts_confidence(self, _which):
+        """Phase B end-to-end: a hit at MEDIUM confidence has its
+        profile fetched, the bio mentions the email's domain stem, and
+        the re-score pushes the hit into HIGH band.
+
+        Without the fetch (Phase A only), profile_coherence is 0.0 and
+        the hit stays at MEDIUM. With the fetch + bio match,
+        profile_coherence picks up ~0.6 and the final score crosses
+        the HIGH threshold."""
+        import respx
+        from httpx import Response
+
+        tool = MaigretTool()
+
+        # Mock maigret: one hit on GitHub for handle ``janedoe``.
+        async def _fake_maigret(*args, **kwargs):
+            cmd_args = list(args)
+            username = cmd_args[1]
+            idx = cmd_args.index("--folderoutput")
+            tmpdir = Path(cmd_args[idx + 1])
+            (tmpdir / f"{username}_simple.json").write_text(
+                json.dumps({
+                    "GitHub": {
+                        "url_user": f"https://github.com/{username}",
+                        "status": {"status": "Claimed", "ids": {}},
+                    },
+                }),
+                encoding="utf-8",
+            )
+            proc = MagicMock()
+            proc.communicate = AsyncMock(return_value=(b"", b""))
+            return proc
+
+        # Mock the GitHub API: returns a bio mentioning GitLab.
+        with patch("asyncio.create_subprocess_exec",
+                   new=AsyncMock(side_effect=_fake_maigret)), \
+             respx.mock:
+            respx.get("https://api.github.com/users/janedoe").mock(
+                return_value=Response(200, json={
+                    "login": "janedoe",
+                    "name": "Jane Doe",
+                    "bio": "Senior engineer at GitLab",
+                    "company": "@gitlab-org",
+                    "html_url": "https://github.com/janedoe",
+                }),
+            )
+
+            result = await tool.run(
+                "janedoe@gitlab.com",
+                target_type="email",
+                max_candidates=1,
+                fetch_profiles=True,
+            )
+
+        hits = result.data["registered_services"]
+        assert len(hits) >= 1
+        github_hit = next(h for h in hits if h["service"] == "GitHub")
+
+        # Profile was fetched.
+        assert github_hit.get("fetched_profile") is not None
+        assert github_hit["fetched_profile"]["bio"] == "Senior engineer at GitLab"
+
+        # Confidence should reflect the bio match (profile_coherence
+        # signal >= 0.5 because the bio mentions ``gitlab``).
+        assert github_hit["confidence_signals"]["profile"] >= 0.5
+        # Should be in HIGH band after rescore.
+        assert github_hit["confidence"] >= 0.7
+        assert github_hit["confidence_band"] == "high"
+
+    @patch("shutil.which", return_value="/usr/local/bin/maigret")
+    async def test_phase_b_fetch_disabled_keeps_phase_a_scoring(self, _which):
+        """When ``fetch_profiles=False``, no profile fetching happens
+        and confidence stays at the Phase A baseline."""
+        tool = MaigretTool()
+
+        async def _fake_maigret(*args, **kwargs):
+            cmd_args = list(args)
+            username = cmd_args[1]
+            idx = cmd_args.index("--folderoutput")
+            tmpdir = Path(cmd_args[idx + 1])
+            (tmpdir / f"{username}_simple.json").write_text(
+                json.dumps({
+                    "GitHub": {
+                        "url_user": f"https://github.com/{username}",
+                        "status": {"status": "Claimed", "ids": {}},
+                    },
+                }),
+                encoding="utf-8",
+            )
+            proc = MagicMock()
+            proc.communicate = AsyncMock(return_value=(b"", b""))
+            return proc
+
+        # We DO NOT patch the GitHub API ── if fetch_profiles=False
+        # works correctly, no HTTP request to api.github.com should
+        # happen. Any attempt would raise (no respx mock) and crash
+        # the test.
+        with patch("asyncio.create_subprocess_exec",
+                   new=AsyncMock(side_effect=_fake_maigret)):
+            result = await tool.run(
+                "janedoe@gitlab.com",
+                target_type="email",
+                max_candidates=1,
+                fetch_profiles=False,
+            )
+
+        github_hit = next(
+            h for h in result.data["registered_services"]
+            if h["service"] == "GitHub"
+        )
+        # No fetched_profile attached.
+        assert "fetched_profile" not in github_hit
+        # Phase A profile_coherence stays at 0.0.
+        assert github_hit["confidence_signals"]["profile"] == 0.0
+
+    @patch("shutil.which", return_value="/usr/local/bin/maigret")
+    async def test_phase_b_cross_reference_between_hits(self, _which):
+        """B4 end-to-end: hit on GitHub has a bio mentioning a
+        Twitter handle; we have a separate Twitter hit for that
+        handle. The cross-reference closes the graph and the Twitter
+        hit's profile signal gets the cross-ref bonus."""
+        import respx
+        from httpx import Response
+
+        tool = MaigretTool()
+
+        async def _fake_maigret(*args, **kwargs):
+            cmd_args = list(args)
+            username = cmd_args[1]
+            idx = cmd_args.index("--folderoutput")
+            tmpdir = Path(cmd_args[idx + 1])
+            # One candidate, two hits (GitHub + Twitter).
+            (tmpdir / f"{username}_simple.json").write_text(
+                json.dumps({
+                    "GitHub": {
+                        "url_user": f"https://github.com/{username}",
+                        "status": {"status": "Claimed", "ids": {}},
+                    },
+                    "Twitter": {
+                        "url_user": f"https://twitter.com/{username}",
+                        "status": {"status": "Claimed", "ids": {}},
+                    },
+                }),
+                encoding="utf-8",
+            )
+            proc = MagicMock()
+            proc.communicate = AsyncMock(return_value=(b"", b""))
+            return proc
+
+        with patch("asyncio.create_subprocess_exec",
+                   new=AsyncMock(side_effect=_fake_maigret)), \
+             respx.mock:
+            # GitHub bio mentions the Twitter handle.
+            respx.get("https://api.github.com/users/janedoe").mock(
+                return_value=Response(200, json={
+                    "login": "janedoe",
+                    "bio": "Engineer. Twitter: twitter.com/janedoe",
+                    "html_url": "https://github.com/janedoe",
+                }),
+            )
+
+            result = await tool.run(
+                "janedoe@example.com",
+                target_type="email",
+                max_candidates=1,
+                fetch_profiles=True,
+            )
+
+        hits = result.data["registered_services"]
+        twitter_hit = next(h for h in hits if h["service"] == "Twitter")
+        # Cross-referenced from GitHub.
+        assert "cross_referenced_from" in twitter_hit
+        sources = [
+            entry["source_service"]
+            for entry in twitter_hit["cross_referenced_from"]
+        ]
+        assert "GitHub" in sources
+
+    @patch("shutil.which", return_value="/usr/local/bin/maigret")
     async def test_dedup_across_candidates(self, _which):
         """Two derived usernames hitting the same service must produce
         ONE finding, not two, per the (username, service) dedup."""
