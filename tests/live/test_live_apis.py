@@ -320,3 +320,179 @@ async def test_crunchbase_live() -> None:
     from nexusrecon.tools.pretext.crunchbase_tool import CrunchbaseTool
     result = await CrunchbaseTool().run("anthropic")
     assert isinstance(result.success, bool)
+
+
+# ─── Phase E live tests ────────────────────────────────────────────────────
+#
+# Each test asserts only structural invariants — the fields downstream code
+# reads, presence/absence of the success flag, the shape of the adapter
+# input. Never on specific values that drift over time (follower counts,
+# talk titles, etc.). This catches "upstream renamed the field" regressions
+# without burning test runs on natural data churn.
+#
+# Targets are picked for long-term stability:
+#   - github_social        → "octocat" (GitHub's mascot)
+#   - mastodon_social      → "Gargron@mastodon.social" (Mastodon's creator)
+#   - bluesky_social       → "bsky.app" (the platform's own handle)
+#   - linkedin_social      → "williamhgates" (Bill Gates, stable public_id)
+#   - business_partner DNS → LIVE_TARGET_DOMAIN ("example.com")
+#   - conference_speaker   → "Bruce Schneier" (perennial DEFCON speaker)
+
+
+@pytest.mark.live("github")
+async def test_github_social_live() -> None:
+    """Smoke-test github_social against octocat.
+
+    octocat is GitHub's mascot, present since day one. We assert
+    only that the tool returns a properly-typed ToolResult and, when
+    it succeeds, that the adapter input has the shape downstream
+    code expects.
+    """
+    from nexusrecon.tools.identity.github_social_tool import (
+        GitHubSocialTool,
+    )
+    result = await GitHubSocialTool().run("octocat")
+    assert isinstance(result.success, bool)
+    if result.success:
+        assert "username" in result.data
+        assert "user_profile" in result.data
+        assert "followers" in result.data
+        assert "following" in result.data
+        assert "repositories" in result.data
+        assert "summary" in result.data
+
+
+@pytest.mark.live("none")
+async def test_mastodon_social_live() -> None:
+    """Anonymous lookup of mastodon.social's creator. No key
+    required; Mastodon's public API serves any account with default
+    privacy settings.
+    """
+    from nexusrecon.tools.identity.mastodon_social_tool import (
+        MastodonSocialTool,
+    )
+    result = await MastodonSocialTool().run(
+        "Gargron@mastodon.social",
+        # Restrict to the one instance we know hosts the account so
+        # the test doesn't fan across the default probe list.
+        instances=["mastodon.social"],
+    )
+    assert isinstance(result.success, bool)
+    if result.success:
+        assert result.data.get("instance") == "mastodon.social"
+        assert "account" in result.data
+        assert "followers" in result.data
+        assert "following" in result.data
+        assert "interactions" in result.data
+
+
+@pytest.mark.live("none")
+async def test_bluesky_social_live() -> None:
+    """Anonymous lookup of bsky.app via api.bsky.app (the public
+    AppView). No key required."""
+    from nexusrecon.tools.identity.bluesky_social_tool import (
+        BlueskySocialTool,
+    )
+    result = await BlueskySocialTool().run("bsky.app")
+    assert isinstance(result.success, bool)
+    if result.success:
+        assert "profile" in result.data
+        assert result.data["profile"].get("did", "").startswith("did:")
+        assert "follows" in result.data
+        assert "followers" in result.data
+        assert "interactions" in result.data
+
+
+@pytest.mark.live("linkedin_cookies")
+async def test_linkedin_social_live() -> None:
+    """LinkedIn smoke-test against a stable public profile.
+
+    Requires LINKEDIN_LI_AT + LINKEDIN_JSESSIONID. Picks
+    ``williamhgates`` because the public_id has been stable for a
+    decade. We tolerate auth failures (cookies expire) ── the
+    tripwire is for *schema drift*, not auth.
+    """
+    from nexusrecon.tools.identity.linkedin_social_tool import (
+        LinkedInSocialTool,
+    )
+    result = await LinkedInSocialTool().run("williamhgates")
+    assert isinstance(result.success, bool)
+    if result.success:
+        assert "profile" in result.data
+        assert "experiences" in result.data
+        assert "skills" in result.data
+        assert "posts" in result.data
+        assert "summary" in result.data
+
+
+@pytest.mark.live("none")
+async def test_business_partner_dns_only_live() -> None:
+    """DNS-only path through business_partner against example.com.
+
+    DNS TXT vendor inference needs no API key. We disable the other
+    sources so the test exercises only the DNS path. example.com
+    has no SPF / MX matching our vendor markers — the success path
+    is "no vendors surfaced", still a structural pass.
+    """
+    from nexusrecon.tools.intel.business_partner_tool import (
+        BusinessPartnerTool,
+    )
+    result = await BusinessPartnerTool().run(
+        LIVE_TARGET_DOMAIN,
+        include_crunchbase=False,
+        include_builtwith=False,
+        include_dns_vendor_inference=True,
+        include_press_scrape=False,
+    )
+    assert isinstance(result.success, bool)
+    if result.success:
+        assert "dns_vendors" in result.data
+
+
+@pytest.mark.live("builtwith")
+async def test_business_partner_builtwith_live() -> None:
+    """BuiltWith path through business_partner against example.com.
+
+    Requires BUILTWITH_API_KEY. Asserts the response carries the
+    structural keys downstream code consumes.
+    """
+    from nexusrecon.tools.intel.business_partner_tool import (
+        BusinessPartnerTool,
+    )
+    result = await BusinessPartnerTool().run(
+        LIVE_TARGET_DOMAIN,
+        include_crunchbase=False,
+        include_builtwith=True,
+        include_dns_vendor_inference=False,
+        include_press_scrape=False,
+    )
+    assert isinstance(result.success, bool)
+    if result.success:
+        assert "builtwith" in result.data
+        assert "sources_used" in result.data
+
+
+@pytest.mark.live("none")
+async def test_conference_speaker_live() -> None:
+    """Smoke-test conference_speaker against a stable real name.
+
+    Bruce Schneier has spoken at most security conferences in the
+    default list at least once. Even if no specific parser surfaces
+    a hit, the soft-404 path keeps the crawl going so the test
+    structurally succeeds.
+    """
+    from nexusrecon.tools.pretext.conference_speaker_tool import (
+        ConferenceSpeakerTool,
+    )
+    result = await ConferenceSpeakerTool().run(
+        "Bruce Schneier",
+        # Probe just two sites to keep the test quick.
+        sites=["DEFCON", "FOSDEM"],
+        max_talks_per_conference=5,
+    )
+    assert isinstance(result.success, bool)
+    if result.success:
+        assert "target" in result.data
+        assert "talks" in result.data
+        assert "summary" in result.data
+        assert result.data["target"] == "Bruce Schneier"

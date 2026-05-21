@@ -63,6 +63,14 @@ LIVE_KEY_REQUIREMENTS: dict[str, list[str]] = {
     "vulners": ["VULNERS_API_KEY"],
     # Pretext
     "crunchbase": ["CRUNCHBASE_API_KEY"],
+    # Phase E
+    "builtwith": ["BUILTWITH_API_KEY"],
+    # LinkedIn — cookie auth (preferred). The tool also accepts
+    # LINKEDIN_USERNAME + LINKEDIN_PASSWORD as a fallback but the
+    # live test only exercises the cookie path because cookies are
+    # the recommended red-team posture and skip-when-missing is
+    # cleaner than testing OR-semantics in conftest.
+    "linkedin_cookies": ["LINKEDIN_LI_AT", "LINKEDIN_JSESSIONID"],
 }
 
 
