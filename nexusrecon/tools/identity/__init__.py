@@ -9,6 +9,7 @@ from . import (
     hudsonrock_tool,
     hunter_tool,
     leakcheck_tool,
+    linkedin_social_tool,
     maigret_tool,
     mastodon_social_tool,
     personal_pivot_tool,
