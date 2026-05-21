@@ -97,9 +97,17 @@ class TestValidateCommand:
 
 class TestToolsCommand:
     def test_tools_list_displays_table(self):
+        """The ``tools`` command renders the registered-tool inventory.
+
+        The output format is the rich.Table title "NexusRecon Tools
+        (N/M available)" plus a tabular body.  Match on the title prefix
+        rather than a hard-coded "Registered" string, which was the
+        wording in an earlier CLI revision.
+        """
         result = runner.invoke(app, ["tools"])
         assert result.exit_code == 0
-        assert "Registered" in result.stdout or "registered" in result.stdout
+        assert "NexusRecon Tools" in result.stdout
+        assert "available" in result.stdout
 
     def test_tools_check(self):
         result = runner.invoke(app, ["tools-check"])
