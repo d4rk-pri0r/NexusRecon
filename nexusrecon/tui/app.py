@@ -8,12 +8,15 @@ actual semver-tracked release number.
 from __future__ import annotations
 
 import logging
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
 
 import structlog
 from textual.app import App
+
+from nexusrecon.tui.themes import THEMES, resolve_theme_name
 
 
 class NexusReconApp(App):
@@ -28,6 +31,8 @@ class NexusReconApp(App):
 
     BINDINGS = [
         ("ctrl+q", "quit", "Quit"),
+        # Global help overlay — every screen inherits this binding.
+        ("question_mark", "show_help", "Help"),
     ]
 
     # Path to the per-session log file (set by ``run_tui`` before
@@ -37,8 +42,36 @@ class NexusReconApp(App):
     session_log_path: Path | None = None
 
     def on_mount(self) -> None:
+        # Register NexusRecon's themes so :class:`Theme` colour
+        # variables resolve in app.tcss. The active theme picks up
+        # from the ``NEXUSRECON_TUI_THEME`` env var; unknown values
+        # fall back to the default rather than crashing on launch.
+        for theme in THEMES.values():
+            try:
+                self.register_theme(theme)
+            except Exception:
+                # register_theme is idempotent in current Textual but
+                # we never want a theme registration error to keep the
+                # TUI from launching.
+                pass
+        self.theme = resolve_theme_name(os.environ.get("NEXUSRECON_TUI_THEME"))
+
         from nexusrecon.tui.screens.welcome import WelcomeScreen
         self.push_screen(WelcomeScreen())
+
+    async def action_show_help(self) -> None:
+        """Open the global keyboard-help overlay (``?`` from any screen)."""
+        from nexusrecon.tui.screens.help import HelpModal
+        # If a help modal is already on top, don't stack a second one ──
+        # the second ``?`` press should be a no-op (the binding inside
+        # the modal closes it via Escape).
+        try:
+            top = self.screen_stack[-1] if self.screen_stack else None
+            if isinstance(top, HelpModal):
+                return
+        except Exception:
+            pass
+        await self.push_screen(HelpModal())
 
 
 def _open_session_log() -> tuple[Path, object]:

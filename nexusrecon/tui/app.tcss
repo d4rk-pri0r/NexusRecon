@@ -1,72 +1,61 @@
-/* NexusRecon TUI — dark terminal-hacker theme */
+/* NexusRecon TUI stylesheet.
+ *
+ * Colours route through Textual's theme variables (`$primary`,
+ * `$surface`, …) and NexusRecon's custom extensions (`$nx-text-muted`,
+ * `$nx-border-muted`, …). Switching themes (see `nexusrecon/tui/themes.py`)
+ * propagates through every rule automatically — no hardcoded hex below
+ * except severity tints, which are intentionally consistent across themes
+ * so an operator's mental "red = critical" mapping doesn't flip on theme
+ * change.
+ */
 
 Screen {
-    background: #0a0e1a;
-    color: #c9d1d9;
+    background: $background;
+    color: $foreground;
 }
 
 Header {
-    background: #0a0e1a;
-    color: #00ff9c;
+    background: $background;
+    color: $primary;
     text-style: bold;
 }
 
 Footer {
-    background: #0a0e1a;
-    color: #7f8c8d;
+    background: $background;
+    color: $nx-text-muted;
 }
 
-/* Welcome screen
-   The #welcome-content wrapper fills the screen area between Header and
-   Footer (height: 1fr) and centers its child stack both horizontally and
-   vertically (align: center middle). On a large monitor the banner +
-   menu now sit in the middle of the viewport instead of pinning to the
-   top-left corner. */
+/* Welcome screen */
 
-/* Outer container fills the viewport between Header and Footer and
-   centers its single child (the stack) both axes. */
 #welcome-content {
     width: 100%;
     height: 1fr;
     align: center middle;
 }
 
-/* The stack is full-width inside the centered container so each Center
-   child below has a known width to center within. Without width: 100%
-   the stack collapses to its widest child and other rows left-align. */
 #welcome-stack {
     width: 100%;
     height: auto;
     max-width: 100;
 }
 
-/* Each Center container only horizontally positions a widget that's
-   narrower than the Center itself. Textual's default widget width is
-   1fr (fills parent), so without an explicit `width: auto` each Static
-   below would expand to fill its Center container and the text would
-   left-align inside that full-width box — exactly the bug the previous
-   layout had. `width: auto` sizes each Static to its content, giving
-   the Center container a small widget to position at the middle. */
-
 #welcome-banner {
-    color: #00ff9c;
+    color: $primary;
     text-style: bold;
     width: auto;
     height: auto;
 }
 
 #welcome-version {
-    color: #00ff9c;
+    color: $primary;
     text-style: bold;
     margin-bottom: 0;
     width: auto;
     height: auto;
 }
 
-/* Dim author attribution — subtle by design, sits just below the
-   version line without competing for visual weight. */
 #welcome-attribution {
-    color: #4a5568;
+    color: $nx-text-dim;
     text-style: italic;
     margin-top: 0;
     margin-bottom: 1;
@@ -75,28 +64,49 @@ Footer {
 }
 
 #welcome-subtitle {
-    color: #c9d1d9;
+    color: $foreground;
     margin-bottom: 1;
     width: auto;
     height: auto;
 }
 
 #welcome-stats {
-    color: #7f8c8d;
-    margin-bottom: 1;
+    color: $nx-text-muted;
+    margin-bottom: 0;
+    width: auto;
+    height: auto;
+}
+
+/* Secondary status line — "X tools active · Y skipped (missing keys)"
+   and "Last run: …" hints under the main stats. Slightly dimmer so it
+   reads as supplementary, not load-bearing. */
+#welcome-status {
+    color: $nx-text-dim;
+    margin-bottom: 0;
     width: auto;
     height: auto;
 }
 
 #welcome-hint {
-    color: #4a5568;
+    color: $nx-text-dim;
     margin-bottom: 2;
     width: auto;
     height: auto;
 }
 
+/* First-run onboarding nudge — only rendered when the framework
+   detects no past campaigns + no configured secrets. Calls out the
+   Config screen as the natural first stop. */
+#welcome-onboarding {
+    color: $warning;
+    text-style: bold;
+    margin-bottom: 1;
+    width: auto;
+    height: auto;
+}
+
 #welcome-menu {
-    border: round #1f6feb;
+    border: round $secondary;
     padding: 1 2;
     width: 60;
     height: auto;
@@ -105,26 +115,23 @@ Footer {
 #welcome-menu Button {
     width: 100%;
     margin-bottom: 1;
-    background: #11151f;
-    color: #c9d1d9;
-    border: tall #11151f;
+    background: $surface;
+    color: $foreground;
+    border: tall $surface;
 }
 
 #welcome-menu Button:hover {
-    background: #1f6feb;
-    color: #ffffff;
+    background: $secondary;
+    color: $background;
 }
 
 #welcome-menu Button.-primary {
-    background: #00ff9c 20%;
-    color: #00ff9c;
-    border: tall #00ff9c;
+    background: $primary 20%;
+    color: $primary;
+    border: tall $primary;
 }
 
-/* Wizard
-   Same centering pattern as the welcome screen. The form has a max-width
-   so input fields don't stretch across the full viewport on a 4K
-   monitor — at that size lines become hard to read end-to-end. */
+/* Wizard */
 
 #wizard-content {
     width: 100%;
@@ -151,24 +158,24 @@ Footer {
 
 .wizard-step {
     padding: 1 2;
-    border: round #1f6feb;
+    border: round $secondary;
     margin: 1 2;
     height: auto;
 }
 
 .wizard-label {
-    color: #00ff9c;
+    color: $primary;
     text-style: bold;
     margin-top: 1;
 }
 
 .wizard-help {
-    color: #7f8c8d;
+    color: $nx-text-muted;
     margin-bottom: 1;
 }
 
 .wizard-error {
-    color: #ff5555;
+    color: $error;
     text-style: bold;
     margin-top: 1;
 }
@@ -179,18 +186,14 @@ Footer {
     height: 3;
 }
 
-/* Runner screen — four stacked panels:
-   1. runner-header        : phase label + chunky progress bar (auto)
-   2. runner-stats         : live counters grid (auto)
-   3. runner-activity-wrap : high-level activity log (1fr)
-   4. runner-detail-wrap   : structlog tail (1fr, toggleable via [d]) */
+/* Runner screen */
 
 #runner-header {
-    border: round #00ff9c;
+    border: round $primary;
     padding: 1 2;
     margin: 1 2 0 2;
     height: auto;
-    background: #0a0e1a;
+    background: $background;
 }
 
 #runner-header > #runner-phase-label {
@@ -205,7 +208,7 @@ Footer {
     width: 100%;
     height: auto;
     margin-bottom: 1;
-    color: #7f8c8d;
+    color: $nx-text-muted;
 }
 
 #runner-header > #runner-progress {
@@ -214,11 +217,11 @@ Footer {
 }
 
 #runner-stats {
-    border: round #1f6feb;
+    border: round $secondary;
     padding: 0 2;
     margin: 1 2 0 2;
     height: auto;
-    background: #0a0e1a;
+    background: $background;
 }
 
 #runner-stats > #runner-stats-body {
@@ -228,11 +231,11 @@ Footer {
 }
 
 #runner-activity-wrap {
-    border: round #7f8c8d;
+    border: round $nx-border-muted;
     padding: 0 1;
     margin: 1 2 0 2;
     height: 1fr;
-    background: #0a0e1a;
+    background: $background;
 }
 
 #runner-activity {
@@ -244,15 +247,15 @@ Footer {
 #activity-log {
     width: 100%;
     height: auto;
-    color: #c9d1d9;
+    color: $foreground;
 }
 
 #runner-detail-wrap {
-    border: round #4a5568;
+    border: round $nx-text-dim;
     padding: 0 1;
     margin: 1 2 1 2;
     height: 1fr;
-    background: #07090f;
+    background: $nx-bg-detail;
 }
 
 #runner-detail {
@@ -264,16 +267,16 @@ Footer {
 #detail-log {
     width: 100%;
     height: auto;
-    color: #7f8c8d;
+    color: $nx-text-muted;
 }
 
 .severity-critical { color: #ff3838; text-style: bold; }
 .severity-high     { color: #ff8c00; text-style: bold; }
 .severity-medium   { color: #f1c40f; }
 .severity-low      { color: #5dade2; }
-.severity-info     { color: #7f8c8d; }
+.severity-info     { color: $nx-text-muted; }
 
-/* Configuration screen — two-pane categorized .env editor */
+/* Configuration screen */
 
 #config-content {
     width: 100%;
@@ -294,7 +297,7 @@ Footer {
 
 #config-hint {
     text-align: center;
-    color: #7f8c8d;
+    color: $nx-text-muted;
     margin-bottom: 1;
     height: auto;
 }
@@ -306,13 +309,13 @@ Footer {
 
 #cat-pane {
     width: 32;
-    border: round #1f6feb;
+    border: round $secondary;
     padding: 1;
     margin: 0 1 0 0;
 }
 
 #cat-pane-header {
-    color: #00ff9c;
+    color: $primary;
     text-style: bold;
     margin-bottom: 1;
     height: auto;
@@ -327,13 +330,13 @@ Footer {
 }
 
 #cat-list > ListItem.--highlight {
-    background: #1f6feb;
-    color: #ffffff;
+    background: $secondary;
+    color: $background;
 }
 
 #keys-pane {
     width: 1fr;
-    border: round #1f6feb;
+    border: round $secondary;
     padding: 1;
 }
 
@@ -343,7 +346,7 @@ Footer {
 }
 
 #keys-pane-desc {
-    color: #7f8c8d;
+    color: $nx-text-muted;
     margin-bottom: 1;
     height: auto;
 }
@@ -356,7 +359,7 @@ Footer {
 
 EditKeyModal {
     align: center middle;
-    background: #0a0e1a 70%;
+    background: $background 70%;
 }
 
 #edit-modal {
@@ -364,8 +367,8 @@ EditKeyModal {
     max-width: 80%;
     height: auto;
     max-height: 80%;
-    background: #0a0e1a;
-    border: thick #00ff9c;
+    background: $background;
+    border: thick $primary;
     padding: 1 2;
 }
 
@@ -381,13 +384,13 @@ EditKeyModal {
 }
 
 #edit-help {
-    color: #c9d1d9;
+    color: $foreground;
     margin-bottom: 1;
     height: auto;
 }
 
 #edit-current {
-    color: #7f8c8d;
+    color: $nx-text-muted;
     margin-bottom: 1;
     height: auto;
 }
@@ -397,7 +400,7 @@ EditKeyModal {
 }
 
 #edit-hint {
-    color: #4a5568;
+    color: $nx-text-dim;
     text-align: center;
     margin-top: 1;
     margin-bottom: 1;
@@ -416,21 +419,66 @@ EditKeyModal {
 /* Results screen */
 
 #results-summary {
-    border: round #00ff9c;
+    border: round $primary;
     padding: 1 2;
     margin: 1 1;
 }
 
 #results-threads {
-    border: round #1f6feb;
+    border: round $secondary;
     padding: 0 1;
     margin: 1 1;
     height: auto;
 }
 
 #results-reports {
-    border: round #7f8c8d;
+    border: round $nx-border-muted;
     padding: 0 1;
     margin: 1 1;
+    height: auto;
+}
+
+/* Help overlay (global ? binding) */
+
+HelpModal {
+    align: center middle;
+    background: $background 80%;
+}
+
+#help-modal {
+    width: 80;
+    max-width: 90%;
+    height: auto;
+    max-height: 80%;
+    background: $background;
+    border: thick $primary;
+    padding: 1 2;
+}
+
+#help-title {
+    text-align: center;
+    color: $primary;
+    text-style: bold;
+    margin-bottom: 1;
+    height: auto;
+}
+
+#help-section-title {
+    color: $primary;
+    text-style: bold;
+    margin-top: 1;
+    height: auto;
+}
+
+#help-table {
+    height: auto;
+    max-height: 22;
+    margin-bottom: 1;
+}
+
+#help-hint {
+    color: $nx-text-dim;
+    text-align: center;
+    margin-top: 1;
     height: auto;
 }
