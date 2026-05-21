@@ -1,4 +1,4 @@
-"""Pretext and human intelligence tools (stubbed with full interface)."""
+"""Pretext and human intelligence tools."""
 from . import (
     conference_speaker_tool,
     crunchbase_tool,

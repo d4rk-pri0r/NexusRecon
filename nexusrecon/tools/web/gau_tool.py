@@ -14,7 +14,7 @@ class GAUTool(OSINTTool):
     category = Category.WEB
     requires_keys = []
     binary_required = "gau"
-    description = "URL discovery via GetAllUrls binary (stubbed)"
+    description = "URL discovery via the GetAllUrls (gau) CLI"
     target_types = ["domain"]
 
     async def run(self, target: str, **kwargs: Any) -> ToolResult:

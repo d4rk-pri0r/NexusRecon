@@ -114,14 +114,25 @@ class ToolRegistry:
                 parts.append(f"bin:{tool.binary_required}")
             return ", ".join(parts) if parts else ""
 
+        def _describe(tool: OSINTTool) -> str:
+            # Surface the [STUB] prefix prominently so operators don't
+            # discover a tool is a stub by reading the source mid-
+            # campaign. Avoid double-prefixing if the description
+            # already starts with the marker.
+            desc = tool.description or ""
+            if tool.stubbed and not desc.startswith("[STUB]"):
+                desc = f"[STUB] {desc}".rstrip()
+            return desc
+
         return [
             {
                 "name": t.name,
                 "tier": t.tier.value,
                 "category": t.category.value,
                 "available": str(t.is_available()),
-                "description": t.description,
+                "description": _describe(t),
                 "requires": _requires(t),
+                "stubbed": str(t.stubbed),
             }
             for t in self._tools.values()
         ]

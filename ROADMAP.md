@@ -75,9 +75,18 @@ each is independently testable.
       are available, surfacing schema drift on the providers we can
       authenticate against. This is the tripwire for wayback /
       fullhunt class bugs.
-- [ ] **Stubbed-tool policy.** Either implement, refuse to register,
-      or rename the description to be explicit. Operators shouldn't
-      discover a tool is a stub by reading the source mid-campaign.
+- [x] **Stubbed-tool policy.** `OSINTTool.stubbed: bool` class
+      attribute (default False). When True, `is_available()` returns
+      False so the registry keeps the tool out of
+      `available_tools()` and the LLM dispatcher cannot select it;
+      `list_tools()` prepends `[STUB] ` to the description so the
+      catalog surfaces the status. `tests/unit/test_stubbed_tools.py`
+      pins the inventory ── adding or removing a stub becomes a
+      conscious decision. Current inventory: `gowitness` (sole
+      remaining stub, awaiting real subprocess wrapper). `gau` was
+      mislabelled (real subprocess implementation existed) — fixed.
+      `gcp_recon` partial stubs (Firebase / Cloud Run) are flagged
+      inline in the per-feature output.
 - [ ] **Fresh-VM install verification.** Test `./install.sh` on
       M-series macOS, Linux x86_64, Linux arm64. Document any
       platform-specific failures. Confirm `pipx install nexusrecon`

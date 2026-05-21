@@ -99,6 +99,13 @@ class OSINTTool(abc.ABC):
     description: str = ""
     target_types: list[str] = ["domain"]  # domain, ip, email, etc.
     dynamic_trigger_hints: list[str] = []  # hints for dynamic dispatcher (Move 4)
+    # When True, the tool is registered for discoverability ("we know
+    # this surface exists") but is intentionally not functional yet.
+    # ``is_available()`` returns False so the registry keeps the tool
+    # out of ``available_tools()`` and ``registry.list_tools()`` flags
+    # it with a ``[STUB]`` prefix. Set to True on tools whose ``run()``
+    # is a placeholder; clear when a real implementation lands.
+    stubbed: bool = False
 
     def __init__(self) -> None:
         self.config = get_config()
@@ -111,7 +118,15 @@ class OSINTTool(abc.ABC):
         ...
 
     def is_available(self) -> bool:
-        """Return True if this tool can run (keys + binaries present)."""
+        """Return True if this tool can run (keys + binaries present).
+
+        Stubbed tools (``stubbed=True``) always return False ── the
+        registry keeps them visible in ``list_tools()`` (operators can
+        see the surface is planned) but excludes them from
+        ``available_tools()`` so the dispatcher never selects them.
+        """
+        if self.stubbed:
+            return False
         for key in self.requires_keys:
             if not self.config.get_secret(key):
                 return False

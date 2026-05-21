@@ -1,4 +1,12 @@
-"""GCP cloud reconnaissance tool (stubbed — implements GCS + App Engine)."""
+"""GCP cloud reconnaissance tool.
+
+GCS bucket enumeration + App Engine discovery are real;
+Firebase project enumeration and Cloud Run service discovery are
+flagged inline as TODO sub-stubs and surface as
+``{"status": "stubbed"}`` in the per-feature output. The tool as
+a whole is NOT marked ``stubbed`` because its primary surface
+(GCS + App Engine) does real work.
+"""
 
 from __future__ import annotations
 
@@ -22,7 +30,10 @@ class GCPReconTool(OSINTTool):
     tier = Tier.T0
     category = Category.CLOUD_GCP
     requires_keys = []
-    description = "GCP cloud asset enumeration (GCS, App Engine, Firebase, Cloud Run) — stubbed"
+    description = (
+        "GCP cloud asset enumeration. Implemented: GCS bucket + App "
+        "Engine discovery. Sub-stubs: Firebase, Cloud Run."
+    )
     target_types = ["domain"]
 
     def __init__(self) -> None:
