@@ -8,6 +8,7 @@ from . import (
     hunter_tool,
     leakcheck_tool,
     maigret_tool,
+    personal_pivot_tool,
     phonebook_tool,
     theharvester_tool,
 )

@@ -182,20 +182,20 @@ Pivot from corporate identity (`jane.doe@gitlab.com`, VP Engineering,
 GitLab) to personal identity (`jane.doe.82@gmail.com`, lives in SF,
 runs marathons), and surface credential-exposure paths via breach data.
 
-- [ ] **D1** `nexusrecon/core/identity_graph.py` — first-class
+- [x] **D1** `nexusrecon/core/identity_graph.py` — first-class
       ``Identity`` model with ``corp_identifiers``,
       ``personal_identifiers``, ``linked_accounts``,
       ``credential_exposures``, ``confidence_per_link`` sub-fields.
       Replaces the current dict-of-dicts ``email_intel.emails[em]``
       pattern.
-- [ ] **D2** `nexusrecon/core/personal_handle_derivation.py` —
+- [x] **D2** `nexusrecon/core/personal_handle_derivation.py` —
       generates personal handle candidates from
       ``(name, optional_age_range, optional_location,
         optional_interests)``. Patterns include name + year, name +
       hobby, nickname variants, common personal-email forms
       (``first.last@gmail``, ``firstinitial.last+year@gmail``, etc.).
       LLM-assisted hobby/interest expansion via the dispatcher.
-- [ ] **D3** `nexusrecon/tools/identity/personal_pivot_tool.py` —
+- [x] **D3** `nexusrecon/tools/identity/personal_pivot_tool.py` —
       orchestrator. Takes a confirmed corp identity, runs personal
       handle derivation, fires maigret against personal-service tiers
       (Reddit, Discord, gaming, dating, hobby forums), runs HIBP /

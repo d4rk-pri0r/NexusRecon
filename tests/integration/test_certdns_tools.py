@@ -29,6 +29,7 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 import respx
 from httpx import ConnectError, Response
 
@@ -548,6 +549,14 @@ def _make_dns_responder(registered: dict):
             return [_FakeRdata(f"10 {v}.") for v in info["mx"]]
         raise Exception(f"unsupported rtype {rtype}")
     return AsyncMock(side_effect=_resolve)
+
+
+# The ``dnstwist`` library is an optional runtime dependency — the tool
+# falls back to a basic permutation generator when it isn't installed.
+# These tests, however, ``patch("dnstwist.Fuzzer", ...)`` which requires
+# the module to be importable.  Skip the whole class when dnstwist is
+# absent so CI environments without the optional dep don't fail.
+dnstwist = pytest.importorskip("dnstwist")
 
 
 class TestDNSTwistTool:

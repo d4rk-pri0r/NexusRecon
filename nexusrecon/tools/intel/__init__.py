@@ -5,6 +5,7 @@ from . import (
     binaryedge_tool,
     censys_tool,
     certstream_tool,
+    dehashed_tool,
     fullhunt_tool,
     greynoise_tool,
     ipinfo_tool,
