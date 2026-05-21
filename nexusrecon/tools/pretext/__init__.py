@@ -1,5 +1,6 @@
 """Pretext and human intelligence tools (stubbed with full interface)."""
 from . import (
+    conference_speaker_tool,
     crunchbase_tool,
     github_org_members_tool,
     jobs_tool,

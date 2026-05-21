@@ -3,6 +3,7 @@ from . import (
     abuseipdb_tool,
     ahmia_tool,
     binaryedge_tool,
+    business_partner_tool,
     censys_tool,
     certstream_tool,
     dehashed_tool,
