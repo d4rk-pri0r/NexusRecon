@@ -287,3 +287,55 @@ class TestAppIntegration:
         import nexusrecon.tui.app as app_module
         assert hasattr(app_module, "THEMES")
         assert hasattr(app_module, "resolve_theme_name")
+
+    def test_css_declares_nx_variable_defaults(self):
+        """Regression test for the launch-crash bug: Textual parses
+        CSS *before* App.on_mount() runs (which is where the custom
+        themes register), so the $nx-* variables MUST have default
+        values declared inline at the top of app.tcss. Without them,
+        the parser raises "reference to undefined variable" before
+        the first frame paints and the TUI never starts.
+
+        This test reads the actual .tcss file and asserts the four
+        $nx-* defaults are declared. It does NOT assert specific
+        values — only presence — because theme variables override
+        the defaults at runtime."""
+        from pathlib import Path
+
+        import nexusrecon.tui.app as app_module
+        css_path = Path(app_module.__file__).parent / app_module.NexusReconApp.CSS_PATH
+        text = css_path.read_text(encoding="utf-8")
+        for var in ("$nx-text-muted", "$nx-text-dim", "$nx-border-muted", "$nx-bg-detail"):
+            # Look for the variable in a declaration position (start of
+            # a line, possibly after whitespace, followed by ':').
+            decl_pattern = f"{var}:"
+            assert decl_pattern in text, (
+                f"app.tcss missing default declaration for {var!r}. "
+                "Without an inline default, Textual's pre-mount CSS "
+                "parser raises 'reference to undefined variable' and "
+                "the TUI never reaches on_mount() to register themes."
+            )
+
+    def test_tui_launches_under_pilot(self):
+        """End-to-end smoke: spin up the TUI headless and verify
+        the welcome screen mounts without a CSS error. Reproduces
+        the original launch crash from ddb2c91 and confirms the
+        fix holds."""
+        import asyncio
+
+        from nexusrecon.tui.app import NexusReconApp
+
+        async def _drive():
+            app = NexusReconApp()
+            async with app.run_test(headless=True) as pilot:
+                await pilot.pause(0.5)
+                # If CSS parse failed, the welcome screen never
+                # mounts and app.screen is the default screen.
+                assert type(app.screen).__name__ == "WelcomeScreen", (
+                    f"Welcome screen failed to mount; got "
+                    f"{type(app.screen).__name__}"
+                )
+                app.exit()
+                await pilot.pause(0.1)
+
+        asyncio.run(_drive())

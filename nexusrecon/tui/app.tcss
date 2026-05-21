@@ -7,7 +7,20 @@
  * except severity tints, which are intentionally consistent across themes
  * so an operator's mental "red = critical" mapping doesn't flip on theme
  * change.
+ *
+ * The $nx-* variable defaults below are required because Textual parses
+ * CSS at app startup BEFORE `App.on_mount()` runs, which is when the
+ * custom themes register. Without these defaults the parser raises
+ * "reference to undefined variable" before the first frame paints.
+ * When a theme is later activated, its `variables` block overrides
+ * these defaults — the dark-theme values match the originals exactly,
+ * so the runtime appearance is unchanged.
  */
+
+$nx-text-muted: #7f8c8d;
+$nx-text-dim: #4a5568;
+$nx-border-muted: #7f8c8d;
+$nx-bg-detail: #07090f;
 
 Screen {
     background: $background;
