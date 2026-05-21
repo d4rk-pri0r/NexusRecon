@@ -1,7 +1,10 @@
 """News, press, M&A, and earnings intelligence tool."""
 from __future__ import annotations
-from typing import Any, Dict, List, Optional
+
+from typing import Any
+
 import httpx
+
 from nexusrecon.opsec.useragent import random_ua
 from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
@@ -34,8 +37,8 @@ class NewsTool(OSINTTool):
     target_types = ["domain"]
 
     async def run(self, target: str, **kwargs: Any) -> ToolResult:
-        articles: List[Dict[str, Any]] = []
-        sources_used: List[str] = []
+        articles: list[dict[str, Any]] = []
+        sources_used: list[str] = []
 
         # Try NewsAPI if key is available
         api_key = self.config.get_secret("newsapi_api_key")
@@ -61,7 +64,7 @@ class NewsTool(OSINTTool):
             result_count=len(articles),
         )
 
-    async def _fetch_newsapi(self, target: str, api_key: str) -> List[Dict[str, Any]]:
+    async def _fetch_newsapi(self, target: str, api_key: str) -> list[dict[str, Any]]:
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(
@@ -90,8 +93,8 @@ class NewsTool(OSINTTool):
             pass
         return []
 
-    async def _fetch_rss_sources(self, target: str) -> List[Dict[str, Any]]:
-        articles: List[Dict[str, Any]] = []
+    async def _fetch_rss_sources(self, target: str) -> list[dict[str, Any]]:
+        articles: list[dict[str, Any]] = []
         async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as client:
             for source in NEWS_SOURCES:
                 try:
@@ -112,13 +115,13 @@ class NewsTool(OSINTTool):
         return articles
 
     @staticmethod
-    def _parse_rss(xml_text: str) -> List[Dict[str, str]]:
+    def _parse_rss(xml_text: str) -> list[dict[str, str]]:
         """Minimal RSS/XML parser without external dependencies."""
         items = []
         import re
         for item_match in re.finditer(r"<item>(.*?)</item>", xml_text, re.DOTALL):
             item_xml = item_match.group(1)
-            item: Dict[str, str] = {}
+            item: dict[str, str] = {}
             for field in ("title", "link", "description", "pubDate", "source"):
                 m = re.search(rf"<{field}[^>]*>(.*?)</{field}>", item_xml, re.DOTALL)
                 if m:

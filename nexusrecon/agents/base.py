@@ -9,8 +9,7 @@ All agents inherit from this class which provides:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import structlog
 
@@ -76,7 +75,7 @@ class BaseNexusAgent:
     max_steps: int = 25
     max_tokens: int = 4096
     allow_delegation: bool = False
-    tools: List[Any] = []
+    tools: list[Any] = []
     require_citations: bool = True
     step_budget: int = 25
 
@@ -85,7 +84,7 @@ class BaseNexusAgent:
             if hasattr(self.__class__, key):
                 setattr(self, key, value)
 
-    def to_crewai_config(self) -> Dict[str, Any]:
+    def to_crewai_config(self) -> dict[str, Any]:
         """Convert to CrewAI Agent constructor kwargs."""
         return {
             "role": self.role,

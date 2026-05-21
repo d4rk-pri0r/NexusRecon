@@ -1,16 +1,15 @@
 """Integration tests for HTTP-based OSINT tools using respx mocking."""
+import httpx
 import pytest
 import respx
-import httpx
 from httpx import Response
 
 from nexusrecon.tools.domain.crtsh_tool import CRTShTool
-from nexusrecon.tools.web.webtech_tool import WebTechTool
-from nexusrecon.tools.web.favicon_tool import FaviconTool
-from nexusrecon.tools.web.dorks_tool import DorksTool
-from nexusrecon.tools.web.metadata_tool import MetadataTool
 from nexusrecon.tools.identity.breach_tool import BreachTool
-
+from nexusrecon.tools.web.dorks_tool import DorksTool
+from nexusrecon.tools.web.favicon_tool import FaviconTool
+from nexusrecon.tools.web.metadata_tool import MetadataTool
+from nexusrecon.tools.web.webtech_tool import WebTechTool
 
 CRTSH_URL = "https://crt.sh/"
 
@@ -264,6 +263,7 @@ class TestBreachTool:
     @pytest.fixture(autouse=True)
     def _set_hibp_key(self):
         import os
+
         from nexusrecon.core.config import get_config
         old = os.environ.get("NEXUS_HAVEIBEENPWNED_API_KEY") or os.environ.get("HAVEIBEENPWNED_API_KEY")
         os.environ["HAVEIBEENPWNED_API_KEY"] = "test-key-123"
@@ -309,6 +309,7 @@ class TestBreachTool:
     @pytest.mark.asyncio
     async def test_hibp_no_api_key(self):
         import os
+
         from nexusrecon.core.config import get_config
         old = os.environ.pop("HAVEIBEENPWNED_API_KEY", None)
         get_config.cache_clear()
@@ -404,6 +405,7 @@ class TestNewsTool:
     @pytest.mark.asyncio
     async def test_newsapi_with_key(self):
         import os
+
         from nexusrecon.core.config import get_config
         from nexusrecon.tools.pretext.news_tool import NewsTool
 
@@ -469,7 +471,7 @@ class TestJobsTool:
 
     @pytest.mark.asyncio
     async def test_jobs_extracts_tech_stack(self):
-        from nexusrecon.tools.pretext.jobs_tool import JobsTool, TECH_KEYWORDS
+        from nexusrecon.tools.pretext.jobs_tool import JobsTool
         tool = JobsTool()
         html = """
         <html><body>
@@ -489,6 +491,7 @@ class TestJobsTool:
     @pytest.mark.asyncio
     async def test_adzuna_api(self):
         import os
+
         from nexusrecon.core.config import get_config
         from nexusrecon.tools.pretext.jobs_tool import JobsTool
 

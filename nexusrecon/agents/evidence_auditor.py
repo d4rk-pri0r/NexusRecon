@@ -1,8 +1,9 @@
 """Evidence & Citation Auditor agent — validates every finding has required citation."""
 from __future__ import annotations
-from typing import Any, Dict, List, Optional
-from nexusrecon.agents.base import BaseNexusAgent
 
+from typing import Any
+
+from nexusrecon.agents.base import BaseNexusAgent
 
 AUDITOR_ROLE = """
 Evidence and Citation Auditor. You are the quality gate for all intelligence.
@@ -34,12 +35,12 @@ class EvidenceAuditorAgent(BaseNexusAgent):
     max_steps = 15
     require_citations = True
 
-    def validate_finding(self, finding: Dict[str, Any]) -> bool:
+    def validate_finding(self, finding: dict[str, Any]) -> bool:
         """Validate a single finding has all required citation fields."""
         required = ["source", "timestamp", "raw_evidence_hash", "confidence"]
         return all(finding.get(field) for field in required)
 
-    def audit_findings(self, findings: List[Dict[str, Any]]) -> tuple:
+    def audit_findings(self, findings: list[dict[str, Any]]) -> tuple:
         """
         Audit a batch of findings.
         Returns (passed, rejected) lists.

@@ -10,9 +10,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from nexusrecon.tools.intel.dehashed_tool import DehashedTool
 from nexusrecon.tools.identity.hudsonrock_tool import HudsonRockTool
-
+from nexusrecon.tools.intel.dehashed_tool import DehashedTool
 
 # ──────────────────────────────────────────────────────────────────────
 # Helpers

@@ -5,14 +5,14 @@ import asyncio
 import hashlib
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import httpx
 import structlog
 
 log = structlog.get_logger(__name__)
 
-CRED_PATTERNS: List[tuple[str, str]] = [
+CRED_PATTERNS: list[tuple[str, str]] = [
     ("aws_access_key", r"(AKIA[0-9A-Z]{16})"),
     ("aws_secret_key", r"(?i)aws.{0,20}?(?:secret|key).{0,20}?['\"]([0-9a-zA-Z/+]{40})['\"]"),
     ("github_token", r"(gh[pousr]_[A-Za-z0-9]{36,})"),
@@ -46,7 +46,7 @@ def _context_excerpt(text: str, match_start: int, window: int = 80) -> str:
     return text[start:end].replace("\n", " ")
 
 
-def _classify_env_key(key: str, value: str) -> Optional[str]:
+def _classify_env_key(key: str, value: str) -> str | None:
     key_upper = key.upper()
     if "AWS" in key_upper and ("KEY" in key_upper or "SECRET" in key_upper):
         return "aws_secret_key" if "SECRET" in key_upper else "aws_access_key"
@@ -75,9 +75,9 @@ class HarvestedCredential:
     context: str
     confidence: float
     validated: bool = False
-    validation_method: Optional[str] = None
-    validation_metadata: Dict[str, Any] = field(default_factory=dict)
-    next_steps: List[str] = field(default_factory=list)
+    validation_method: str | None = None
+    validation_metadata: dict[str, Any] = field(default_factory=dict)
+    next_steps: list[str] = field(default_factory=list)
 
 
 def _make_cred(
@@ -87,7 +87,7 @@ def _make_cred(
     source_type: str,
     context: str,
     confidence: float,
-    next_steps: Optional[List[str]] = None,
+    next_steps: list[str] | None = None,
 ) -> HarvestedCredential:
     return HarvestedCredential(
         cred_type=cred_type,
@@ -105,7 +105,7 @@ def _scan_text_for_creds(
     text: str,
     source_url: str,
     source_type: str,
-) -> List[HarvestedCredential]:
+) -> list[HarvestedCredential]:
     creds = []
     for cred_type, pattern in CRED_PATTERNS:
         for m in re.finditer(pattern, text):
@@ -115,7 +115,7 @@ def _scan_text_for_creds(
     return creds
 
 
-def _harvest_env_files(state: Dict[str, Any]) -> List[HarvestedCredential]:
+def _harvest_env_files(state: dict[str, Any]) -> list[HarvestedCredential]:
     creds = []
     infra_intel = state.get("infra_intel", {})
     for sub, data in infra_intel.items():
@@ -141,7 +141,7 @@ def _harvest_env_files(state: Dict[str, Any]) -> List[HarvestedCredential]:
     return creds
 
 
-def _harvest_git_configs(state: Dict[str, Any]) -> List[HarvestedCredential]:
+def _harvest_git_configs(state: dict[str, Any]) -> list[HarvestedCredential]:
     creds = []
     infra_intel = state.get("infra_intel", {})
     for sub, data in infra_intel.items():
@@ -165,7 +165,7 @@ def _harvest_git_configs(state: Dict[str, Any]) -> List[HarvestedCredential]:
     return creds
 
 
-def _harvest_github_actions(state: Dict[str, Any]) -> List[HarvestedCredential]:
+def _harvest_github_actions(state: dict[str, Any]) -> list[HarvestedCredential]:
     creds = []
     code_intel = state.get("code_intel", {})
     for key, data in code_intel.items():
@@ -189,7 +189,7 @@ def _harvest_github_actions(state: Dict[str, Any]) -> List[HarvestedCredential]:
     return creds
 
 
-def _harvest_gitleaks(state: Dict[str, Any]) -> List[HarvestedCredential]:
+def _harvest_gitleaks(state: dict[str, Any]) -> list[HarvestedCredential]:
     creds = []
     code_intel = state.get("code_intel", {})
     for key, data in code_intel.items():
@@ -212,7 +212,7 @@ def _harvest_gitleaks(state: Dict[str, Any]) -> List[HarvestedCredential]:
     return creds
 
 
-def _harvest_infostealer(state: Dict[str, Any]) -> List[HarvestedCredential]:
+def _harvest_infostealer(state: dict[str, Any]) -> list[HarvestedCredential]:
     creds = []
     email_intel = state.get("email_intel", {})
     for em, data in email_intel.get("emails", {}).items():
@@ -245,7 +245,7 @@ def _harvest_infostealer(state: Dict[str, Any]) -> List[HarvestedCredential]:
     return creds
 
 
-def _harvest_pastebin(state: Dict[str, Any]) -> List[HarvestedCredential]:
+def _harvest_pastebin(state: dict[str, Any]) -> list[HarvestedCredential]:
     creds = []
     dark_intel = state.get("dark_intel", {})
     for key, data in dark_intel.items():
@@ -293,8 +293,8 @@ async def _validate_github(cred: HarvestedCredential, raw_value: str) -> None:
                 cred.validated = True
                 cred.validation_method = "GET https://api.github.com/user"
                 cred.validation_metadata = {"login": data.get("login", ""), "email": data.get("email", "")}
-    except Exception as exc:
-        cred.next_steps.append(f"Manual: curl -H 'Authorization: token <token>' https://api.github.com/user")
+    except Exception:
+        cred.next_steps.append("Manual: curl -H 'Authorization: token <token>' https://api.github.com/user")
 
 
 async def _validate_slack(cred: HarvestedCredential, raw_value: str) -> None:
@@ -316,8 +316,8 @@ async def _validate_slack(cred: HarvestedCredential, raw_value: str) -> None:
 
 async def _validate_jwt(cred: HarvestedCredential, raw_value: str) -> None:
     try:
-        import json as _json
         import base64
+        import json as _json
         parts = raw_value.split(".")
         if len(parts) >= 2:
             padded = parts[1] + "=" * (-len(parts[1]) % 4)
@@ -330,11 +330,11 @@ async def _validate_jwt(cred: HarvestedCredential, raw_value: str) -> None:
 
 
 async def harvest_credentials(
-    state: Dict[str, Any],
+    state: dict[str, Any],
     validate: bool = False,
-) -> List[HarvestedCredential]:
+) -> list[HarvestedCredential]:
     """Walk all intel sources, extract concrete credentials, optionally validate (read-only)."""
-    all_creds: List[HarvestedCredential] = []
+    all_creds: list[HarvestedCredential] = []
 
     all_creds.extend(_harvest_env_files(state))
     all_creds.extend(_harvest_git_configs(state))
@@ -345,7 +345,7 @@ async def harvest_credentials(
 
     # Deduplicate by value_hash
     seen_hashes: set[str] = set()
-    unique_creds: List[HarvestedCredential] = []
+    unique_creds: list[HarvestedCredential] = []
     for cred in all_creds:
         if cred.value_hash not in seen_hashes:
             seen_hashes.add(cred.value_hash)
@@ -377,9 +377,9 @@ async def harvest_credentials(
     return unique_creds
 
 
-def _build_raw_map(state: Dict[str, Any]) -> Dict[str, str]:
+def _build_raw_map(state: dict[str, Any]) -> dict[str, str]:
     """Build hash→raw_value map for validation. Values are never logged."""
-    raw_map: Dict[str, str] = {}
+    raw_map: dict[str, str] = {}
 
     infra_intel = state.get("infra_intel", {})
     for sub, data in infra_intel.items():

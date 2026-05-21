@@ -16,13 +16,12 @@ authoritative API.
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import dns.asyncresolver
 
 from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
-
 
 # Cap how many permutations we DNS-resolve in a single call. ``dnstwist``
 # typically generates 1000+ candidates per domain; checking all of them
@@ -65,7 +64,7 @@ class DNSTwistTool(OSINTTool):
             # has at minimum ``domain`` and ``fuzzer`` keys. The fuzzer
             # also yields a ``*original`` entry representing the input
             # itself — skip it; we only care about permutations.
-            candidates: List[Dict[str, Any]] = []
+            candidates: list[dict[str, Any]] = []
             for perm in fuzzer.domains:
                 fuzzer_name = perm.get("fuzzer")
                 domain = perm.get("domain")
@@ -101,7 +100,7 @@ class DNSTwistTool(OSINTTool):
             resolver.timeout = _DNS_TIMEOUT_SEC
             resolver.lifetime = _DNS_LIFETIME_SEC
 
-            async def _resolve(candidate: Dict[str, str]) -> Optional[Dict[str, Any]]:
+            async def _resolve(candidate: dict[str, str]) -> dict[str, Any] | None:
                 dom = candidate["domain"]
                 try:
                     a_answers = await resolver.resolve(dom, "A")
@@ -145,7 +144,7 @@ class DNSTwistTool(OSINTTool):
             return ToolResult(success=False, source=self.name, error=str(e))
 
     @staticmethod
-    def _basic_permutations(domain: str) -> List[Dict[str, Any]]:
+    def _basic_permutations(domain: str) -> list[dict[str, Any]]:
         """Basic permutation fallback when the dnstwist library is not
         installed. Returns a curated list of "subdomain-style" variants
         commonly used for phishing — not full typosquat coverage, just

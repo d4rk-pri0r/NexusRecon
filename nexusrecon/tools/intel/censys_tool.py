@@ -1,7 +1,10 @@
 """Censys API tool, hosts and certificates search."""
 from __future__ import annotations
-from typing import Any, Dict, List
+
+from typing import Any
+
 import httpx
+
 from nexusrecon.tools.base import BaseHTTPTool, Category, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
 
@@ -30,7 +33,7 @@ class CensysTool(BaseHTTPTool):
                 timeout=15.0,
                 **self._proxy_kwargs(),
             ) as client:
-                results: Dict[str, Any] = {}
+                results: dict[str, Any] = {}
 
                 # ``classify_response`` from :class:`BaseHTTPTool` replaces
                 # bare ``if status == 200`` gates that previously masked

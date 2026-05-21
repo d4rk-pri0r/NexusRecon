@@ -1,7 +1,7 @@
 """Correlation & Hypothesis agent — connects entities, generates leads."""
 from __future__ import annotations
-from nexusrecon.agents.base import BaseNexusAgent
 
+from nexusrecon.agents.base import BaseNexusAgent
 
 CORRELATION_ROLE = """
 Intelligence Correlation and Hypothesis Generation Specialist. You connect

@@ -25,12 +25,10 @@ from unittest.mock import patch
 import respx
 from httpx import Response
 
-from tests.fixtures import load_fixture
-
 from nexusrecon.tools.identity.emailrep_tool import EmailRepTool
 from nexusrecon.tools.identity.hudsonrock_tool import HudsonRockTool
 from nexusrecon.tools.identity.leakcheck_tool import LeakCheckTool
-
+from tests.fixtures import load_fixture
 
 # ────────────────────────────────────────────────────────────────────────
 # EmailRep — emailrep.io (API key optional)

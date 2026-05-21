@@ -17,14 +17,13 @@ from __future__ import annotations
 
 import asyncio
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import httpx
 
 from nexusrecon.opsec.useragent import random_ua
 from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
-
 
 S3_REGIONS = [
     "us-east-1", "us-east-2", "us-west-1", "us-west-2",
@@ -82,7 +81,7 @@ class AWSReconTool(OSINTTool):
 
     def __init__(self) -> None:
         super().__init__()
-        self._http: Optional[httpx.AsyncClient] = None
+        self._http: httpx.AsyncClient | None = None
 
     async def _get_client(self) -> httpx.AsyncClient:
         if self._http is None:
@@ -97,7 +96,7 @@ class AWSReconTool(OSINTTool):
             await self._http.aclose()
 
     async def run(self, target: str, **kwargs: Any) -> ToolResult:
-        results: Dict[str, Any] = {}
+        results: dict[str, Any] = {}
         try:
             client = await self._get_client()
             base = target.split(".")[0].lower().replace("-", "").replace("_", "")
@@ -153,8 +152,8 @@ class AWSReconTool(OSINTTool):
         self,
         client: httpx.AsyncClient,
         base: str,
-        subdomains: Optional[List[str]] = None,
-    ) -> List[Dict[str, Any]]:
+        subdomains: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
         bucket_names = set()
 
         # From permutations
@@ -176,7 +175,7 @@ class AWSReconTool(OSINTTool):
         results = []
         sem = asyncio.Semaphore(20)  # limit concurrency
 
-        async def _check_bucket(name: str) -> Optional[Dict[str, Any]]:
+        async def _check_bucket(name: str) -> dict[str, Any] | None:
             async with sem:
                 for region in S3_REGIONS:
                     url = f"https://{name}.s3.{region}.amazonaws.com/"
@@ -200,7 +199,7 @@ class AWSReconTool(OSINTTool):
 
     # ── CloudFront ────────────────────────────────────────────────────────────
 
-    async def _enumerate_cloudfront(self, client: httpx.AsyncClient, domain: str) -> List[Dict[str, Any]]:
+    async def _enumerate_cloudfront(self, client: httpx.AsyncClient, domain: str) -> list[dict[str, Any]]:
         # Search crt.sh for *.cloudfront.net associated with the domain
         # For now, do a simple subdomain check
         cf_candidates = [
@@ -224,7 +223,7 @@ class AWSReconTool(OSINTTool):
 
     # ── Lambda Function URLs ──────────────────────────────────────────────────
 
-    async def _enumerate_lambda(self, client: httpx.AsyncClient, base: str) -> List[Dict[str, Any]]:
+    async def _enumerate_lambda(self, client: httpx.AsyncClient, base: str) -> list[dict[str, Any]]:
         results = []
         for perm in LAMBDA_PATTERNS:
             name = perm.format(name=base).lower()
@@ -250,8 +249,8 @@ class AWSReconTool(OSINTTool):
     # ── Cognito ───────────────────────────────────────────────────────────────
 
     async def _find_cognito_pools(
-        self, client: httpx.AsyncClient, subdomains: List[str]
-    ) -> List[Dict[str, Any]]:
+        self, client: httpx.AsyncClient, subdomains: list[str]
+    ) -> list[dict[str, Any]]:
         # Scan web apps for Cognito pool IDs
         cognito_pattern = re.compile(r'([a-z0-9-]+_[a-z0-9]{20,})')
         found = []
@@ -274,7 +273,7 @@ class AWSReconTool(OSINTTool):
 
     # ── ECR ───────────────────────────────────────────────────────────────────
 
-    async def _enumerate_ecr(self, client: httpx.AsyncClient, base: str) -> List[Dict[str, Any]]:
+    async def _enumerate_ecr(self, client: httpx.AsyncClient, base: str) -> list[dict[str, Any]]:
         # ECR public gallery search by account alias
         # Public ECR URL pattern: public.ecr.aws/{repository_alias}
         names = [base, f"{base}-app", f"{base}-api", f"{base}-web", f"{base}com"]
@@ -297,7 +296,7 @@ class AWSReconTool(OSINTTool):
 
     # ── Elastic Beanstalk ─────────────────────────────────────────────────────
 
-    async def _enumerate_beanstalk(self, client: httpx.AsyncClient, base: str) -> List[Dict[str, Any]]:
+    async def _enumerate_beanstalk(self, client: httpx.AsyncClient, base: str) -> list[dict[str, Any]]:
         names = [base, f"{base}-api", f"{base}-app", f"{base}-web", f"{base}-prod", f"{base}-staging"]
         found = []
         for name in names:

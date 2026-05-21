@@ -16,7 +16,7 @@ from nexusrecon.opsec.profiles import (
     StealthProfile,
     get_profile,
 )
-from nexusrecon.opsec.proxy import ProxyConfig, ProxyManager
+from nexusrecon.opsec.proxy import ProxyManager
 from nexusrecon.opsec.rate_limiter import (
     BurstDetector,
     RateLimiter,
@@ -28,7 +28,6 @@ from nexusrecon.opsec.useragent import (
     UserAgentPool,
     random_ua,
 )
-
 
 # ──────────────────────────────────────────────────────────────────────────
 # UserAgentPool + random_ua

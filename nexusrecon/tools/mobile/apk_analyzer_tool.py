@@ -1,14 +1,12 @@
 """APK Analyzer — download APK from APKMirror and scan for secrets/endpoints."""
 from __future__ import annotations
 
-import asyncio
 import hashlib
-import importlib.util
 import re
 import tempfile
 import zipfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import httpx
 
@@ -21,7 +19,7 @@ _HEADERS = {
     "Accept": "text/html,application/xhtml+xml,*/*",
 }
 
-APK_CRED_PATTERNS: List[tuple[str, str]] = [
+APK_CRED_PATTERNS: list[tuple[str, str]] = [
     ("aws_access_key", r"AKIA[0-9A-Z]{16}"),
     ("github_token", r"gh[pousr]_[A-Za-z0-9]{36,}"),
     ("google_api_key", r"AIza[0-9A-Za-z_\-]{35}"),
@@ -47,7 +45,7 @@ _APKPURE_WARNING = (
 )
 
 
-def _scan_text(text: str) -> List[Dict[str, str]]:
+def _scan_text(text: str) -> list[dict[str, str]]:
     found = []
     for cred_type, pattern in APK_CRED_PATTERNS:
         matches = re.findall(pattern, text)
@@ -57,7 +55,7 @@ def _scan_text(text: str) -> List[Dict[str, str]]:
     return found
 
 
-def _extract_version(manifest_bytes: bytes) -> Optional[str]:
+def _extract_version(manifest_bytes: bytes) -> str | None:
     """Parse versionName from AndroidManifest.xml bytes using ElementTree."""
     import xml.etree.ElementTree as ET
     try:
@@ -72,13 +70,13 @@ def _extract_version(manifest_bytes: bytes) -> Optional[str]:
         return None
 
 
-def _scan_apk(apk_path: Path) -> tuple[Optional[str], Dict[str, Any]]:
+def _scan_apk(apk_path: Path) -> tuple[str | None, dict[str, Any]]:
     """Scan APK for secrets, endpoints, permissions. Returns (version, scan_data)."""
-    secrets: List[Dict[str, str]] = []
-    endpoints: List[str] = []
-    permissions: List[str] = []
-    libs: List[str] = []
-    version: Optional[str] = None
+    secrets: list[dict[str, str]] = []
+    endpoints: list[str] = []
+    permissions: list[str] = []
+    libs: list[str] = []
+    version: str | None = None
 
     try:
         with zipfile.ZipFile(apk_path) as zf:
@@ -127,7 +125,7 @@ def _scan_apk(apk_path: Path) -> tuple[Optional[str], Dict[str, Any]]:
     }
 
 
-async def _fetch_apkmirror(package: str, client: httpx.AsyncClient) -> Optional[bytes]:
+async def _fetch_apkmirror(package: str, client: httpx.AsyncClient) -> bytes | None:
     """Try to fetch APK from APKMirror. Returns raw bytes or None."""
     try:
         from bs4 import BeautifulSoup
@@ -183,7 +181,7 @@ async def _fetch_apkmirror(package: str, client: httpx.AsyncClient) -> Optional[
     return None
 
 
-async def _fetch_apkpure(package: str, client: httpx.AsyncClient) -> Optional[bytes]:
+async def _fetch_apkpure(package: str, client: httpx.AsyncClient) -> bytes | None:
     """Try to fetch APK from APKPure. Returns raw bytes or None."""
     try:
         from bs4 import BeautifulSoup
@@ -195,7 +193,7 @@ async def _fetch_apkpure(package: str, client: httpx.AsyncClient) -> Optional[by
         soup = BeautifulSoup(resp.text, "lxml")
 
         # Find first result link that contains the package name
-        app_link: Optional[str] = None
+        app_link: str | None = None
         for a in soup.select("a[href]"):
             href = str(a.get("href", ""))
             if f"/{package}" in href:
@@ -219,7 +217,7 @@ async def _fetch_apkpure(package: str, client: httpx.AsyncClient) -> Optional[by
         dl_soup = BeautifulSoup(dl_resp.text, "lxml")
 
         # Find the direct APK link
-        final_link: Optional[str] = None
+        final_link: str | None = None
         for a in dl_soup.select("a[href*='.apk'], a[href*='download.apkpure']"):
             final_link = str(a.get("href", ""))
             break
@@ -261,11 +259,11 @@ class APKAnalyzerTool(OSINTTool):
     dynamic_trigger_hints = ["android app discovered", "play store app found"]
 
     async def run(self, target: str, **kwargs: Any) -> ToolResult:
-        warnings: List[str] = []
+        warnings: list[str] = []
         source = "metadata_only"
-        version: Optional[str] = None
-        checksum_sha256: Optional[str] = None
-        scan_results: Dict[str, Any] = {
+        version: str | None = None
+        checksum_sha256: str | None = None
+        scan_results: dict[str, Any] = {
             "extracted_secrets": [],
             "extracted_endpoints": [],
             "permissions": [],

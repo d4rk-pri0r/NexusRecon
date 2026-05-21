@@ -6,10 +6,7 @@ HTTP calls. The tool's scoring math + identity-extension assembly
 are the real targets here."""
 from __future__ import annotations
 
-from typing import Any, Dict
 from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
 
 from nexusrecon.core.identity_graph import (
     BreachConfidence,
@@ -25,7 +22,6 @@ from nexusrecon.tools.identity.personal_pivot_tool import (
     _summarise_breach_data,
     apply_extensions_to_graph,
 )
-
 
 # ──────────────────────────────────────────────────────────────────────
 # Probe disabled: pure orchestration logic
@@ -64,7 +60,7 @@ class TestProbeDisabledModes:
         widen the candidate set ── the test exercises the wiring,
         not the derivation itself (that's D2's tests)."""
         tool = PersonalPivotTool()
-        result_bare = await tool.run(
+        await tool.run(
             "j@x.com", name="Jane Doe",
             probe_handles=False, probe_emails=False,
         )

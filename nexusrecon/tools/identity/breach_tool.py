@@ -1,8 +1,11 @@
 """Breach data correlation tool — HIBP API + optional DeHashed/IntelX."""
 from __future__ import annotations
-from typing import Any, Dict, List, Optional
+
 import base64
+from typing import Any
+
 import httpx
+
 from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
 
@@ -18,7 +21,7 @@ class BreachTool(OSINTTool):
     dynamic_trigger_hints = ["credential breach found", "email breach detected"]
 
     async def run(self, target: str, **kwargs: Any) -> ToolResult:
-        results: Dict[str, Any] = {}
+        results: dict[str, Any] = {}
         target_type = kwargs.get("target_type", "email")
 
         # HIBP
@@ -44,7 +47,7 @@ class BreachTool(OSINTTool):
             result_count=total_breaches,
         )
 
-    async def _check_hibp(self, target: str, target_type: str) -> Dict[str, Any]:
+    async def _check_hibp(self, target: str, target_type: str) -> dict[str, Any]:
         key = self.config.get_secret("haveibeenpwned_api_key")
         if not key:
             return {"error": "HIBP API key not set"}
@@ -90,7 +93,7 @@ class BreachTool(OSINTTool):
         except Exception as e:
             return {"error": str(e)}
 
-    async def _check_dehashed(self, target: str, target_type: str, username: str, api_key: str) -> Dict[str, Any]:
+    async def _check_dehashed(self, target: str, target_type: str, username: str, api_key: str) -> dict[str, Any]:
         """Query DeHashed API for breach data."""
         try:
             auth_str = base64.b64encode(f"{username}:{api_key}".encode()).decode()
@@ -124,7 +127,7 @@ class BreachTool(OSINTTool):
         except Exception as e:
             return {"error": str(e)}
 
-    async def _check_intelx(self, target: str, target_type: str, api_key: str) -> Dict[str, Any]:
+    async def _check_intelx(self, target: str, target_type: str, api_key: str) -> dict[str, Any]:
         """Query IntelX API for breach/intelligence data."""
         try:
             selectors = {"email": "email", "domain": "domain", "phone": "phone", "username": "username"}

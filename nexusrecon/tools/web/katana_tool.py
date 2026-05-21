@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, List, Set
+from typing import Any
 
 from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
@@ -38,10 +38,10 @@ class KatanaTool(OSINTTool):
                 timeout_sec=180,
             )
 
-            urls: Set[str] = set()
-            forms: List[Dict[str, Any]] = []
-            js_files: List[str] = []
-            api_paths: List[str] = []
+            urls: set[str] = set()
+            forms: list[dict[str, Any]] = []
+            js_files: list[str] = []
+            api_paths: list[str] = []
 
             for line in proc.stdout.splitlines():
                 line = line.strip()
@@ -70,7 +70,7 @@ class KatanaTool(OSINTTool):
         except Exception as exc:
             return ToolResult(success=False, source=self.name, error=str(exc))
 
-        data: Dict[str, Any] = {
+        data: dict[str, Any] = {
             "target": url,
             "url_count": len(urls),
             "js_files": sorted(js_files)[:50],

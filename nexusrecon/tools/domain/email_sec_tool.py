@@ -1,8 +1,11 @@
 """Email security posture assessment tool — SPF/DKIM/DMARC/MTA-STS/BIMI scoring."""
 from __future__ import annotations
+
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 import dns.asyncresolver
+
 from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
 
@@ -25,7 +28,7 @@ class EmailSecTool(OSINTTool):
             resolver.timeout = 5
             resolver.lifetime = 10
 
-            results: Dict[str, Any] = {}
+            results: dict[str, Any] = {}
 
             # SPF
             results["spf"] = await self._check_spf(resolver, target)
@@ -54,7 +57,7 @@ class EmailSecTool(OSINTTool):
         except Exception as e:
             return ToolResult(success=False, source=self.name, error=str(e))
 
-    async def _check_spf(self, resolver, domain: str) -> Dict[str, Any]:
+    async def _check_spf(self, resolver, domain: str) -> dict[str, Any]:
         try:
             answers = await resolver.resolve(domain, "TXT")
             spf_records = [str(r).strip('"') for r in answers if "v=spf1" in str(r)]
@@ -91,7 +94,7 @@ class EmailSecTool(OSINTTool):
             pass
         return {"found": False, "score": 0, "status": "missing"}
 
-    async def _check_dmarc(self, resolver, domain: str) -> Dict[str, Any]:
+    async def _check_dmarc(self, resolver, domain: str) -> dict[str, Any]:
         try:
             answers = await resolver.resolve(f"_dmarc.{domain}", "TXT")
             records = [str(r).strip('"') for r in answers if "v=DMARC1" in str(r)]
@@ -117,7 +120,7 @@ class EmailSecTool(OSINTTool):
             pass
         return {"found": False, "score": 0, "status": "missing"}
 
-    async def _check_dkim(self, resolver, domain: str) -> Dict[str, Any]:
+    async def _check_dkim(self, resolver, domain: str) -> dict[str, Any]:
         selectors = ["selector1", "selector2", "google", "default"]
         found = []
         for sel in selectors:
@@ -137,7 +140,7 @@ class EmailSecTool(OSINTTool):
             "score": 100 if len(found) >= 2 else (50 if len(found) == 1 else 0),
         }
 
-    async def _check_mta_sts(self, resolver, domain: str) -> Dict[str, Any]:
+    async def _check_mta_sts(self, resolver, domain: str) -> dict[str, Any]:
         try:
             answers = await resolver.resolve(f"_mta-sts.{domain}", "TXT")
             records = [str(r).strip('"') for r in answers if "v=STSv1" in str(r)]
@@ -145,7 +148,7 @@ class EmailSecTool(OSINTTool):
         except Exception:
             return {"found": False, "score": 0}
 
-    async def _check_bimi(self, resolver, domain: str) -> Dict[str, Any]:
+    async def _check_bimi(self, resolver, domain: str) -> dict[str, Any]:
         try:
             answers = await resolver.resolve(f"default._bimi.{domain}", "TXT")
             records = [str(r).strip('"') for r in answers if "v=BIMI1" in str(r)]
@@ -153,7 +156,7 @@ class EmailSecTool(OSINTTool):
         except Exception:
             return {"found": False, "score": 0}
 
-    async def _check_tls_rpt(self, resolver, domain: str) -> Dict[str, Any]:
+    async def _check_tls_rpt(self, resolver, domain: str) -> dict[str, Any]:
         try:
             answers = await resolver.resolve(f"_smtp._tls.{domain}", "TXT")
             records = [str(r).strip('"') for r in answers if "v=TLSRPTv1" in str(r)]
@@ -162,7 +165,7 @@ class EmailSecTool(OSINTTool):
             return {"found": False, "score": 0}
 
     @staticmethod
-    def _calculate_score(results: Dict) -> Dict[str, Any]:
+    def _calculate_score(results: dict) -> dict[str, Any]:
         components = {
             "spf": results.get("spf", {}).get("score", 0),
             "dmarc": results.get("dmarc", {}).get("score", 0),

@@ -12,7 +12,7 @@ import hashlib
 import json
 import time
 from functools import lru_cache
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Type
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
@@ -48,22 +48,22 @@ class ToolRegistry:
     """
 
     def __init__(self) -> None:
-        self._tools: Dict[str, OSINTTool] = {}
-        self._scope_guard: Optional["ScopeGuard"] = None
-        self._cache: Optional["Cache"] = None
-        self._audit_log: Optional["AuditLog"] = None
-        self._stealth_profile: Optional["StealthProfile"] = None
-        self._rate_limiter: Optional["RateLimiter"] = None
-        self._proxy_manager: Optional["ProxyManager"] = None
+        self._tools: dict[str, OSINTTool] = {}
+        self._scope_guard: ScopeGuard | None = None
+        self._cache: Cache | None = None
+        self._audit_log: AuditLog | None = None
+        self._stealth_profile: StealthProfile | None = None
+        self._rate_limiter: RateLimiter | None = None
+        self._proxy_manager: ProxyManager | None = None
 
     def set_campaign_context(
         self,
-        scope_guard: "ScopeGuard",
-        cache: Optional["Cache"] = None,
-        audit_log: Optional["AuditLog"] = None,
-        stealth_profile: Optional["StealthProfile"] = None,
-        rate_limiter: Optional["RateLimiter"] = None,
-        proxy_manager: Optional["ProxyManager"] = None,
+        scope_guard: ScopeGuard,
+        cache: Cache | None = None,
+        audit_log: AuditLog | None = None,
+        stealth_profile: StealthProfile | None = None,
+        rate_limiter: RateLimiter | None = None,
+        proxy_manager: ProxyManager | None = None,
     ) -> None:
         """
         Bind campaign-scoped services to the registry.
@@ -96,16 +96,16 @@ class ToolRegistry:
         self._rate_limiter = None
         self._proxy_manager = None
 
-    def register(self, tool_cls: Type[OSINTTool]) -> None:
+    def register(self, tool_cls: type[OSINTTool]) -> None:
         """Register a tool class by instantiating it and storing by name."""
         tool = tool_cls()
         self._tools[tool.name] = tool
         log.debug("Registered tool", name=tool.name, tier=tool.tier.value, category=tool.category.value)
 
-    def get(self, name: str) -> Optional[OSINTTool]:
+    def get(self, name: str) -> OSINTTool | None:
         return self._tools.get(name)
 
-    def list_tools(self) -> List[Dict[str, str]]:
+    def list_tools(self) -> list[dict[str, str]]:
         def _requires(tool: OSINTTool) -> str:
             parts = []
             if tool.requires_keys:
@@ -126,13 +126,13 @@ class ToolRegistry:
             for t in self._tools.values()
         ]
 
-    def list_by_category(self, category: str) -> List[OSINTTool]:
+    def list_by_category(self, category: str) -> list[OSINTTool]:
         return [t for t in self._tools.values() if t.category.value == category]
 
-    def list_by_tier(self, tier: str) -> List[OSINTTool]:
+    def list_by_tier(self, tier: str) -> list[OSINTTool]:
         return [t for t in self._tools.values() if t.tier.value == tier]
 
-    def available_tools(self) -> List[OSINTTool]:
+    def available_tools(self) -> list[OSINTTool]:
         return [t for t in self._tools.values() if t.is_available()]
 
     async def execute(
@@ -194,7 +194,7 @@ class ToolRegistry:
 
         # ── OPSEC: propagate proxy URL via ContextVar so the tool's
         # httpx.AsyncClient picks it up via BaseHTTPTool._proxy_kwargs() ──────
-        proxy_url: Optional[str] = None
+        proxy_url: str | None = None
         if self._proxy_manager is not None and self._proxy_manager.available:
             proxy_url = self._proxy_manager.get_proxy_for_source(tool_name)
 
@@ -225,7 +225,7 @@ class ToolRegistry:
 
 # ── Decorator ────────────────────────────────────────────────────────────────
 
-def register_tool(cls: Type[OSINTTool]) -> Type[OSINTTool]:
+def register_tool(cls: type[OSINTTool]) -> type[OSINTTool]:
     """
     Decorator that auto-registers a tool class in the global registry.
 

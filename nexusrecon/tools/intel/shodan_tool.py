@@ -1,7 +1,10 @@
 """Shodan API tool, host info + search + facets."""
 from __future__ import annotations
-from typing import Any, Dict, List
+
+from typing import Any
+
 import httpx
+
 from nexusrecon.tools.base import BaseHTTPTool, Category, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
 
@@ -22,7 +25,7 @@ class ShodanTool(BaseHTTPTool):
         if not key:
             return ToolResult(success=False, source=self.name, error="SHODAN_API_KEY not set")
 
-        results: Dict[str, Any] = {}
+        results: dict[str, Any] = {}
         try:
             async with httpx.AsyncClient(
                 base_url="https://api.shodan.io",
@@ -71,7 +74,7 @@ class ShodanTool(BaseHTTPTool):
         except Exception as e:
             return ToolResult(success=False, source=self.name, error=str(e))
 
-    def _parse_search_results(self, data: Dict) -> Dict:
+    def _parse_search_results(self, data: dict) -> dict:
         hosts = []
         for match in data.get("matches", []):
             hosts.append({
@@ -88,7 +91,7 @@ class ShodanTool(BaseHTTPTool):
             })
         return {"total": data.get("total", 0), "hosts": hosts}
 
-    def _parse_host(self, data: Dict) -> Dict:
+    def _parse_host(self, data: dict) -> dict:
         return {
             "ip": data.get("ip_str"),
             "ports": data.get("ports", []),

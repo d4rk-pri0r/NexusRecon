@@ -2,8 +2,10 @@
 import os
 import tempfile
 from pathlib import Path
+
 import pytest
-from nexusrecon.core.cache import Cache, DEFAULT_TTLS
+
+from nexusrecon.core.cache import DEFAULT_TTLS, Cache
 
 
 @pytest.fixture

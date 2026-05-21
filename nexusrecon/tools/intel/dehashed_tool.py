@@ -28,7 +28,7 @@ Integration notes:
 from __future__ import annotations
 
 import base64
-from typing import Any, Dict, List
+from typing import Any
 
 import httpx
 
@@ -113,8 +113,8 @@ class DehashedTool(BaseHTTPTool):
         except Exception as exc:
             return ToolResult(success=False, source=self.name, error=str(exc))
 
-        entries_raw: List[Any] = raw.get("entries") or []
-        entries: List[Dict[str, Any]] = []
+        entries_raw: list[Any] = raw.get("entries") or []
+        entries: list[dict[str, Any]] = []
 
         for e in entries_raw:
             if not isinstance(e, dict):
@@ -134,7 +134,7 @@ class DehashedTool(BaseHTTPTool):
             else:
                 cred_kind = "presence_only"
 
-            entry: Dict[str, Any] = {
+            entry: dict[str, Any] = {
                 "id": e.get("id"),
                 "email": (e.get("email") or "").strip() or None,
                 "username": (e.get("username") or "").strip() or None,
@@ -161,7 +161,7 @@ class DehashedTool(BaseHTTPTool):
             entries.append(entry)
 
         # Quick stats for the calling phase.
-        by_kind: Dict[str, int] = {}
+        by_kind: dict[str, int] = {}
         for entry in entries:
             k = entry["credential_kind"]
             by_kind[k] = by_kind.get(k, 0) + 1

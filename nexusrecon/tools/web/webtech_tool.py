@@ -1,13 +1,16 @@
 """Web technology fingerprinting via HTTP headers and HTML analysis."""
 from __future__ import annotations
+
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 import httpx
+
 from nexusrecon.opsec.useragent import random_ua
 from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
 
-TECH_SIGNATURES: Dict[str, Dict[str, Any]] = {
+TECH_SIGNATURES: dict[str, dict[str, Any]] = {
     "nginx": {"headers": {"server": "nginx"}, "cats": ["web server"]},
     "apache": {"headers": {"server": "apache"}, "cats": ["web server"]},
     "cloudflare": {"headers": {"server": "cloudflare", "cf-ray": ""}, "cats": ["cdn"]},
@@ -63,7 +66,7 @@ class WebTechTool(OSINTTool):
 
     async def run(self, target: str, **kwargs: Any) -> ToolResult:
         url = f"https://{target}" if not target.startswith("http") else target
-        found: Dict[str, Any] = {}
+        found: dict[str, Any] = {}
 
         async with httpx.AsyncClient(timeout=15.0, follow_redirects=True, verify=False) as client:
             try:

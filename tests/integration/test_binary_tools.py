@@ -27,24 +27,22 @@ from __future__ import annotations
 import json
 import subprocess
 from pathlib import Path
-from typing import Any, List
+from typing import Any
 from unittest.mock import MagicMock, patch
 
-import pytest
-
-from nexusrecon.tools.domain.subfinder_tool import SubfinderTool
+from nexusrecon.tools.code.gitleaks_tool import GitleaksTool
+from nexusrecon.tools.code.trufflehog_tool import TruffleHogTool
 from nexusrecon.tools.domain.amass_tool import AmassTool
 from nexusrecon.tools.domain.dnsx_tool import DNSXTool
-from nexusrecon.tools.web.httpx_tool import HTTPxTool
-from nexusrecon.tools.web.katana_tool import KatanaTool
-from nexusrecon.tools.web.nuclei_tool import NucleiTool
+from nexusrecon.tools.domain.subfinder_tool import SubfinderTool
+from nexusrecon.tools.identity.maigret_tool import MaigretTool
+from nexusrecon.tools.identity.theharvester_tool import TheHarvesterTool
 from nexusrecon.tools.web.arjun_tool import ArjunTool
 from nexusrecon.tools.web.gau_tool import GAUTool
 from nexusrecon.tools.web.gowitness_tool import GowitnessTool
-from nexusrecon.tools.code.gitleaks_tool import GitleaksTool
-from nexusrecon.tools.code.trufflehog_tool import TruffleHogTool
-from nexusrecon.tools.identity.maigret_tool import MaigretTool
-from nexusrecon.tools.identity.theharvester_tool import TheHarvesterTool
+from nexusrecon.tools.web.httpx_tool import HTTPxTool
+from nexusrecon.tools.web.katana_tool import KatanaTool
+from nexusrecon.tools.web.nuclei_tool import NucleiTool
 
 
 def _mock_completed(stdout: str = "", returncode: int = 0, stderr: str = "") -> MagicMock:
@@ -65,7 +63,7 @@ def _file_writer(write_to_arg: str, content: str):
     rather than on stdout. Returns a mock CompletedProcess so the
     caller can also assert on stdout/stderr if they want.
     """
-    def _side_effect(cmd: List[str], **kwargs: Any) -> MagicMock:
+    def _side_effect(cmd: list[str], **kwargs: Any) -> MagicMock:
         for i, arg in enumerate(cmd):
             if arg == write_to_arg and i + 1 < len(cmd):
                 Path(cmd[i + 1]).write_text(content, encoding="utf-8")

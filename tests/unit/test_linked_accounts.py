@@ -7,7 +7,6 @@ from nexusrecon.core.linked_accounts import (
     extract_linked_accounts,
 )
 
-
 # ──────────────────────────────────────────────────────────────────────
 # URL-based extraction
 # ──────────────────────────────────────────────────────────────────────

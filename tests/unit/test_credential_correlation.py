@@ -1,11 +1,8 @@
 """Tests for nexusrecon.core.credential_correlation (D4)."""
 from __future__ import annotations
 
-import pytest
-
 from nexusrecon.core.credential_correlation import (
     AuthEndpoint,
-    CredentialSprayCandidate,
     _classify_url,
     _domain_from_key,
     _domain_from_url,
@@ -24,7 +21,6 @@ from nexusrecon.core.identity_graph import (
     IdentityGraph,
     derive_identity_id,
 )
-
 
 # ──────────────────────────────────────────────────────────────────────
 # Fixtures

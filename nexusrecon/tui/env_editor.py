@@ -29,7 +29,6 @@ import os
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional
 
 
 @dataclass
@@ -38,8 +37,8 @@ class _EnvLine:
     a blank. Keeping the original raw text lets us write back without
     re-formatting unrelated lines."""
     raw: str               # the line exactly as it appeared (no trailing \n)
-    key: Optional[str]     # KEY for assignments, None for comments/blanks
-    value: Optional[str]   # value for assignments (unquoted), else None
+    key: str | None     # KEY for assignments, None for comments/blanks
+    value: str | None   # value for assignments (unquoted), else None
 
 
 class EnvFile:
@@ -47,7 +46,7 @@ class EnvFile:
 
     def __init__(self, path: Path) -> None:
         self.path = Path(path)
-        self._lines: List[_EnvLine] = []
+        self._lines: list[_EnvLine] = []
         self._load()
 
     def _load(self) -> None:
@@ -76,7 +75,7 @@ class EnvFile:
             v = v[1:-1]
         return _EnvLine(raw=raw, key=k, value=v)
 
-    def get(self, key: str) -> Optional[str]:
+    def get(self, key: str) -> str | None:
         """Return the current value for ``key``, or ``None`` if absent.
 
         Treats present-but-empty values as ``None`` so callers can
@@ -87,7 +86,7 @@ class EnvFile:
                 return ln.value if ln.value else None
         return None
 
-    def all_keys(self) -> List[str]:
+    def all_keys(self) -> list[str]:
         return [ln.key for ln in self._lines if ln.key is not None]
 
     def is_set(self, key: str) -> bool:
@@ -170,7 +169,7 @@ class EnvFile:
                     pass
             raise
 
-    def as_dict(self) -> Dict[str, str]:
+    def as_dict(self) -> dict[str, str]:
         """Snapshot of all key/value pairs (non-empty only)."""
         return {
             ln.key: ln.value
@@ -179,7 +178,7 @@ class EnvFile:
         }
 
 
-def mask_value(value: Optional[str], visible_tail: int = 4) -> str:
+def mask_value(value: str | None, visible_tail: int = 4) -> str:
     """Return a masked display string for a sensitive value.
 
     Shows length + last ``visible_tail`` chars so the operator can

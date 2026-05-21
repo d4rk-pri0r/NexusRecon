@@ -3,11 +3,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from nexusrecon.graph.nodes import route_to_next_phase
 from nexusrecon.graph.state import CampaignGraphState
 from nexusrecon.graph.workflow import (
-    build_campaign_workflow, PHASE_ORDER, PHASE_TIERS, run_workflow,
+    PHASE_ORDER,
+    PHASE_TIERS,
+    build_campaign_workflow,
+    run_workflow,
 )
-from nexusrecon.graph.nodes import route_to_next_phase
 from nexusrecon.models.campaign import CampaignMode
 from nexusrecon.tools.base import ToolResult
 

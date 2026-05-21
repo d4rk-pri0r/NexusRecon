@@ -26,7 +26,7 @@ import asyncio
 import json
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 from nexusrecon.core.attribution import score_handle_attribution
 from nexusrecon.core.avatar_hash import (
@@ -49,7 +49,6 @@ from nexusrecon.core.timeline_cluster import (
 from nexusrecon.core.username_derivation import derive_usernames
 from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
-
 
 # Maigret's default site set is too large for the framework's stealth
 # budget (a single check fans out to ~3000 services). Cap by default
@@ -99,7 +98,7 @@ class MaigretTool(OSINTTool):
         # The ``max_candidates`` kwarg caps the derivation. Default is
         # conservative (3) to keep a per-email maigret run under ~1 minute
         # at the configured per-site timeout.
-        candidates: List[str]
+        candidates: list[str]
         target_type = kwargs.get("target_type", "username")
         if "@" in target or target_type == "email":
             candidates = derive_usernames(
@@ -127,7 +126,7 @@ class MaigretTool(OSINTTool):
         # working directory and so we can clean up reliably.
         timeout = int(kwargs.get("timeout", _DEFAULT_SITE_TIMEOUT))
         top_sites = int(kwargs.get("top_sites", _DEFAULT_TOP_SITES))
-        all_findings: List[Dict[str, Any]] = []
+        all_findings: list[dict[str, Any]] = []
 
         try:
             with tempfile.TemporaryDirectory(prefix="nexus-maigret-") as tmpdir:
@@ -149,7 +148,7 @@ class MaigretTool(OSINTTool):
         # candidates produce the same hit on the same service; the
         # second hit is uninteresting.
         seen: set = set()
-        deduped: List[Dict[str, Any]] = []
+        deduped: list[dict[str, Any]] = []
         for hit in all_findings:
             key = (hit.get("username", ""), hit.get("service", ""))
             if key in seen:
@@ -166,7 +165,7 @@ class MaigretTool(OSINTTool):
         email_anchor = target if "@" in target else None
         harvested_names = kwargs.get("names") or []
 
-        def _rescore(hit: Dict[str, Any], profile_payload: Any, cross_ref: bool) -> None:
+        def _rescore(hit: dict[str, Any], profile_payload: Any, cross_ref: bool) -> None:
             attribution = score_handle_attribution(
                 email=email_anchor,
                 handle=hit.get("username", ""),
@@ -218,7 +217,7 @@ class MaigretTool(OSINTTool):
                 # one service's profile claiming another service's
                 # handle can flag that other hit.
                 all_linked_refs = []
-                profile_by_hit_id: Dict[int, Any] = {}
+                profile_by_hit_id: dict[int, Any] = {}
                 for hit, profile in zip(candidates_to_fetch, fetched_profiles):
                     profile_by_hit_id[id(hit)] = profile
                     if profile.fetched:
@@ -374,7 +373,7 @@ class MaigretTool(OSINTTool):
         tmpdir: Path,
         timeout: int,
         top_sites: int,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Run maigret against a single username and return parsed hits.
 
         Errors during this single-username probe are logged and skipped
@@ -409,7 +408,7 @@ class MaigretTool(OSINTTool):
         )
         try:
             _, _stderr = await asyncio.wait_for(proc.communicate(), timeout=overall_timeout)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             proc.kill()
             await proc.wait()
             return []  # one slow username doesn't fail the whole tool
@@ -426,7 +425,7 @@ class MaigretTool(OSINTTool):
         return []
 
 
-def _parse_simple_json(username: str, data: Any) -> List[Dict[str, Any]]:
+def _parse_simple_json(username: str, data: Any) -> list[dict[str, Any]]:
     """Parse maigret's ``--json simple`` output into our result shape.
 
     The simple format is a dict keyed by site name; each value carries
@@ -434,7 +433,7 @@ def _parse_simple_json(username: str, data: Any) -> List[Dict[str, Any]]:
     Maigret evolves this schema occasionally so we treat absent fields
     defensively.
     """
-    findings: List[Dict[str, Any]] = []
+    findings: list[dict[str, Any]] = []
     if not isinstance(data, dict):
         return findings
     for site_name, site_data in data.items():

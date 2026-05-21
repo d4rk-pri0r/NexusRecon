@@ -2,8 +2,8 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
-from typing import Any, Dict, List
+from datetime import UTC, datetime
+from typing import Any
 
 import httpx
 
@@ -18,7 +18,7 @@ _HEADERS = {
 }
 
 
-def _org_variants(domain: str) -> List[str]:
+def _org_variants(domain: str) -> list[str]:
     """Derive company-name variants from a seed domain.
 
     e.g. acme-corp.com → ['acme', 'corp'], acme.com → ['acme']
@@ -59,7 +59,7 @@ class RansomwatchTool(OSINTTool):
         except Exception as exc:
             return ToolResult(success=False, source=self.name, error=str(exc))
 
-        listings: List[Dict[str, Any]] = []
+        listings: list[dict[str, Any]] = []
         for post in posts:
             title = str(post.get("post_title", "")).lower()
             url = str(post.get("post_url", "")).lower()
@@ -79,7 +79,7 @@ class RansomwatchTool(OSINTTool):
                 "target": target,
                 "is_listed": len(listings) > 0,
                 "listings": listings,
-                "list_check_date": datetime.now(timezone.utc).isoformat(),
+                "list_check_date": datetime.now(UTC).isoformat(),
             },
             result_count=len(listings),
         )

@@ -31,18 +31,15 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, patch
 
 import httpx
-import pytest
 import respx
 from httpx import Response
-
-from tests.fixtures import load_fixture, load_text_fixture
 
 from nexusrecon.tools.cloud.aws_tool import AWSReconTool
 from nexusrecon.tools.cloud.azure_tenant_tool import AzureTenantTool
 from nexusrecon.tools.cloud.azure_tool import AzureM365Tool
 from nexusrecon.tools.cloud.bucket_enum_tool import BucketEnumTool
 from nexusrecon.tools.cloud.gcp_tool import GCPReconTool
-
+from tests.fixtures import load_fixture, load_text_fixture
 
 # ────────────────────────────────────────────────────────────────────────
 # Helpers

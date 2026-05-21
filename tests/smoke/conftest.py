@@ -2,15 +2,14 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 
-
 # ── Minimal state skeleton ────────────────────────────────────────────────────
 
-def _base_state(**overrides: Any) -> Dict[str, Any]:
-    state: Dict[str, Any] = {
+def _base_state(**overrides: Any) -> dict[str, Any]:
+    state: dict[str, Any] = {
         "campaign_id": "smoke-test",
         "engagement_id": "SMOKE-001",
         "scope_hash": "sha256:smoketest",
@@ -62,13 +61,13 @@ def temp_output_dir(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def mock_state_minimal() -> Dict[str, Any]:
+def mock_state_minimal() -> dict[str, Any]:
     """Bare-minimum CampaignGraphState useful for phase function calls."""
     return _base_state()
 
 
 @pytest.fixture
-def mock_state_rich() -> Dict[str, Any]:
+def mock_state_rich() -> dict[str, Any]:
     """State pre-loaded with synthetic intel in every slot."""
     return _base_state(
         subdomain_intel={

@@ -1,9 +1,7 @@
 """Tests for nexusrecon.core.timeline_cluster."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
-import pytest
+from datetime import UTC, datetime
 
 from nexusrecon.core.timeline_cluster import (
     AccountTimestamp,
@@ -12,7 +10,6 @@ from nexusrecon.core.timeline_cluster import (
     find_timeline_clusters,
     parse_timestamp,
 )
-
 
 # ──────────────────────────────────────────────────────────────────────
 # Timestamp parsing
@@ -78,7 +75,7 @@ class TestParseTimestamp:
 def _ts(service: str, username: str, year: int, month: int, day: int) -> AccountTimestamp:
     return AccountTimestamp(
         service=service, username=username,
-        created_at=datetime(year, month, day, tzinfo=timezone.utc),
+        created_at=datetime(year, month, day, tzinfo=UTC),
     )
 
 

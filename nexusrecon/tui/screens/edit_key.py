@@ -8,18 +8,17 @@ and buttons.
 from __future__ import annotations
 
 import asyncio
-from typing import Optional
 
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, Footer, Input, Select, Static
 
-from nexusrecon.tui.config_schema import ConfigVar, find_var
+from nexusrecon.tui.config_schema import ConfigVar
 from nexusrecon.tui.env_editor import EnvFile, mask_value
 
 
-class EditKeyModal(ModalScreen[Optional[str]]):
+class EditKeyModal(ModalScreen[str | None]):
     """Modal: edit one env key, write to .env, hot-reload the config.
 
     Returns the new value (or None on cancel) via the standard

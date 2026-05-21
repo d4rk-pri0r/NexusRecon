@@ -1,7 +1,7 @@
 """Public collaboration board discovery — accidentally-public Trello, Confluence, Notion."""
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any
 
 import httpx
 
@@ -37,7 +37,7 @@ class PublicCollabTool(OSINTTool):
             for t in _DORK_TEMPLATES
         ]
 
-        results: List[Dict[str, Any]] = []
+        results: list[dict[str, Any]] = []
         bing_key = self.config.get_secret("bing_search_api_key")
 
         if bing_key:
@@ -85,7 +85,7 @@ class PublicCollabTool(OSINTTool):
         except Exception:
             pass
 
-        data: Dict[str, Any] = {
+        data: dict[str, Any] = {
             "target": target,
             "company": company,
             "dorks": dorks,

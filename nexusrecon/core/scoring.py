@@ -11,10 +11,8 @@ Results are normalised to [0, 1] and ranked descending.
 """
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
-
+from typing import Any
 
 # ── Dataclass for a ranked finding ────────────────────────────────────────────
 
@@ -26,24 +24,24 @@ class RankedFinding:
     severity: str               # critical / high / medium / low / info
     confidence: float
     description: str
-    affected_assets: List[str] = field(default_factory=list)
-    next_steps: List[str] = field(default_factory=list)
+    affected_assets: list[str] = field(default_factory=list)
+    next_steps: list[str] = field(default_factory=list)
     # CVE-specific
-    cve_id: Optional[str] = None
-    cvss: Optional[float] = None
-    epss: Optional[float] = None
+    cve_id: str | None = None
+    cvss: float | None = None
+    epss: float | None = None
     in_kev: bool = False
     has_exploit: bool = False
     has_metasploit: bool = False
     has_nuclei_template: bool = False
     # Breach/leak-specific
-    breach_sources: List[str] = field(default_factory=list)
+    breach_sources: list[str] = field(default_factory=list)
     # Cloud-specific
-    cloud_provider: Optional[str] = None
+    cloud_provider: str | None = None
     # Evidence
-    sources: List[str] = field(default_factory=list)
+    sources: list[str] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "title": self.title,
             "category": self.category,
@@ -68,12 +66,12 @@ class RankedFinding:
 
 # ── Main scoring function ──────────────────────────────────────────────────────
 
-def score_findings(state: Dict[str, Any]) -> List[RankedFinding]:
+def score_findings(state: dict[str, Any]) -> list[RankedFinding]:
     """
     Consume campaign state and return a ranked list of RankedFinding objects.
     Called from Phase 8 — reads vuln_intel, cloud_intel, code_intel, email_intel.
     """
-    candidates: List[RankedFinding] = []
+    candidates: list[RankedFinding] = []
 
     candidates.extend(_score_cves(state))
     candidates.extend(_score_cloud_buckets(state))
@@ -95,9 +93,9 @@ def score_findings(state: Dict[str, Any]) -> List[RankedFinding]:
 
 # ── CVE scoring ────────────────────────────────────────────────────────────────
 
-def _score_cves(state: Dict[str, Any]) -> List[RankedFinding]:
+def _score_cves(state: dict[str, Any]) -> list[RankedFinding]:
     vuln_intel = state.get("vuln_intel", {})
-    results: List[RankedFinding] = []
+    results: list[RankedFinding] = []
 
     # KEV CVE IDs (all exploited-in-wild by definition)
     kev_ids: set[str] = set()
@@ -108,7 +106,7 @@ def _score_cves(state: Dict[str, Any]) -> List[RankedFinding]:
             kev_ids.add(cve.upper())
 
     # Enriched CVE data from Phase 7
-    enriched_cves: Dict[str, Any] = vuln_intel.get("enriched_cves", {})
+    enriched_cves: dict[str, Any] = vuln_intel.get("enriched_cves", {})
 
     for cve_id, data in enriched_cves.items():
         cvss = float(data.get("cvss", 0.0) or 0.0)
@@ -170,7 +168,7 @@ def _cvss_to_severity(cvss: float) -> str:
     return "info"
 
 
-def _cve_next_steps(cve_id: str, has_msf: bool, has_template: bool, tech: str) -> List[str]:
+def _cve_next_steps(cve_id: str, has_msf: bool, has_template: bool, tech: str) -> list[str]:
     steps = []
     if has_msf:
         steps.append(f"Load Metasploit: search {cve_id} in msfconsole, configure and run against target")
@@ -183,8 +181,8 @@ def _cve_next_steps(cve_id: str, has_msf: bool, has_template: bool, tech: str) -
 
 # ── Cloud bucket scoring ───────────────────────────────────────────────────────
 
-def _score_cloud_buckets(state: Dict[str, Any]) -> List[RankedFinding]:
-    results: List[RankedFinding] = []
+def _score_cloud_buckets(state: dict[str, Any]) -> list[RankedFinding]:
+    results: list[RankedFinding] = []
     cloud_intel = state.get("cloud_intel", {})
 
     for key, data in cloud_intel.items():
@@ -223,8 +221,8 @@ def _score_cloud_buckets(state: Dict[str, Any]) -> List[RankedFinding]:
 
 # ── Secret / credential scoring ───────────────────────────────────────────────
 
-def _score_secrets(state: Dict[str, Any]) -> List[RankedFinding]:
-    results: List[RankedFinding] = []
+def _score_secrets(state: dict[str, Any]) -> list[RankedFinding]:
+    results: list[RankedFinding] = []
     code_intel = state.get("code_intel", {})
 
     for key, data in code_intel.items():
@@ -235,7 +233,7 @@ def _score_secrets(state: Dict[str, Any]) -> List[RankedFinding]:
             continue
 
         # Group by type for a single finding per source
-        types: Dict[str, int] = {}
+        types: dict[str, int] = {}
         for leak in leaks:
             t = leak.get("type", leak.get("rule", "secret")) if isinstance(leak, dict) else "secret"
             types[t] = types.get(t, 0) + 1
@@ -265,14 +263,14 @@ def _score_secrets(state: Dict[str, Any]) -> List[RankedFinding]:
 
 # ── Breach / infostealer scoring ──────────────────────────────────────────────
 
-def _score_breaches(state: Dict[str, Any]) -> List[RankedFinding]:
-    results: List[RankedFinding] = []
+def _score_breaches(state: dict[str, Any]) -> list[RankedFinding]:
+    results: list[RankedFinding] = []
     email_intel = state.get("email_intel", {})
     emails = email_intel.get("emails", {})
 
     # Collect all breach hits
-    breached: Dict[str, List[str]] = {}  # email → [source, ...]
-    infostealer: Dict[str, List[str]] = {}
+    breached: dict[str, list[str]] = {}  # email → [source, ...]
+    infostealer: dict[str, list[str]] = {}
 
     for em, info in emails.items():
         if not isinstance(info, dict):
@@ -347,8 +345,8 @@ def _score_breaches(state: Dict[str, Any]) -> List[RankedFinding]:
 
 # ── Nuclei findings scoring ────────────────────────────────────────────────────
 
-def _score_nuclei_findings(state: Dict[str, Any]) -> List[RankedFinding]:
-    results: List[RankedFinding] = []
+def _score_nuclei_findings(state: dict[str, Any]) -> list[RankedFinding]:
+    results: list[RankedFinding] = []
     vuln_intel = state.get("vuln_intel", {})
 
     nuclei_data = vuln_intel.get("nuclei_scan", {})
@@ -390,9 +388,9 @@ def _score_nuclei_findings(state: Dict[str, Any]) -> List[RankedFinding]:
 
 # ── Open exposure scoring ─────────────────────────────────────────────────────
 
-def _score_open_exposures(state: Dict[str, Any]) -> List[RankedFinding]:
+def _score_open_exposures(state: dict[str, Any]) -> list[RankedFinding]:
     """Score open admin panels, git configs, .env files discovered in Phase 6."""
-    results: List[RankedFinding] = []
+    results: list[RankedFinding] = []
     infra_intel = state.get("infra_intel", {})
 
     high_value_paths = {
@@ -465,7 +463,7 @@ def _severity_to_float(severity: str) -> float:
 
 # ── Agent-structured finding scoring ─────────────────────────────────────────
 
-def _score_agent_findings(state: Dict[str, Any]) -> List[RankedFinding]:
+def _score_agent_findings(state: dict[str, Any]) -> list[RankedFinding]:
     """
     Score structured findings emitted by agents via the FINDINGS_JSON protocol.
 
@@ -474,8 +472,8 @@ def _score_agent_findings(state: Dict[str, Any]) -> List[RankedFinding]:
     This function lifts those into RankedFinding objects so they can appear in
     ranked_threads even when no tool-level signals (CVEs, buckets, nuclei) were found.
     """
-    results: List[RankedFinding] = []
-    sev_base: Dict[str, float] = {
+    results: list[RankedFinding] = []
+    sev_base: dict[str, float] = {
         "critical": 0.85,
         "high": 0.65,
         "medium": 0.45,

@@ -30,8 +30,6 @@ import httpx
 import respx
 from httpx import Response
 
-from tests.fixtures import load_fixture
-
 from nexusrecon.tools.vuln.epss_tool import EPSSTool
 from nexusrecon.tools.vuln.exploitdb_tool import ExploitDBTool
 from nexusrecon.tools.vuln.github_advisory_tool import GitHubAdvisoryTool
@@ -40,7 +38,7 @@ from nexusrecon.tools.vuln.nuclei_template_tool import NucleiTemplateTool
 from nexusrecon.tools.vuln.nvd_tool import NVDTool
 from nexusrecon.tools.vuln.osv_tool import OSVTool
 from nexusrecon.tools.vuln.vulners_tool import VulnersTool
-
+from tests.fixtures import load_fixture
 
 CVE = "CVE-2021-44228"
 

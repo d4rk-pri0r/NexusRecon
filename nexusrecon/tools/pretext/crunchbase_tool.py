@@ -1,7 +1,7 @@
 """Crunchbase — funding rounds, leadership, acquisitions, and company intelligence."""
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any
 
 import httpx
 
@@ -69,7 +69,7 @@ class CrunchbaseTool(OSINTTool):
                 props = raw.get("properties", {})
                 cards = raw.get("cards", {})
 
-                def _people(card_key: str) -> List[Dict[str, str]]:
+                def _people(card_key: str) -> list[dict[str, str]]:
                     return [
                         {
                             "name": p.get("person_identifier", {}).get("value"),
@@ -90,7 +90,7 @@ class CrunchbaseTool(OSINTTool):
                     for r in cards.get("funding_rounds", [])[:10]
                 ]
 
-                data: Dict[str, Any] = {
+                data: dict[str, Any] = {
                     "name": props.get("identifier", {}).get("value"),
                     "permalink": permalink,
                     "domain": props.get("website", {}).get("value"),

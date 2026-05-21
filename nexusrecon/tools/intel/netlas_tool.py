@@ -1,7 +1,7 @@
 """Netlas.io — internet scan data (freemium Shodan/Censys alternative)."""
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any
 
 import httpx
 
@@ -50,7 +50,7 @@ class NetlasTool(OSINTTool):
                     return ToolResult(success=False, source=self.name, error=f"Netlas returned {resp.status_code}")
 
                 raw = resp.json()
-                items: List[Dict[str, Any]] = raw.get("items", [])
+                items: list[dict[str, Any]] = raw.get("items", [])
 
                 hosts = []
                 for item in items:
@@ -70,7 +70,7 @@ class NetlasTool(OSINTTool):
                         "timestamp": d.get("timestamp"),
                     })
 
-                data: Dict[str, Any] = {
+                data: dict[str, Any] = {
                     "query": query,
                     "total": raw.get("count", len(items)),
                     "hosts": hosts,

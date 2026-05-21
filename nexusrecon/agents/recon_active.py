@@ -1,7 +1,7 @@
 """Active Recon Specialist agent — executes T2/T3 tools gated by scope."""
 from __future__ import annotations
-from nexusrecon.agents.base import BaseNexusAgent
 
+from nexusrecon.agents.base import BaseNexusAgent
 
 RECON_ACTIVE_ROLE = """
 Active Reconnaissance Specialist. You execute T2 (light active) and T3 (active)

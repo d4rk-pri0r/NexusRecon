@@ -2,13 +2,13 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Dict, List
+from typing import Any
 
 from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
 
 
-def _search_play_sync(org_name: str, seed_domain: str) -> List[Dict[str, Any]]:
+def _search_play_sync(org_name: str, seed_domain: str) -> list[dict[str, Any]]:
     try:
         from google_play_scraper import search
     except ImportError:
@@ -25,7 +25,7 @@ def _search_play_sync(org_name: str, seed_domain: str) -> List[Dict[str, Any]]:
         app_title = r.get("title", "") or ""
         dev_name = r.get("developer", "") or ""
         # Filter: developer email domain matches seed or title substring matches org
-        org_base = org_name.lower()
+        org_name.lower()
         seed_base = seed_domain.split(".")[0].lower()
         if (
             seed_domain.lower() in dev_email.lower()

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import httpx
 
@@ -11,7 +11,7 @@ from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
 
 # Each entry: (name, confidence_weight, probe_path, [body_patterns], [header_patterns])
-_SIGNATURES: List[tuple] = [
+_SIGNATURES: list[tuple] = [
     ("WordPress", 0.9, "/wp-login.php", [r"WordPress", r"wp-content", r"wp-includes"], ["X-Powered-By: W3 Total Cache", "link: <.*wp-json"]),
     ("WordPress", 0.8, "/wp-json/", [r'"description"', r'"name"', r'"url"'], []),
     ("Joomla", 0.9, "/administrator/", [r"Joomla!", r"com_login"], ["X-Content-Encoded-By: Joomla"]),
@@ -43,14 +43,14 @@ class CMSDetectTool(OSINTTool):
 
     async def run(self, target: str, **kwargs: Any) -> ToolResult:
         base_url = target if target.startswith("http") else f"https://{target}"
-        detected: List[Dict[str, Any]] = []
+        detected: list[dict[str, Any]] = []
 
         headers = {
             "User-Agent": random_ua(),
             "Accept": "text/html,*/*;q=0.9",
         }
 
-        probed_paths: Dict[str, tuple] = {}  # path -> (body, response_headers)
+        probed_paths: dict[str, tuple] = {}  # path -> (body, response_headers)
 
         # Deduplicate probes — same path may appear for multiple CMS
         for cms, confidence, path, body_pats, header_pats in _SIGNATURES:
@@ -76,15 +76,15 @@ class CMSDetectTool(OSINTTool):
             return ToolResult(success=False, source=self.name, error=str(exc))
 
         # Evaluate signatures against probed responses
-        cms_scores: Dict[str, float] = {}
-        cms_evidence: Dict[str, List[str]] = {}
+        cms_scores: dict[str, float] = {}
+        cms_evidence: dict[str, list[str]] = {}
 
         for cms, confidence, path, body_pats, header_pats in _SIGNATURES:
             body, resp_headers = probed_paths.get(path, ("", {}))
             if not body and not resp_headers:
                 continue
 
-            matched: List[str] = []
+            matched: list[str] = []
             for pat in body_pats:
                 if re.search(pat, body, re.I):
                     matched.append(f"body:{pat}")
@@ -106,7 +106,7 @@ class CMSDetectTool(OSINTTool):
                 "evidence": list(set(cms_evidence.get(cms, [])))[:5],
             })
 
-        data: Dict[str, Any] = {
+        data: dict[str, Any] = {
             "target": base_url,
             "detected": detected,
             "primary_cms": detected[0]["cms"] if detected else None,

@@ -7,7 +7,6 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import Optional
 
 import structlog
 import typer
@@ -16,9 +15,13 @@ from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
-from nexusrecon.core.campaign import CampaignManager, ROE_BANNER
+from nexusrecon.core.campaign import CampaignManager
 from nexusrecon.core.config import get_config
-from nexusrecon.core.scope import ScopeGuard, ScopeModel, OutOfScopeError, TierViolationError, preflight_check
+from nexusrecon.core.scope import (
+    ScopeGuard,
+    ScopeModel,
+    preflight_check,
+)
 from nexusrecon.models.campaign import CampaignMode
 from nexusrecon.reports.engine import ReportEngine
 
@@ -151,9 +154,9 @@ setup_logging(get_config().log_level)
 @app.command()
 def run(
     scope: str = typer.Option(..., "--scope", "-s", help="Path to engagement scope YAML file"),
-    seeds: Optional[str] = typer.Option(None, "--seeds", help="Comma-separated initial targets"),
+    seeds: str | None = typer.Option(None, "--seeds", help="Comma-separated initial targets"),
     mode: str = typer.Option("medium", "--mode", "-m", help="Campaign mode: light, medium, deep, monitor"),
-    resume: Optional[str] = typer.Option(None, "--resume", "-r", help="Resume a campaign by ID"),
+    resume: str | None = typer.Option(None, "--resume", "-r", help="Resume a campaign by ID"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Validate scope and plan without running tools"),
     use_graph: bool = typer.Option(False, "--use-graph", help="Use LangGraph workflow engine"),
     validate_creds: bool = typer.Option(False, "--validate-creds", help="Validate harvested credentials via read-only API calls (AWS sts, GitHub /user, etc.). Off by default."),
@@ -182,7 +185,7 @@ def run(
         style = "bold red" if level == "ERROR" else "yellow"
         console.print(f"[{style}][{level}][/{style}] {msg}")
 
-    if any(l == "ERROR" for l, _ in warnings):
+    if any(lvl == "ERROR" for lvl, _ in warnings):
         console.print("[bold red]Preflight errors — campaign aborted.[/bold red]")
         raise typer.Exit(1)
 
@@ -573,7 +576,7 @@ def diff(old: str = typer.Argument(...), new: str = typer.Argument(...)) -> None
 @app.command()
 def tools(
     available_only: bool = typer.Option(False, "--available", "-a", help="Show only available tools"),
-    category: Optional[str] = typer.Option(None, "--category", "-c", help="Filter by category"),
+    category: str | None = typer.Option(None, "--category", "-c", help="Filter by category"),
 ) -> None:
     """List all registered tools, their availability, and what they require."""
     from nexusrecon.tools.registry import get_registry
@@ -627,7 +630,7 @@ def tools(
         if missing:
             need_keys = [t for t in missing if t.get("requires") and "bin:" not in t.get("requires", "")]
             need_bins = [t for t in missing if "bin:" in t.get("requires", "")]
-            need_both = [t for t in missing if t.get("requires") and "bin:" in t.get("requires", "") and any(
+            [t for t in missing if t.get("requires") and "bin:" in t.get("requires", "") and any(
                 k for k in t.get("requires", "").split(", ") if not k.startswith("bin:")
             )]
 
@@ -674,7 +677,7 @@ def config() -> None:
 
 @app.command()
 def campaign_list(
-    client: Optional[str] = typer.Option(None, "--client", "-c", help="Filter by client name"),
+    client: str | None = typer.Option(None, "--client", "-c", help="Filter by client name"),
 ) -> None:
     """List all campaigns and their status."""
     config = get_config()
@@ -769,7 +772,7 @@ def tools_check() -> None:
 def export(
     campaign_id: str = typer.Argument(..., help="Campaign ID to export"),
     fmt: str = typer.Option("csv", "--format", "-f", help="Export format: csv, json, markdown"),
-    output: Optional[str] = typer.Option(None, "--output", "-o", help="Output file path"),
+    output: str | None = typer.Option(None, "--output", "-o", help="Output file path"),
 ) -> None:
     """Export campaign findings to CSV, JSON, or Markdown."""
     config = get_config()
@@ -838,7 +841,7 @@ def export(
 def smoke(
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show individual test output"),
     tb: str = typer.Option("short", "--tb", help="Traceback style: short, long, no, line"),
-    keyword: Optional[str] = typer.Option(None, "-k", help="Only run tests matching this keyword"),
+    keyword: str | None = typer.Option(None, "-k", help="Only run tests matching this keyword"),
 ) -> None:
     """Run the NexusRecon smoke test suite.
 

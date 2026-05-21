@@ -1,7 +1,7 @@
 """Executive Reporter agent — produces final deliverables."""
 from __future__ import annotations
-from nexusrecon.agents.base import BaseNexusAgent
 
+from nexusrecon.agents.base import BaseNexusAgent
 
 REPORTER_ROLE = """
 Executive Intelligence Reporter. You transform raw reconnaissance findings

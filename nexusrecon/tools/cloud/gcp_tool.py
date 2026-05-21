@@ -1,8 +1,11 @@
 """GCP cloud reconnaissance tool (stubbed — implements GCS + App Engine)."""
 
 from __future__ import annotations
-from typing import Any, Dict, List, Optional
+
+from typing import Any
+
 import httpx
+
 from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
 
@@ -24,7 +27,7 @@ class GCPReconTool(OSINTTool):
 
     def __init__(self) -> None:
         super().__init__()
-        self._http: Optional[httpx.AsyncClient] = None
+        self._http: httpx.AsyncClient | None = None
 
     async def _get_client(self) -> httpx.AsyncClient:
         if self._http is None:
@@ -32,7 +35,7 @@ class GCPReconTool(OSINTTool):
         return self._http
 
     async def run(self, target: str, **kwargs: Any) -> ToolResult:
-        results: Dict[str, Any] = {}
+        results: dict[str, Any] = {}
         try:
             client = await self._get_client()
             base = target.split(".")[0].lower().replace("-", "")
@@ -57,7 +60,7 @@ class GCPReconTool(OSINTTool):
         except Exception as e:
             return ToolResult(success=False, source=self.name, error=str(e))
 
-    async def _enumerate_gcs(self, client: httpx.AsyncClient, base: str) -> List[Dict[str, Any]]:
+    async def _enumerate_gcs(self, client: httpx.AsyncClient, base: str) -> list[dict[str, Any]]:
         found = []
         for perm in GCS_PERMUTATIONS:
             name = perm.format(name=base).lower()
@@ -72,7 +75,7 @@ class GCPReconTool(OSINTTool):
                 continue
         return found
 
-    async def _enumerate_appengine(self, client: httpx.AsyncClient, base: str) -> List[Dict[str, Any]]:
+    async def _enumerate_appengine(self, client: httpx.AsyncClient, base: str) -> list[dict[str, Any]]:
         names = [base, f"{base}-api", f"{base}-app"]
         found = []
         for name in names:

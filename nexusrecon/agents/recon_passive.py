@@ -1,7 +1,7 @@
 """Passive Recon Specialist agent — executes T0/T1 tools in parallel."""
 from __future__ import annotations
-from nexusrecon.agents.base import BaseNexusAgent
 
+from nexusrecon.agents.base import BaseNexusAgent
 
 RECON_PASSIVE_ROLE = """
 Passive OSINT Reconnaissance Specialist. You execute T0 and T1 reconnaissance

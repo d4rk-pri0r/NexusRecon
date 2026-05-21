@@ -10,29 +10,26 @@ Acceptance criteria verified:
 """
 from __future__ import annotations
 
-import asyncio
-import json
-from typing import Any, Dict, List
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from nexusrecon.graph.dynamic_dispatcher import (
+    LITE_DISPATCH_PHASES,
     MAX_PER_CYCLE,
     MAX_TOTAL,
-    LITE_DISPATCH_PHASES,
     _parse_dispatch_plan,
     _validate_plan,
     run_dynamic_dispatch,
 )
 from nexusrecon.graph.nodes import reflection_node
 
-
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _base_state(**overrides: Any) -> Dict[str, Any]:
+def _base_state(**overrides: Any) -> dict[str, Any]:
     """Minimal CampaignGraphState for testing."""
-    state: Dict[str, Any] = {
+    state: dict[str, Any] = {
         "seeds": ["acme.com"],
         "current_phase": "phase1",
         "dispatch_mode": "full",
@@ -178,7 +175,7 @@ class TestReflectionNodeOffMode:
             "nexusrecon.graph.dynamic_dispatcher.run_dynamic_dispatch",
             new_callable=AsyncMock,
         ) as mock_dispatch:
-            result = await reflection_node(state)
+            await reflection_node(state)
             mock_dispatch.assert_not_called()
 
 
@@ -278,7 +275,7 @@ class TestLiteMode:
             "nexusrecon.graph.dynamic_dispatcher.run_dynamic_dispatch",
             new_callable=AsyncMock,
         ) as mock_rdd:
-            result = await reflection_node(state)
+            await reflection_node(state)
             mock_rdd.assert_not_called()
 
     @pytest.mark.asyncio

@@ -30,7 +30,6 @@ import os
 
 import pytest
 
-
 # Use a single safe target across all live tests so quota usage stays
 # predictable and we don't accidentally trigger anyone's WAF.
 LIVE_TARGET_DOMAIN = "example.com"

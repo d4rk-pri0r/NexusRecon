@@ -10,20 +10,19 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from tests.smoke.conftest import _base_state
 
-
 # ── Test 1: Phase 1 passive footprinting ─────────────────────────────────────
 
 @pytest.mark.asyncio
 async def test_phase1_passive_runs_without_error(mock_state_minimal):
     """Phase 1 must complete and populate state keys even with no tools available."""
-    from nexusrecon.graph.nodes import phase1_passive_footprinting, _reset_executor
+    from nexusrecon.graph.nodes import _reset_executor, phase1_passive_footprinting
     _reset_executor()
 
     try:
@@ -66,7 +65,7 @@ async def test_phase7_5_credential_harvest_runs():
     from nexusrecon.graph.nodes import phase7_5_harvest
     result = await phase7_5_harvest(state)
 
-    creds: List[Dict[str, Any]] = result.get("harvested_credentials", [])
+    creds: list[dict[str, Any]] = result.get("harvested_credentials", [])
     assert len(creds) >= 1, f"Expected at least one credential, got {len(creds)}"
 
     aws_creds = [c for c in creds if c.get("cred_type") == "aws_access_key"]
@@ -163,7 +162,7 @@ async def test_dynamic_dispatcher_with_wordpress_finding():
 @pytest.mark.asyncio
 async def test_dispatcher_caps_enforced():
     """Global cap (30) and per-cycle cap (5) must both be enforced."""
-    from nexusrecon.graph.dynamic_dispatcher import run_dynamic_dispatch, MAX_PER_CYCLE, MAX_TOTAL
+    from nexusrecon.graph.dynamic_dispatcher import MAX_PER_CYCLE, MAX_TOTAL, run_dynamic_dispatch
 
     # Part A: total cap — 30 existing entries → dispatcher returns immediately
     full_log = [

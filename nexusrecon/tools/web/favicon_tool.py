@@ -1,8 +1,11 @@
 """Favicon hash computation + Shodan/Censys correlation."""
 from __future__ import annotations
+
 import base64
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 import httpx
+
 from nexusrecon.opsec.useragent import random_ua
 from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
@@ -33,7 +36,7 @@ class FaviconTool(OSINTTool):
 
     async def run(self, target: str, **kwargs: Any) -> ToolResult:
         base_url = f"https://{target}" if not target.startswith("http") else target
-        results: Dict[str, Any] = {}
+        results: dict[str, Any] = {}
         icons_found = []
 
         async with httpx.AsyncClient(timeout=10.0, follow_redirects=True, verify=False) as client:
@@ -63,7 +66,7 @@ class FaviconTool(OSINTTool):
                     h = icons_found[0]["mmh3_hash_str"]
                     async with httpx.AsyncClient(timeout=10.0) as client:
                         shodan_resp = await client.get(
-                            f"https://api.shodan.io/shodan/host/search",
+                            "https://api.shodan.io/shodan/host/search",
                             params={"key": shodan_key, "query": f"http.favicon.hash:{h}"},
                         )
                         if shodan_resp.status_code == 200:
@@ -86,7 +89,7 @@ class FaviconTool(OSINTTool):
         )
 
     @staticmethod
-    def _compute_mmh3_hash(data: bytes) -> Optional[int]:
+    def _compute_mmh3_hash(data: bytes) -> int | None:
         try:
             import mmh3
             encoded = base64.b64encode(data)

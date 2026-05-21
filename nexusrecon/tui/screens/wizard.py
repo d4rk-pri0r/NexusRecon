@@ -5,14 +5,13 @@ import datetime as _dt
 import re
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import yaml
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, Vertical, VerticalScroll
 from textual.screen import Screen
 from textual.widgets import Button, Footer, Header, Input, Select, Static, Switch
-
 
 _DOMAIN_RE = re.compile(r"^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$")
 _HEX64_RE = re.compile(r"^[0-9a-fA-F]{64}$")
@@ -60,7 +59,7 @@ class WizardScreen(Screen):
     def __init__(self) -> None:
         super().__init__()
         self.step: int = 1
-        self.data: Dict[str, Any] = {
+        self.data: dict[str, Any] = {
             # Step 1
             "client": "",
             "engagement_id": "",
@@ -276,7 +275,7 @@ class WizardScreen(Screen):
         body_lines = ["[bold #00ff9c]Review your selections[/bold #00ff9c]\n"]
         for k, v in rows:
             body_lines.append(f"  [bold]{k:<18}[/bold] {v}")
-        warnings: List[str] = []
+        warnings: list[str] = []
         if d["max_tier"] == "T3":
             warnings.append("T3 tier selected — make sure your SOW authorizes intrusive testing.")
         if d["generate_phishing"]:
@@ -335,7 +334,7 @@ class WizardScreen(Screen):
                 except Exception:
                     pass
 
-    def _validate_step(self) -> Optional[str]:
+    def _validate_step(self) -> str | None:
         d = self.data
         if self.step == 1:
             if not d["client"].strip():
@@ -482,7 +481,7 @@ class WizardScreen(Screen):
             classes="wizard-label",
         ))
 
-    def _build_scope_yaml(self) -> Dict[str, Any]:
+    def _build_scope_yaml(self) -> dict[str, Any]:
         """Shared YAML construction used by both _launch_campaign and
         _save_scope_only. Identical structure so the two paths can't drift."""
         d = self.data

@@ -27,14 +27,10 @@ library function directly rather than going through respx.
 """
 from __future__ import annotations
 
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 import respx
 from httpx import ConnectError, Response
-
-from tests.fixtures import load_fixture, load_text_fixture
 
 from nexusrecon.tools.cloud.cdn_tool import CDNTool
 from nexusrecon.tools.domain.dnstwist_tool import DNSTwistTool
@@ -42,7 +38,7 @@ from nexusrecon.tools.domain.hackertarget_tool import HackerTargetTool
 from nexusrecon.tools.domain.passive_dns_tool import PassiveDNSTool
 from nexusrecon.tools.domain.rdap_tool import RDAPTool
 from nexusrecon.tools.domain.whois_tool import WHOISTool
-
+from tests.fixtures import load_fixture, load_text_fixture
 
 # ────────────────────────────────────────────────────────────────────────
 # HackerTarget — api.hackertarget.com/hostsearch / reverseiplookup
@@ -388,7 +384,7 @@ class TestWHOISTool:
             # Missing every attribute the tool reads — first .registrar
             # access raises AttributeError, caught by the outer except.
             def __getattr__(self, _name: str):
-                raise AttributeError(f"no attribute on broken object")
+                raise AttributeError("no attribute on broken object")
 
         with patch(
             "nexusrecon.tools.domain.whois_tool.whois.whois",

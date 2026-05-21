@@ -1,7 +1,7 @@
 """Phishing Drafter agent — generates per-target draft emails for authorized red-team engagements."""
 from __future__ import annotations
-from nexusrecon.agents.base import BaseNexusAgent
 
+from nexusrecon.agents.base import BaseNexusAgent
 
 _ROLE = "Authorized Red-Team Phishing Operator"
 

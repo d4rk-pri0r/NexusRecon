@@ -10,14 +10,13 @@ from __future__ import annotations
 import threading
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Dict, List, Optional
 
 import structlog
 
 log = structlog.get_logger(__name__)
 
 # Pricing as of mid-2026 (USD per million tokens) — update as needed
-MODEL_PRICING: Dict[str, Dict[str, float]] = {
+MODEL_PRICING: dict[str, dict[str, float]] = {
     "claude-opus-4-5": {"input": 15.0, "output": 75.0},
     "claude-sonnet-4-5": {"input": 3.0, "output": 15.0},
     "claude-haiku-3-5": {"input": 0.8, "output": 4.0},
@@ -77,9 +76,9 @@ class CostTracker:
         self.total_llm_cost_usd: float = 0.0
         self.total_api_cost_usd: float = 0.0
 
-        self._agent_records: Dict[str, AgentCostRecord] = {}
-        self._tool_records: Dict[str, ToolCostRecord] = {}
-        self._call_log: List[Dict] = []
+        self._agent_records: dict[str, AgentCostRecord] = {}
+        self._tool_records: dict[str, ToolCostRecord] = {}
+        self._call_log: list[dict] = []
 
     def record_llm_call(
         self,
@@ -164,7 +163,7 @@ class CostTracker:
             return 100.0
         return (self.total_llm_cost_usd / self.max_llm_cost_usd) * 100.0
 
-    def summary(self) -> Dict:
+    def summary(self) -> dict:
         """Return a cost summary dict for reporting."""
         with self._lock:
             return {
@@ -193,7 +192,7 @@ class CostTracker:
                 },
             }
 
-    def warn_if_high_utilization(self, threshold_pct: float = 80.0) -> Optional[str]:
+    def warn_if_high_utilization(self, threshold_pct: float = 80.0) -> str | None:
         """Return warning string if utilization is above threshold, else None."""
         pct = self.budget_utilization_pct()
         if pct >= threshold_pct:

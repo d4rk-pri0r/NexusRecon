@@ -47,14 +47,13 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from nexusrecon.core.identity_graph import (
     BreachConfidence,
     CredentialExposure,
-    Identity,
-    IdentityGraph,
     IdentifierType,
+    IdentityGraph,
 )
 
 # ── Constants ──────────────────────────────────────────────────────────────
@@ -63,19 +62,19 @@ _MIN_CONFIDENCE = 0.15           # Below this → suppressed
 _DEFAULT_MAX_CANDIDATES = 50
 
 # Confidence contributions
-_BASE_CONFIDENCE: Dict[str, float] = {
+_BASE_CONFIDENCE: dict[str, float] = {
     "password": 0.70,
     "hash": 0.40,
     "token": 0.55,
     "cookie": 0.35,
     "presence_only": 0.20,
 }
-_BREACH_CONF_MOD: Dict[str, float] = {
+_BREACH_CONF_MOD: dict[str, float] = {
     BreachConfidence.VERIFIED.value: 0.10,
     BreachConfidence.LIKELY.value: 0.05,
     BreachConfidence.UNVERIFIED.value: 0.00,
 }
-_ENDPOINT_TYPE_MOD: Dict[str, float] = {
+_ENDPOINT_TYPE_MOD: dict[str, float] = {
     "adfs": 0.05,
     "o365_managed": 0.05,
     "owa": 0.03,
@@ -87,7 +86,7 @@ _RECENCY_BONUS = 0.05
 _RECENCY_THRESHOLD_YEARS = 2
 
 # MITRE technique mapping by (credential_kind, endpoint_type)
-_MITRE_MAP: Dict[Tuple[str, str], List[str]] = {
+_MITRE_MAP: dict[tuple[str, str], list[str]] = {
     ("password", "adfs"):        ["T1110.003", "T1078"],
     ("password", "o365_managed"): ["T1110.003", "T1078"],
     ("password", "owa"):         ["T1110.003", "T1078"],
@@ -105,7 +104,7 @@ _MITRE_MAP: Dict[Tuple[str, str], List[str]] = {
 }
 
 # Well-known auth endpoint patterns for URL classification
-_URL_PATTERNS: List[Tuple[str, str]] = [
+_URL_PATTERNS: list[tuple[str, str]] = [
     (r"/adfs/", "adfs"),
     (r"adfs\.", "adfs"),
     (r"sts\.", "adfs"),
@@ -149,7 +148,7 @@ class AuthEndpoint:
     lockout_policy_unknown: bool = True
     notes: str = ""
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "url": self.url,
             "endpoint_type": self.endpoint_type,
@@ -192,7 +191,7 @@ class CredentialSprayCandidate:
     corp_email: str
     observed_at: str
     breach_source: str
-    breach_date: Optional[str]
+    breach_date: str | None
     credential_kind: str
     credential_value: str
     breach_confidence: BreachConfidence
@@ -201,13 +200,13 @@ class CredentialSprayCandidate:
     endpoint_domain: str
     mfa_expected: bool
     confidence: float
-    risk_flags: List[str] = field(default_factory=list)
-    mitre_techniques: List[str] = field(default_factory=list)
+    risk_flags: list[str] = field(default_factory=list)
+    mitre_techniques: list[str] = field(default_factory=list)
     recommendation: str = ""
     do_not_execute: bool = True
     notes: str = ""
 
-    def to_dict(self, redact_value: bool = True) -> Dict[str, Any]:
+    def to_dict(self, redact_value: bool = True) -> dict[str, Any]:
         """JSON-safe representation. Redacts credential_value by default."""
         return {
             "identity_id": self.identity_id,
@@ -235,7 +234,7 @@ class CredentialSprayCandidate:
 # ── Auth endpoint extraction ───────────────────────────────────────────────
 
 
-def extract_auth_endpoints(cloud_intel: Dict[str, Any]) -> List[AuthEndpoint]:
+def extract_auth_endpoints(cloud_intel: dict[str, Any]) -> list[AuthEndpoint]:
     """Parse cloud_intel (from Phase 2) into AuthEndpoint objects.
 
     Recognises Azure/M365 federation data, OWA indicators, VPN prefixes,
@@ -256,7 +255,7 @@ def extract_auth_endpoints(cloud_intel: Dict[str, Any]) -> List[AuthEndpoint]:
       - Future-compatible (no-op when absent):
         ``data["owa_url"]``, ``data["vpn_url"]``, ``data["mfa_enforced"]``.
     """
-    endpoints: List[AuthEndpoint] = []
+    endpoints: list[AuthEndpoint] = []
     seen_urls: set[str] = set()
 
     def _add(ep: AuthEndpoint) -> None:
@@ -441,7 +440,7 @@ def _domain_from_url(url: str) -> str:
     return ""
 
 
-def _classify_url(url: str) -> Optional[str]:
+def _classify_url(url: str) -> str | None:
     """Classify a URL into an endpoint type using known patterns."""
     url_lower = url.lower()
     for pattern, ep_type in _URL_PATTERNS:
@@ -466,7 +465,7 @@ def _score(
     return max(0.0, min(1.0, base + mod + ep_mod - mfa_pen + recency))
 
 
-def _recency_bonus(breach_date: Optional[str]) -> float:
+def _recency_bonus(breach_date: str | None) -> float:
     """Return ``_RECENCY_BONUS`` if the breach date is within threshold.
 
     Handles year-only ("2024"), ISO date ("2024-01-15"), and ISO datetime
@@ -499,9 +498,9 @@ def _recency_bonus(breach_date: Optional[str]) -> float:
 def _build_risk_flags(
     exposure: CredentialExposure,
     endpoint: AuthEndpoint,
-) -> List[str]:
+) -> list[str]:
     """Return a list of risk flags the operator must consider."""
-    flags: List[str] = []
+    flags: list[str] = []
 
     # Account lockout is always possible when spraying.
     flags.append("account_lockout_risk")
@@ -530,7 +529,7 @@ def _build_risk_flags(
 def _build_mitre(
     credential_kind: str,
     endpoint_type: str,
-) -> List[str]:
+) -> list[str]:
     """Return MITRE ATT&CK technique IDs for this combination."""
     key = (credential_kind, endpoint_type)
     techniques = list(_MITRE_MAP.get(key, []))
@@ -583,12 +582,12 @@ def _build_recommendation(
 
 def correlate_credentials(
     graph: IdentityGraph,
-    cloud_intel: Optional[Dict[str, Any]] = None,
+    cloud_intel: dict[str, Any] | None = None,
     *,
     max_candidates: int = _DEFAULT_MAX_CANDIDATES,
     min_confidence: float = _MIN_CONFIDENCE,
     include_presence_only: bool = False,
-) -> List[CredentialSprayCandidate]:
+) -> list[CredentialSprayCandidate]:
     """Correlate breach data with auth surfaces and produce a punch list.
 
     Args:
@@ -609,7 +608,7 @@ def correlate_credentials(
         This function makes no network calls and has no side effects.
         Every returned candidate carries ``do_not_execute = True``.
     """
-    candidates: List[CredentialSprayCandidate] = []
+    candidates: list[CredentialSprayCandidate] = []
     endpoints = extract_auth_endpoints(cloud_intel or {})
 
     # If cloud_intel produced no endpoints, synthesise a generic O365 fallback
@@ -703,9 +702,9 @@ def correlate_credentials(
     return candidates[:max_candidates]
 
 
-def _infer_seeds_from_graph(graph: IdentityGraph) -> List[str]:
+def _infer_seeds_from_graph(graph: IdentityGraph) -> list[str]:
     """Extract unique email domains from corp_email identifiers in the graph."""
-    domains: List[str] = []
+    domains: list[str] = []
     seen: set[str] = set()
     for identity in graph.all():
         for ident in identity.identifiers:
@@ -720,7 +719,7 @@ def _infer_seeds_from_graph(graph: IdentityGraph) -> List[str]:
 # ── Convenience summary ────────────────────────────────────────────────────
 
 
-def summarise_punch_list(candidates: List[CredentialSprayCandidate]) -> Dict[str, Any]:
+def summarise_punch_list(candidates: list[CredentialSprayCandidate]) -> dict[str, Any]:
     """Build a statistics dict for the report header."""
     if not candidates:
         return {
@@ -732,9 +731,9 @@ def summarise_punch_list(candidates: List[CredentialSprayCandidate]) -> Dict[str
             "mfa_exposure_count": 0,
         }
 
-    by_kind: Dict[str, int] = {}
-    by_ep: Dict[str, int] = {}
-    by_band: Dict[str, int] = {"high": 0, "medium": 0, "low": 0}
+    by_kind: dict[str, int] = {}
+    by_ep: dict[str, int] = {}
+    by_band: dict[str, int] = {"high": 0, "medium": 0, "low": 0}
     identity_ids: set[str] = set()
     mfa_count = 0
 

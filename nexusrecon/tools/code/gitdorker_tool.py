@@ -1,8 +1,11 @@
 """gitdorker tool — automated GitHub dork scanning."""
 from __future__ import annotations
+
 import asyncio
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 import httpx
+
 from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
 

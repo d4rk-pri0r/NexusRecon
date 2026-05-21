@@ -1,7 +1,7 @@
 """Master Reporter agent — produces the cohesive narrative master report."""
 from __future__ import annotations
-from nexusrecon.agents.base import BaseNexusAgent
 
+from nexusrecon.agents.base import BaseNexusAgent
 
 MASTER_REPORTER_ROLE = """
 Chief synthesist for a NexusRecon OSINT campaign. Produces a single

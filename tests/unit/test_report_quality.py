@@ -31,11 +31,8 @@ narrative coherence, executive-summary readability ── lives in
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator, List, Tuple
-
-import pytest
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 AGENTS_DIR = REPO_ROOT / "nexusrecon" / "agents"
@@ -60,7 +57,7 @@ TEMPLATES_DIR = REPORTS_DIR / "templates"
 
 # Hardest-rule phrases ── LLM refusal/disclaimer artifacts that mean
 # the prompt is leaking model identity into the deliverable.
-LLM_DISCLAIMER_PHRASES: List[str] = [
+LLM_DISCLAIMER_PHRASES: list[str] = [
     "as a large language model",
     "as an ai language model",
     "as an ai assistant",
@@ -75,7 +72,7 @@ LLM_DISCLAIMER_PHRASES: List[str] = [
 
 # Marketing fluff that signals a product brochure, not an operator
 # tool. From the ROADMAP humanizer skill's "buzzwords & filler" list.
-MARKETING_FLUFF_PHRASES: List[str] = [
+MARKETING_FLUFF_PHRASES: list[str] = [
     "cutting-edge",
     "best-in-class",
     "game-changer",
@@ -95,7 +92,7 @@ MARKETING_FLUFF_PHRASES: List[str] = [
 # Kept narrow ── words like "leverage" have legit uses in this domain
 # ("leverage a vulnerability") so we exclude general technical terms
 # and only flag pure-prose AI hits.
-AI_VOCABULARY_PHRASES: List[str] = [
+AI_VOCABULARY_PHRASES: list[str] = [
     "delve into",
     "delving into",
     "tapestry of",
@@ -113,7 +110,7 @@ AI_VOCABULARY_PHRASES: List[str] = [
 ]
 
 
-def _iter_scannable_text_files() -> Iterator[Tuple[Path, str]]:
+def _iter_scannable_text_files() -> Iterator[tuple[Path, str]]:
     """Yield ``(path, text)`` for every file we want the AI-tell scanner
     to look at. Scope:
 
@@ -141,10 +138,10 @@ def _iter_scannable_text_files() -> Iterator[Tuple[Path, str]]:
         yield engine, engine.read_text()
 
 
-def _scan_for_phrases(phrases: List[str]) -> List[Tuple[Path, int, str, str]]:
+def _scan_for_phrases(phrases: list[str]) -> list[tuple[Path, int, str, str]]:
     """Return a list of ``(path, line_number, phrase, line_text)`` for
     every hit across the scannable text inventory."""
-    hits: List[Tuple[Path, int, str, str]] = []
+    hits: list[tuple[Path, int, str, str]] = []
     for path, text in _iter_scannable_text_files():
         for line_no, line in enumerate(text.splitlines(), 1):
             lowered = line.lower()
@@ -154,7 +151,7 @@ def _scan_for_phrases(phrases: List[str]) -> List[Tuple[Path, int, str, str]]:
     return hits
 
 
-def _format_hits(hits: List[Tuple[Path, int, str, str]]) -> str:
+def _format_hits(hits: list[tuple[Path, int, str, str]]) -> str:
     out = []
     for path, line_no, phrase, text in hits:
         rel = path.relative_to(REPO_ROOT)
@@ -287,7 +284,7 @@ class TestCVECitationFormat:
 
     def test_engine_has_no_malformed_cve_references(self):
         engine_src = (REPORTS_DIR / "engine.py").read_text()
-        bad: List[str] = []
+        bad: list[str] = []
         for pattern in _MALFORMED_CVE_PATTERNS:
             for match in pattern.finditer(engine_src):
                 bad.append(match.group(0))

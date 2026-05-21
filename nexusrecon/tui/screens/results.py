@@ -5,15 +5,15 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 from textual.app import ComposeResult
-from textual.containers import Vertical, VerticalScroll
+from textual.containers import VerticalScroll
 from textual.screen import Screen
 from textual.widgets import Footer, Header, Static
 
 
-def _open_path(path: str) -> Optional[Exception]:
+def _open_path(path: str) -> Exception | None:
     """Open `path` with the user's editor / system handler. Returns the exception on failure."""
     try:
         if sys.platform == "darwin":
@@ -47,7 +47,7 @@ class ResultsScreen(Screen):
         ("ctrl+q", "quit_app", "Quit"),
     ]
 
-    def __init__(self, campaign_dir: str, state: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, campaign_dir: str, state: dict[str, Any] | None = None) -> None:
         super().__init__()
         self.campaign_dir = Path(campaign_dir)
         self.reports_dir = self.campaign_dir / "reports"
@@ -118,7 +118,7 @@ class ResultsScreen(Screen):
             p = rd / fname
             status = "" if p.exists() else "  [dim](not generated)[/dim]"
             lines.append(f"  [bold]{key}[/bold]  {label}{status}")
-        lines.append(f"  [bold]a[/bold]  📁  All Reports (open directory)")
+        lines.append("  [bold]a[/bold]  📁  All Reports (open directory)")
         try:
             self.query_one("#results-reports", Static).update("\n".join(lines))
         except Exception:

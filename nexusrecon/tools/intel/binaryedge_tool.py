@@ -1,7 +1,7 @@
 """BinaryEdge — internet scan data for subdomains and IPs."""
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any
 
 import httpx
 
@@ -52,7 +52,7 @@ class BinaryEdgeTool(OSINTTool):
 
                 if target_type == "ip":
                     events = raw.get("events", [])
-                    data: Dict[str, Any] = {
+                    data: dict[str, Any] = {
                         "target": target,
                         "total": raw.get("total", len(events)),
                         "services": [
@@ -69,7 +69,7 @@ class BinaryEdgeTool(OSINTTool):
                     }
                     result_count = len(events)
                 else:
-                    subdomains: List[str] = raw.get("events", [])
+                    subdomains: list[str] = raw.get("events", [])
                     data = {
                         "domain": target,
                         "total": raw.get("total", len(subdomains)),

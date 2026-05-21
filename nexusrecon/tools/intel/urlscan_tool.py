@@ -1,7 +1,10 @@
 """urlscan.io historical scan correlation tool."""
 from __future__ import annotations
-from typing import Any, Dict, Optional
+
+from typing import Any
+
 import httpx
+
 from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
 
@@ -37,7 +40,7 @@ class URLScanTool(OSINTTool):
                 r = resp.json()
                 results = []
                 for hit in r.get("results", [])[:20]:
-                    task = hit.get("task", {})
+                    hit.get("task", {})
                     page = hit.get("page", {})
                     results.append({
                         "scan_url": page.get("url"),

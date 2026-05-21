@@ -1,8 +1,9 @@
 """Email format inference tool with confidence scoring."""
 from __future__ import annotations
+
 import re
-from collections import Counter
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
 
@@ -53,11 +54,11 @@ class EmailFormatTool(OSINTTool):
     target_types = ["domain"]
 
     async def run(self, target: str, **kwargs: Any) -> ToolResult:
-        emails: List[str] = kwargs.get("emails", [])
+        emails: list[str] = kwargs.get("emails", [])
         if not emails:
             return ToolResult(success=True, source=self.name, data={"error": "No emails to analyze"}, result_count=0)
 
-        patterns_found: Dict[str, int] = {}
+        patterns_found: dict[str, int] = {}
         parsed = []
 
         for email in emails:

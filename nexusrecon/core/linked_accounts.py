@@ -26,7 +26,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import List, Optional
 
 
 @dataclass
@@ -123,8 +122,8 @@ _LABELLED_PATTERNS = [
 def extract_linked_accounts(
     source_service: str,
     profile_text: str,
-    profile_blog: Optional[str] = None,
-) -> List[LinkedAccount]:
+    profile_blog: str | None = None,
+) -> list[LinkedAccount]:
     """Extract cross-service references from a profile's bio + blog URL.
 
     Args:
@@ -145,14 +144,14 @@ def extract_linked_accounts(
     if not profile_text and not profile_blog:
         return []
 
-    haystack_parts: List[str] = []
+    haystack_parts: list[str] = []
     if profile_text:
         haystack_parts.append(profile_text)
     if profile_blog:
         haystack_parts.append(profile_blog)
     haystack = "\n".join(haystack_parts)
 
-    out: List[LinkedAccount] = []
+    out: list[LinkedAccount] = []
     seen: set = set()
 
     def _add(target_service: str, target_handle: str, target_url: str, raw: str) -> None:
@@ -262,9 +261,9 @@ def _looks_like_prose(handle: str) -> bool:
 
 
 def cross_reference_with_hits(
-    extracted: List[LinkedAccount],
-    maigret_hits: List[dict],
-) -> List[dict]:
+    extracted: list[LinkedAccount],
+    maigret_hits: list[dict],
+) -> list[dict]:
     """Match extracted references against known maigret hits.
 
     For each :class:`LinkedAccount`, check whether ``maigret_hits``

@@ -57,11 +57,10 @@ import os
 import secrets
 import sqlite3
 import threading
+from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from pathlib import Path
-from typing import Iterator, Optional
-
 
 # Default location ── ~/.nexusrecon/handle_ubiquity.db. Created on
 # first init. The directory is created with mode 0o700 (owner-only).
@@ -91,14 +90,14 @@ class HandleUbiquityTracker:
     process.
     """
 
-    def __init__(self, db_path: Optional[Path] = None) -> None:
+    def __init__(self, db_path: Path | None = None) -> None:
         if db_path is None:
             override = os.environ.get("NEXUS_UBIQUITY_DB_PATH")
             db_path = Path(override) if override else _DEFAULT_DB_PATH
         self._db_path = Path(db_path)
         self._lock = threading.Lock()
-        self._salt: Optional[bytes] = None
-        self._conn: Optional[sqlite3.Connection] = None
+        self._salt: bytes | None = None
+        self._conn: sqlite3.Connection | None = None
         self._initialise()
 
     # ── Public API ───────────────────────────────────────────────────
@@ -112,8 +111,8 @@ class HandleUbiquityTracker:
         handle: str,
         service: str,
         campaign_id: str,
-        engagement_id: Optional[str] = None,
-        confidence: Optional[float] = None,
+        engagement_id: str | None = None,
+        confidence: float | None = None,
     ) -> None:
         """Record that we saw ``handle`` on ``service`` during the
         ``campaign_id`` campaign. Idempotent ── repeated observations
@@ -193,7 +192,7 @@ class HandleUbiquityTracker:
                     pass
                 self._conn = None
 
-    def __enter__(self) -> "HandleUbiquityTracker":
+    def __enter__(self) -> HandleUbiquityTracker:
         return self
 
     def __exit__(self, *exc) -> None:
@@ -312,12 +311,12 @@ def _commonness_for_count(count: int) -> float:
 # pick it up automatically. By default the var is None ── scoring
 # happens without ubiquity input, matching the opt-in default.
 
-_current_tracker: ContextVar[Optional[HandleUbiquityTracker]] = ContextVar(
+_current_tracker: ContextVar[HandleUbiquityTracker | None] = ContextVar(
     "nexus_handle_ubiquity_tracker", default=None,
 )
 
 
-def get_current_tracker() -> Optional[HandleUbiquityTracker]:
+def get_current_tracker() -> HandleUbiquityTracker | None:
     """Return the tracker bound by the enclosing ``ubiquity_context``,
     or ``None`` if no tracker is active. Attribution and maigret_tool
     call this to find a tracker without explicit parameter passing."""
@@ -325,7 +324,7 @@ def get_current_tracker() -> Optional[HandleUbiquityTracker]:
 
 
 @contextmanager
-def ubiquity_context(tracker: Optional[HandleUbiquityTracker]) -> Iterator[None]:
+def ubiquity_context(tracker: HandleUbiquityTracker | None) -> Iterator[None]:
     """Bind a tracker for the duration of the ``with`` block.
 
     Pattern from the campaign runner::

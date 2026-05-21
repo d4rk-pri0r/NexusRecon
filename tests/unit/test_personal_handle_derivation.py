@@ -1,15 +1,11 @@
 """Tests for nexusrecon.core.personal_handle_derivation (D2)."""
 from __future__ import annotations
 
-import pytest
-
 from nexusrecon.core.personal_handle_derivation import (
     EmailCandidate,
-    HandleCandidate,
     derive_personal_emails,
     derive_personal_handles,
 )
-
 
 # ──────────────────────────────────────────────────────────────────────
 # Name parsing edge cases (exercised through the public functions)

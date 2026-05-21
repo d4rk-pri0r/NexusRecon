@@ -41,7 +41,7 @@ Shape contract (fields consumed by ``personal_pivot_tool._extract_credential_exp
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import httpx
 
@@ -52,13 +52,13 @@ from nexusrecon.tools.registry import register_tool
 _BASE = "https://cavalier.hudsonrock.com/api/json/v2/osint-tools"
 
 
-def _build_headers(api_key: Optional[str]) -> Dict[str, str]:
+def _build_headers(api_key: str | None) -> dict[str, str]:
     """Return headers for the Cavalier request.
 
     The community tier works without authentication; the paid tier
     requires ``X-API-KEY``.  We always include a rotated UA.
     """
-    headers: Dict[str, str] = {
+    headers: dict[str, str] = {
         "User-Agent": random_ua(),
         "Accept": "application/json",
     }
@@ -67,7 +67,7 @@ def _build_headers(api_key: Optional[str]) -> Dict[str, str]:
     return headers
 
 
-def _extract_captured(creds_raw: Any) -> List[Dict[str, Any]]:
+def _extract_captured(creds_raw: Any) -> list[dict[str, Any]]:
     """Normalise the ``credentials`` array from a Cavalier stealer record.
 
     Each entry maps to ``{url, username, password}`` with empty strings
@@ -76,7 +76,7 @@ def _extract_captured(creds_raw: Any) -> List[Dict[str, Any]]:
     """
     if not creds_raw or not isinstance(creds_raw, list):
         return []
-    out: List[Dict[str, Any]] = []
+    out: list[dict[str, Any]] = []
     for c in creds_raw:
         if not isinstance(c, dict):
             continue
@@ -88,9 +88,9 @@ def _extract_captured(creds_raw: Any) -> List[Dict[str, Any]]:
     return out
 
 
-def _dedup_urls(creds: List[Dict[str, Any]]) -> List[str]:
+def _dedup_urls(creds: list[dict[str, Any]]) -> list[str]:
     seen: set[str] = set()
-    out: List[str] = []
+    out: list[str] = []
     for c in creds:
         u = c.get("url", "").strip()
         if u and u not in seen:
@@ -118,7 +118,7 @@ class HudsonRockTool(OSINTTool):
 
     async def run(self, target: str, **kwargs: Any) -> ToolResult:
         # API key is optional; absence degrades to community-tier data only.
-        api_key: Optional[str] = self.config.get_secret("hudsonrock_api_key")
+        api_key: str | None = self.config.get_secret("hudsonrock_api_key")
 
         target_type = kwargs.get("target_type", "email")
         try:
@@ -152,8 +152,8 @@ class HudsonRockTool(OSINTTool):
     async def _check_email(
         self,
         email: str,
-        api_key: Optional[str],
-    ) -> Dict[str, Any]:
+        api_key: str | None,
+    ) -> dict[str, Any]:
         headers = _build_headers(api_key)
         async with httpx.AsyncClient(headers=headers, timeout=15.0) as client:
             resp = await client.get(
@@ -198,8 +198,8 @@ class HudsonRockTool(OSINTTool):
     async def _check_domain(
         self,
         domain: str,
-        api_key: Optional[str],
-    ) -> Dict[str, Any]:
+        api_key: str | None,
+    ) -> dict[str, Any]:
         headers = _build_headers(api_key)
         async with httpx.AsyncClient(headers=headers, timeout=20.0) as client:
             resp = await client.get(
@@ -212,7 +212,7 @@ class HudsonRockTool(OSINTTool):
                 return {"error": f"Hudson Rock returned {resp.status_code}"}
 
             raw = resp.json()
-            employees: List[Dict[str, Any]] = raw.get("stealers", [])
+            employees: list[dict[str, Any]] = raw.get("stealers", [])
             employee_count = raw.get("employeeCredentialsCount", len(employees))
             client_count = raw.get("clientCredentialsCount", 0)
 
@@ -222,9 +222,9 @@ class HudsonRockTool(OSINTTool):
             # Build per-stealer records including captured credentials.
             # Cap at 25 stealers — full credential arrays per stealer can
             # be very large.
-            all_captured_urls: List[str] = []
+            all_captured_urls: list[str] = []
             seen_urls: set[str] = set()
-            stealer_records: List[Dict[str, Any]] = []
+            stealer_records: list[dict[str, Any]] = []
 
             for s in employees[:25]:
                 creds_raw = s.get("credentials") or []

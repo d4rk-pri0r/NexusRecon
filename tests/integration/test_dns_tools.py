@@ -10,10 +10,7 @@ with the rest of their behaviour.)
 """
 from __future__ import annotations
 
-from typing import Any, List
 from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
 
 from nexusrecon.tools.domain.dns_tool import DNSTool
 
@@ -34,7 +31,7 @@ def _make_resolver(record_map: dict) -> MagicMock:
     branch handles that)."""
     resolver = MagicMock()
 
-    async def fake_resolve(name: str, rtype: str) -> List[MagicMock]:
+    async def fake_resolve(name: str, rtype: str) -> list[MagicMock]:
         key = (name, rtype) if (name, rtype) in record_map else rtype
         if key not in record_map:
             raise Exception(f"no record for {name} {rtype}")

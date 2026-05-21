@@ -12,14 +12,10 @@ import json
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
-from nexusrecon.tools.base import ToolResult
 from nexusrecon.tools.identity.maigret_tool import (
     MaigretTool,
     _parse_simple_json,
 )
-
 
 # Canonical maigret "simple" JSON output for a single username probe.
 # Real maigret outputs much more metadata; this fixture captures the

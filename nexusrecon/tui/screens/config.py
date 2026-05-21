@@ -14,24 +14,17 @@ ToolsScreen remains read-only (browse-only).
 """
 from __future__ import annotations
 
-import asyncio
 import shutil
 from pathlib import Path
-from typing import Any, Dict, List, Optional
 
 from textual.app import ComposeResult
-from textual.binding import Binding
-from textual.containers import Container, Horizontal, Vertical, VerticalScroll
+from textual.containers import Container, Horizontal, Vertical
 from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header, ListItem, ListView, Static
 
 from nexusrecon.tui.config_schema import (
-    BINARIES_CATEGORY,
-    CATEGORIES,
     ConfigCategory,
-    ConfigVar,
     all_categories,
-    find_var,
 )
 from nexusrecon.tui.env_editor import EnvFile, mask_value
 
@@ -67,7 +60,7 @@ class ConfigScreen(Screen):
     def __init__(self) -> None:
         super().__init__()
         self.env_path = _resolve_env_path()
-        self._cats: List[ConfigCategory] = all_categories()
+        self._cats: list[ConfigCategory] = all_categories()
         self._current_cat_idx: int = 0
 
     # ── Compose ────────────────────────────────────────────────────────
@@ -163,7 +156,7 @@ class ConfigScreen(Screen):
 
     def _populate_binaries_table(self, table: DataTable) -> None:
         table.add_columns("Binary", "Path", "Notes")
-        seen: Dict[str, str] = {}
+        seen: dict[str, str] = {}
         try:
             from nexusrecon.tools.registry import get_registry
             for t in get_registry()._tools.values():
@@ -228,7 +221,7 @@ class ConfigScreen(Screen):
         var = cat.vars[row]
         from nexusrecon.tui.screens.edit_key import EditKeyModal
 
-        def _on_dismiss(result: Optional[str]) -> None:
+        def _on_dismiss(result: str | None) -> None:
             # result is None on cancel, the new value (or "" for clear) on save
             self._render_keys_pane()
 

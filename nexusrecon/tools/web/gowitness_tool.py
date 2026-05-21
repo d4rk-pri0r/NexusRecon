@@ -1,6 +1,8 @@
 """gowitness screenshot tool (T2 stub)."""
 from __future__ import annotations
-from typing import Any, Optional
+
+from typing import Any
+
 from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
 

@@ -12,13 +12,13 @@ import hashlib
 import json
 import uuid
 from datetime import datetime
-from enum import Enum
-from typing import Any, Dict, List, Optional
+from enum import StrEnum
+from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
 
 
-class ConfidenceLevel(str, Enum):
+class ConfidenceLevel(StrEnum):
     CONFIRMED = "confirmed"    # 0.9–1.0: verified by multiple independent sources
     HIGH = "high"              # 0.7–0.89: single reliable/authoritative source
     MEDIUM = "medium"          # 0.5–0.69: plausible, single source, unverified
@@ -26,7 +26,7 @@ class ConfidenceLevel(str, Enum):
     SPECULATIVE = "speculative" # 0.0–0.19: hypothesis only
 
 
-class FindingSeverity(str, Enum):
+class FindingSeverity(StrEnum):
     CRITICAL = "critical"  # Immediate exploitation possible
     HIGH = "high"          # Significant risk, exploit likely with effort
     MEDIUM = "medium"      # Moderate risk, supporting role in attack chain
@@ -34,7 +34,7 @@ class FindingSeverity(str, Enum):
     INFO = "info"          # Informational, no direct risk
 
 
-class FindingCategory(str, Enum):
+class FindingCategory(StrEnum):
     CLOUD_EXPOSURE = "cloud_exposure"
     CREDENTIAL_LEAK = "credential_leak"
     EMAIL_SECURITY = "email_security"
@@ -74,34 +74,34 @@ class Finding(BaseModel):
 
     # ── Mandatory citation fields ──────────────────────────────
     source: str                     # Tool name or source identifier
-    source_url: Optional[str] = None
+    source_url: str | None = None
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     raw_evidence_hash: str          # sha256:<hex> of raw_evidence
     raw_evidence: str               # JSON-serialized raw tool output
 
     # ── Asset linkage ──────────────────────────────────────────
-    affected_assets: List[str] = Field(default_factory=list)
-    entity_ids: List[str] = Field(default_factory=list)
+    affected_assets: list[str] = Field(default_factory=list)
+    entity_ids: list[str] = Field(default_factory=list)
 
     # ── Attack relevance ───────────────────────────────────────
-    attack_vector: Optional[str] = None
-    mitre_techniques: List[str] = Field(default_factory=list)
-    mitre_tactics: List[str] = Field(default_factory=list)
+    attack_vector: str | None = None
+    mitre_techniques: list[str] = Field(default_factory=list)
+    mitre_tactics: list[str] = Field(default_factory=list)
 
     # ── Remediation ────────────────────────────────────────────
-    recommendation: Optional[str] = None
-    remediation_effort: Optional[str] = None  # low, medium, high
+    recommendation: str | None = None
+    remediation_effort: str | None = None  # low, medium, high
 
     # ── Engagement metadata ────────────────────────────────────
-    engagement_id: Optional[str] = None
-    phase: Optional[str] = None
-    tags: List[str] = Field(default_factory=list)
+    engagement_id: str | None = None
+    phase: str | None = None
+    tags: list[str] = Field(default_factory=list)
     is_verified: bool = False
-    verified_by: Optional[str] = None
-    verified_at: Optional[datetime] = None
+    verified_by: str | None = None
+    verified_at: datetime | None = None
 
     @model_validator(mode="after")
-    def validate_evidence_hash(self) -> "Finding":
+    def validate_evidence_hash(self) -> Finding:
         """Verify that raw_evidence_hash matches raw_evidence."""
         if self.raw_evidence and self.raw_evidence_hash:
             expected = "sha256:" + hashlib.sha256(
@@ -126,7 +126,7 @@ class Finding(BaseModel):
         source: str,
         raw_evidence: Any,
         **kwargs: Any,
-    ) -> "Finding":
+    ) -> Finding:
         """
         Preferred factory method.  Computes evidence hash automatically.
 
@@ -170,7 +170,7 @@ class Finding(BaseModel):
             and self.confidence >= 0.0
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize to dict, converting datetimes to ISO strings."""
         data = self.model_dump()
         data["timestamp"] = self.timestamp.isoformat()

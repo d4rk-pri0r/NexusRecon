@@ -149,6 +149,16 @@ target-version = "py311"
 select = ["E", "F", "W", "I", "UP"]
 ignore = ["E501"]
 
+[tool.ruff.lint.per-file-ignores]
+# Package __init__.py files import submodules for tool/agent registration
+# side-effects.  Ruff's F401 (unused import) misfires here — the imports
+# ARE the API surface, not dead code.
+"**/__init__.py" = ["F401"]
+# Ambiguous variable names (``l``, ``I``) inside list comprehensions are
+# common shorthand in test code where scope is tiny and readability is
+# already high.  Suppress E741 for tests only.
+"tests/**/*.py" = ["E741"]
+
 [tool.mypy]
 python_version = "3.11"
 strict = false

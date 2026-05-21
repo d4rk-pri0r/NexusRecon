@@ -1,10 +1,8 @@
 """Tests for core/config.py ── NexusConfig."""
-import os
 
 import pytest
 
 from nexusrecon.core.config import NexusConfig
-
 
 # Env vars that the "default values" tests assume are not set. A local
 # developer ``.env`` would otherwise win over the field defaults via

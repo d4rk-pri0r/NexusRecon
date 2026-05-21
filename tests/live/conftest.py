@@ -25,16 +25,14 @@ For tools that don't need a key (crt.sh, OSV, KEV feed) use
 from __future__ import annotations
 
 import os
-from typing import Dict, List
 
 import pytest
-
 
 # Map from ``live("<provider>")`` marker arg to the env vars that must
 # be present for the test to make a real API call. The same provider
 # may appear in many tests; the lookup happens once per test in
 # ``pytest_collection_modifyitems``.
-LIVE_KEY_REQUIREMENTS: Dict[str, List[str]] = {
+LIVE_KEY_REQUIREMENTS: dict[str, list[str]] = {
     # No-key providers — live tests always allowed.
     "none": [],
     # Subdomain enumeration
@@ -79,7 +77,7 @@ def pytest_configure(config: pytest.Config) -> None:
 
 
 def pytest_collection_modifyitems(
-    config: pytest.Config, items: List[pytest.Item]
+    config: pytest.Config, items: list[pytest.Item]
 ) -> None:
     """Auto-skip live tests whose required env vars are missing."""
     for item in items:

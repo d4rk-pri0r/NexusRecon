@@ -1,7 +1,7 @@
 """HackerTarget — free passive DNS and reverse-IP lookup."""
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any
 
 import httpx
 
@@ -45,14 +45,14 @@ class HackerTargetTool(OSINTTool):
 
                 if target_type == "ip":
                     hostnames = [line.strip() for line in body.splitlines() if line.strip()]
-                    data: Dict[str, Any] = {
+                    data: dict[str, Any] = {
                         "ip": target,
                         "hosted_domains": hostnames,
                         "count": len(hostnames),
                     }
                     result_count = len(hostnames)
                 else:
-                    entries: List[Dict[str, str]] = []
+                    entries: list[dict[str, str]] = []
                     for line in body.splitlines():
                         line = line.strip()
                         if "," in line:

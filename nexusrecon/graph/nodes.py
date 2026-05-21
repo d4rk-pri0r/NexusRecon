@@ -12,7 +12,7 @@ from __future__ import annotations
 import asyncio
 import json
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any
 
 import structlog
 
@@ -42,7 +42,7 @@ def _reset_executor() -> None:
     _executor = None
 
 
-def _get_tools_by_tier(max_tier: str, exclude_categories: set = None) -> List[Any]:
+def _get_tools_by_tier(max_tier: str, exclude_categories: set = None) -> list[Any]:
     """Get available tools filtered by tier."""
     registry = get_registry()
     tier_limit = int(max_tier[1])
@@ -77,8 +77,8 @@ async def phase1_passive_footprinting(state: CampaignGraphState) -> CampaignGrap
     """T0 passive broad sweep — subdomains, DNS, WHOIS, certs, initial intel."""
     log.info("Phase 1: Passive footprinting")
     state["current_phase"] = "phase1"
-    subdomain_intel: Dict[str, Any] = {}
-    domain_intel: Dict[str, Any] = {}
+    subdomain_intel: dict[str, Any] = {}
+    domain_intel: dict[str, Any] = {}
 
     registry = get_registry()
 
@@ -144,7 +144,7 @@ async def phase1_passive_footprinting(state: CampaignGraphState) -> CampaignGrap
         })
 
     # Dark intel: ransomwatch, ahmia, pastebin, certstream — parallel per seed
-    dark_intel: Dict[str, Any] = {}
+    dark_intel: dict[str, Any] = {}
     dark_tasks = []
     for seed in state.get("seeds", []):
         dark_tasks.extend([
@@ -175,8 +175,8 @@ async def phase2_identity_cloud(state: CampaignGraphState) -> CampaignGraphState
     """M365/Entra/AWS/GCP enumeration, email harvesting, federation discovery."""
     log.info("Phase 2: Identity and cloud recon")
     state["current_phase"] = "phase2"
-    email_intel: Dict[str, Any] = {"emails": {}, "formats": {}}
-    cloud_intel: Dict[str, Any] = {}
+    email_intel: dict[str, Any] = {"emails": {}, "formats": {}}
+    cloud_intel: dict[str, Any] = {}
 
     registry = get_registry()
     seeds = state.get("seeds", [])
@@ -271,7 +271,7 @@ async def phase2_identity_cloud(state: CampaignGraphState) -> CampaignGraphState
             # email. Each email's record in email_intel may carry a
             # position/department/name field; collect what's there.
             email_record = email_intel["emails"].get(em, {})
-            harvested_names: List[str] = []
+            harvested_names: list[str] = []
             for key in ("name", "first_name", "last_name"):
                 val = email_record.get(key)
                 if val and isinstance(val, str):
@@ -325,7 +325,7 @@ async def phase2_identity_cloud(state: CampaignGraphState) -> CampaignGraphState
     # collisions (smith on Reddit derived from john.smith@... etc.)
     # have already been scored down by the attribution scorer; this
     # is just where we threshold.
-    account_summary: Dict[str, Any] = {
+    account_summary: dict[str, Any] = {
         "per_email_account_count": {},
         "actionable_accounts": [],
         "filtered_noise_count": 0,
@@ -488,7 +488,7 @@ async def phase3_code_leakage(state: CampaignGraphState) -> CampaignGraphState:
     """Recursive subdomain on high-value findings, GitHub/code recon."""
     log.info("Phase 3: Deep subdomain and code leakage")
     state["current_phase"] = "phase3"
-    code_intel: Dict[str, Any] = {}
+    code_intel: dict[str, Any] = {}
     seeds = state.get("seeds", [])
 
     registry = get_registry()
@@ -889,7 +889,7 @@ async def phase7_vuln_pretext(state: CampaignGraphState) -> CampaignGraphState:
     """Pretexting research, CVE correlation against fingerprinted tech."""
     log.info("Phase 7: Pretext and vulnerability correlation")
     state["current_phase"] = "phase7"
-    vuln_intel: Dict[str, Any] = {}
+    vuln_intel: dict[str, Any] = {}
 
     registry = get_registry()
 
@@ -926,7 +926,7 @@ async def phase7_vuln_pretext(state: CampaignGraphState) -> CampaignGraphState:
             vuln_intel[f"nvd/{tech}"] = res.data
 
     # Collect all CVE IDs from NVD results
-    all_cve_ids: Dict[str, str] = {}  # cve_id → tech_name
+    all_cve_ids: dict[str, str] = {}  # cve_id → tech_name
     for tech, res in zip(list(tech_names)[:5], nvd_results):
         if isinstance(res, BaseException) or not res.success:
             continue
@@ -938,9 +938,9 @@ async def phase7_vuln_pretext(state: CampaignGraphState) -> CampaignGraphState:
                     all_cve_ids[cid] = tech
 
     # CVE enrichment — for each CVE, run exploit/template lookups in parallel
-    enriched_cves: Dict[str, Any] = {}
+    enriched_cves: dict[str, Any] = {}
 
-    async def _enrich_cve(cve_id: str, tech: str) -> tuple[str, Dict[str, Any]]:
+    async def _enrich_cve(cve_id: str, tech: str) -> tuple[str, dict[str, Any]]:
         enrich_tasks = [
             registry.execute("exploitdb", cve_id, "cve"),
             registry.execute("github_advisory", cve_id, "cve"),
@@ -954,7 +954,7 @@ async def phase7_vuln_pretext(state: CampaignGraphState) -> CampaignGraphState:
 
         exploitdb_r, ghsa_r, osv_r, template_r, vulners_r = results_list
 
-        enriched: Dict[str, Any] = {"tech": tech, "sources": ["nvd"]}
+        enriched: dict[str, Any] = {"tech": tech, "sources": ["nvd"]}
 
         # EPSS
         epss_r = await registry.execute("epss", cve_id, "cve")
@@ -1074,16 +1074,16 @@ async def phase2_5_personal_identity_pivot(state: CampaignGraphState) -> Campaig
     log.info("Phase 2.5: Personal identity pivot")
     state["current_phase"] = "phase2_5"
 
+    from nexusrecon.core.credential_correlation import correlate_credentials
     from nexusrecon.core.identity_graph import (
         IdentifierType,
         build_from_email_intel,
     )
-    from nexusrecon.core.credential_correlation import correlate_credentials
     from nexusrecon.tools.identity.personal_pivot_tool import apply_extensions_to_graph
 
     registry = get_registry()
-    email_intel: Dict[str, Any] = state.get("email_intel") or {}
-    cloud_intel: Dict[str, Any] = state.get("cloud_intel") or {}
+    email_intel: dict[str, Any] = state.get("email_intel") or {}
+    cloud_intel: dict[str, Any] = state.get("cloud_intel") or {}
 
     # Build the graph from Phase 2 output.
     graph = build_from_email_intel(email_intel)
@@ -1096,7 +1096,7 @@ async def phase2_5_personal_identity_pivot(state: CampaignGraphState) -> Campaig
         return state
 
     pivot_sem = asyncio.Semaphore(3)
-    pivot_results: Dict[str, Any] = {}  # identity_id → pivot ToolResult.data
+    pivot_results: dict[str, Any] = {}  # identity_id → pivot ToolResult.data
 
     async def _pivot_one(identity: Any) -> None:
         corp_id = identity.best_identifier_for(IdentifierType.CORP_EMAIL)

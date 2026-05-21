@@ -10,10 +10,13 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections import defaultdict, deque
-from typing import Deque, Dict, Optional
+from collections import deque
+from typing import TYPE_CHECKING
 
 import structlog
+
+if TYPE_CHECKING:
+    from nexusrecon.opsec.profiles import StealthProfile
 
 log = structlog.get_logger(__name__)
 
@@ -26,7 +29,7 @@ class TokenBucket:
     capacity: max tokens in bucket (burst allowance)
     """
 
-    def __init__(self, rate: float, capacity: Optional[float] = None) -> None:
+    def __init__(self, rate: float, capacity: float | None = None) -> None:
         self.rate = rate
         self.capacity = capacity or max(rate * 2, 1.0)
         self._tokens = self.capacity
@@ -84,7 +87,7 @@ class BurstDetector:
     def __init__(self, threshold: int, window_sec: float) -> None:
         self.threshold = threshold
         self.window_sec = window_sec
-        self._timestamps: Deque[float] = deque()
+        self._timestamps: deque[float] = deque()
 
     def record_and_check(self) -> float:
         """
@@ -117,14 +120,14 @@ class SourceRateLimiter:
 
     def __init__(
         self,
-        source_rates: Dict[str, float],
+        source_rates: dict[str, float],
         burst_threshold: int = 10,
         burst_window_sec: float = 1.0,
         burst_detection_enabled: bool = True,
     ) -> None:
         self._rates = source_rates
-        self._buckets: Dict[str, TokenBucket] = {}
-        self._burst_detectors: Dict[str, BurstDetector] = {}
+        self._buckets: dict[str, TokenBucket] = {}
+        self._burst_detectors: dict[str, BurstDetector] = {}
         self._burst_detection_enabled = burst_detection_enabled
         self._burst_threshold = burst_threshold
         self._burst_window_sec = burst_window_sec
@@ -177,8 +180,7 @@ class RateLimiter(SourceRateLimiter):
     """
 
     @classmethod
-    def from_profile(cls, profile: "StealthProfile") -> "RateLimiter":  # type: ignore[name-defined]
-        from nexusrecon.opsec.profiles import StealthProfile
+    def from_profile(cls, profile: StealthProfile) -> RateLimiter:
         return cls(
             source_rates=profile.source_rates,
             burst_threshold=profile.burst_threshold,

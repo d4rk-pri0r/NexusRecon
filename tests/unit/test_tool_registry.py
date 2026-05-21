@@ -1,7 +1,6 @@
 """Tests for tools/registry.py."""
-import pytest
-from nexusrecon.tools.base import OSINTTool, Tier, Category, ToolResult
-from nexusrecon.tools.registry import ToolRegistry, register_tool, get_registry
+from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
+from nexusrecon.tools.registry import ToolRegistry, get_registry, register_tool
 
 
 class TestTool:

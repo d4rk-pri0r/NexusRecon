@@ -1,7 +1,7 @@
 """LeakCheck — breach database search by email, username, phone, or domain."""
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any
 
 import httpx
 
@@ -79,7 +79,7 @@ class LeakCheckTool(OSINTTool):
                     )
 
                 found: int = raw.get("found", 0)
-                entries: List[Dict[str, Any]] = raw.get("result", [])
+                entries: list[dict[str, Any]] = raw.get("result", [])
                 data = {
                     "query": target,
                     "query_type": query_type,

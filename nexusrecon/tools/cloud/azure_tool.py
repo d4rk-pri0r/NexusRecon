@@ -19,9 +19,8 @@ Tier: T0-T1 (passive endpoints only, no active auth attempts)
 
 from __future__ import annotations
 
-import asyncio
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import httpx
 
@@ -41,7 +40,7 @@ class AzureM365Tool(OSINTTool):
 
     def __init__(self) -> None:
         super().__init__()
-        self._http: Optional[httpx.AsyncClient] = None
+        self._http: httpx.AsyncClient | None = None
 
     async def _get_client(self) -> httpx.AsyncClient:
         if self._http is None:
@@ -58,7 +57,7 @@ class AzureM365Tool(OSINTTool):
             await self._http.aclose()
 
     async def run(self, target: str, **kwargs: Any) -> ToolResult:
-        results: Dict[str, Any] = {}
+        results: dict[str, Any] = {}
 
         try:
             client = await self._get_client()
@@ -153,7 +152,7 @@ class AzureM365Tool(OSINTTool):
 
     # ── OpenID Configuration ──────────────────────────────────────────────────
 
-    async def _get_openid_config(self, client: httpx.AsyncClient, domain: str) -> Dict[str, Any]:
+    async def _get_openid_config(self, client: httpx.AsyncClient, domain: str) -> dict[str, Any]:
         url = f"https://login.microsoftonline.com/{domain}/.well-known/openid-configuration"
         try:
             resp = await client.get(url)
@@ -173,7 +172,7 @@ class AzureM365Tool(OSINTTool):
 
     # ── User Realm ────────────────────────────────────────────────────────────
 
-    async def _get_user_realm(self, client: httpx.AsyncClient, domain: str) -> Dict[str, Any]:
+    async def _get_user_realm(self, client: httpx.AsyncClient, domain: str) -> dict[str, Any]:
         url = f"https://login.microsoftonline.com/getuserrealm.srf?login=user@{domain}&xml=1"
         try:
             resp = await client.get(url)
@@ -219,13 +218,13 @@ class AzureM365Tool(OSINTTool):
         except Exception:
             return {"found": False, "error": "request_failed"}
 
-    def _extract_xml_field(self, text: str, field: str) -> Optional[str]:
+    def _extract_xml_field(self, text: str, field: str) -> str | None:
         match = re.search(rf'<{field}>([^<]+)</{field}>', text)
         return match.group(1) if match else None
 
     # ── .onmicrosoft.com Discovery ────────────────────────────────────────────
 
-    async def _discover_onmicrosoft(self, client: httpx.AsyncClient, domain: str) -> Dict[str, Any]:
+    async def _discover_onmicrosoft(self, client: httpx.AsyncClient, domain: str) -> dict[str, Any]:
         # Try common patterns: <company>, <company>corp, <company>inc, etc.
         # Use the domain to derive candidate names
         base = domain.split(".")[0].lower()
@@ -256,7 +255,7 @@ class AzureM365Tool(OSINTTool):
 
     # ── Azure Storage Enumeration ─────────────────────────────────────────────
 
-    async def _enumerate_storage(self, client: httpx.AsyncClient, domain: str) -> List[Dict[str, Any]]:
+    async def _enumerate_storage(self, client: httpx.AsyncClient, domain: str) -> list[dict[str, Any]]:
         base = domain.split(".")[0].lower().replace("-", "")
         storage_types = ["blob", "file", "queue", "table"]
 
@@ -289,7 +288,7 @@ class AzureM365Tool(OSINTTool):
 
     # ── Azure App Services ────────────────────────────────────────────────────
 
-    async def _enumerate_app_services(self, client: httpx.AsyncClient, domain: str) -> List[Dict[str, Any]]:
+    async def _enumerate_app_services(self, client: httpx.AsyncClient, domain: str) -> list[dict[str, Any]]:
         base = domain.split(".")[0].lower().replace("-", "")
         patterns = [
             base, f"{base}-api", f"{base}-app", f"{base}-web",
@@ -316,7 +315,7 @@ class AzureM365Tool(OSINTTool):
 
     # ── Azure DevOps ──────────────────────────────────────────────────────────
 
-    async def _enumerate_devops(self, client: httpx.AsyncClient, domain: str) -> List[Dict[str, Any]]:
+    async def _enumerate_devops(self, client: httpx.AsyncClient, domain: str) -> list[dict[str, Any]]:
         base = domain.split(".")[0].lower().replace("-", "")
         orgs = [base, f"{base}-dev", f"{base}engineering"]
         found = []
@@ -348,7 +347,7 @@ class AzureM365Tool(OSINTTool):
 
     # ── ADFS Detection ────────────────────────────────────────────────────────
 
-    async def _detect_adfs(self, client: httpx.AsyncClient, domain: str) -> Dict[str, Any]:
+    async def _detect_adfs(self, client: httpx.AsyncClient, domain: str) -> dict[str, Any]:
         # Check for adfs subdomain
         adfs_url = f"https://adfs.{domain}/adfs/ls/idpinitiatedsignon.aspx"
         # Check for sts subdomain
@@ -377,7 +376,7 @@ class AzureM365Tool(OSINTTool):
 
     # ── DKIM Selector Check ───────────────────────────────────────────────────
 
-    async def _check_dkim_selectors(self, client: httpx.AsyncClient, domain: str) -> Dict[str, Any]:
+    async def _check_dkim_selectors(self, client: httpx.AsyncClient, domain: str) -> dict[str, Any]:
         import dns.asyncresolver
         selectors = ["selector1", "selector2", "selector1-domainkey", "selector2-domainkey", "default"]
         found = []
@@ -410,7 +409,7 @@ class AzureM365Tool(OSINTTool):
 
     # ── OneDrive / SharePoint ─────────────────────────────────────────────────
 
-    async def _check_onedrive(self, client: httpx.AsyncClient, emails: List[str]) -> List[Dict[str, Any]]:
+    async def _check_onedrive(self, client: httpx.AsyncClient, emails: list[str]) -> list[dict[str, Any]]:
         results = []
         for email in emails[:20]:  # limit to 20
             local = email.split("@")[0]
@@ -434,7 +433,7 @@ class AzureM365Tool(OSINTTool):
     # ── Summary ───────────────────────────────────────────────────────────────
 
     @staticmethod
-    def _summarize(openid: Dict, realm: Dict, onmicrosoft: Dict, adfs: Dict) -> str:
+    def _summarize(openid: dict, realm: dict, onmicrosoft: dict, adfs: dict) -> str:
         lines = []
         if openid.get("found"):
             lines.append(f"Tenant ID: {openid.get('tenant_id', 'unknown')}")

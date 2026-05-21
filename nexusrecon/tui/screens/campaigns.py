@@ -3,10 +3,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from textual.app import ComposeResult
-from textual.containers import VerticalScroll
 from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header, Static
 
@@ -22,7 +21,7 @@ class CampaignsScreen(Screen):
     def __init__(self, resume_mode: bool = False) -> None:
         super().__init__()
         self.resume_mode = resume_mode
-        self._campaigns: List[Dict[str, Any]] = []
+        self._campaigns: list[dict[str, Any]] = []
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=False)

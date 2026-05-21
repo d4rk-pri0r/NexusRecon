@@ -1,13 +1,14 @@
 """Unit tests for LangGraph phase nodes with mocked dependencies."""
 import asyncio
-
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from nexusrecon.graph.nodes import (
+    _reset_executor,
     phase1_passive_footprinting,
-    phase2_identity_cloud,
     phase2_5_personal_identity_pivot,
+    phase2_identity_cloud,
     phase3_code_leakage,
     phase4_correlation,
     phase5_light_active,
@@ -16,11 +17,9 @@ from nexusrecon.graph.nodes import (
     phase8_attack_surface,
     phase9_reporting,
     route_to_next_phase,
-    _reset_executor,
 )
 from nexusrecon.graph.state import CampaignGraphState
 from nexusrecon.tools.base import ToolResult
-
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 

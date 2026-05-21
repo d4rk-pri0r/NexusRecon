@@ -15,7 +15,6 @@ Field semantics:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List, Optional
 
 
 @dataclass
@@ -23,8 +22,8 @@ class ConfigVar:
     key: str
     help: str
     sensitive: bool = False
-    label: Optional[str] = None
-    choices: Optional[List[str]] = None
+    label: str | None = None
+    choices: list[str] | None = None
 
     def display_label(self) -> str:
         return self.label or self.key
@@ -35,12 +34,12 @@ class ConfigCategory:
     id: str
     name: str
     description: str
-    vars: List[ConfigVar] = field(default_factory=list)
+    vars: list[ConfigVar] = field(default_factory=list)
 
 
 # ── Schema ──────────────────────────────────────────────────────────────
 
-CATEGORIES: List[ConfigCategory] = [
+CATEGORIES: list[ConfigCategory] = [
     ConfigCategory(
         id="llm",
         name="🤖 LLM Provider",
@@ -206,13 +205,13 @@ BINARIES_CATEGORY = ConfigCategory(
 )
 
 
-def all_categories() -> List[ConfigCategory]:
+def all_categories() -> list[ConfigCategory]:
     """Categories in the order they appear in the left pane, with the
     binaries inventory appended at the end."""
     return CATEGORIES + [BINARIES_CATEGORY]
 
 
-def find_var(key: str) -> Optional[ConfigVar]:
+def find_var(key: str) -> ConfigVar | None:
     """Lookup helper used by the edit modal to fetch help text + choices."""
     for cat in CATEGORIES:
         for v in cat.vars:

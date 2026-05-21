@@ -22,7 +22,7 @@ data surfaces a different pattern.
 from __future__ import annotations
 
 import re
-from typing import Iterable, List, Optional, Sequence
+from collections.abc import Iterable, Sequence
 
 # Maximum length for a credible username. Beyond this is almost
 # certainly an email address that happened to not contain ``@``.
@@ -68,7 +68,7 @@ def _strip_trailing_digits(s: str) -> str:
     return _NUMERIC_SUFFIX_RE.sub("", s)
 
 
-def _split_name_parts(name: str) -> List[str]:
+def _split_name_parts(name: str) -> list[str]:
     """Tokenise a harvested name into components. Handles common forms:
 
       - ``"Jane Doe"`` → ``["jane", "doe"]``
@@ -95,7 +95,7 @@ def _split_name_parts(name: str) -> List[str]:
     return [tokens[0]] + [t for t in tokens[1:-1] if len(t) >= 2] + [tokens[-1]]
 
 
-def _local_part_variants(local: str) -> List[str]:
+def _local_part_variants(local: str) -> list[str]:
     """Generate username candidates from the email local-part.
 
     Input ``"jane.doe"`` produces (in rank order):
@@ -114,7 +114,7 @@ def _local_part_variants(local: str) -> List[str]:
     if not local:
         return []
 
-    out: List[str] = []
+    out: list[str] = []
 
     def _add(candidate: str) -> None:
         if (
@@ -179,7 +179,7 @@ def _local_part_variants(local: str) -> List[str]:
     return out
 
 
-def _name_variants(names: Sequence[str]) -> List[str]:
+def _name_variants(names: Sequence[str]) -> list[str]:
     """Generate username candidates from harvested names.
 
     For each name like ``"Jane Doe"``:
@@ -187,7 +187,7 @@ def _name_variants(names: Sequence[str]) -> List[str]:
       - jane / doe (lone first/last)
       - jdoe / j.doe / janed (initial patterns)
     """
-    out: List[str] = []
+    out: list[str] = []
 
     def _add(candidate: str) -> None:
         if (
@@ -224,10 +224,10 @@ def _name_variants(names: Sequence[str]) -> List[str]:
 
 
 def derive_usernames(
-    email: Optional[str] = None,
-    names: Optional[Iterable[str]] = None,
+    email: str | None = None,
+    names: Iterable[str] | None = None,
     max_candidates: int = 12,
-) -> List[str]:
+) -> list[str]:
     """Return a ranked list of likely usernames for an identity.
 
     Args:
@@ -257,7 +257,7 @@ def derive_usernames(
         6. Name-derived dotted/concat (from harvested names)
         7. Name-derived initial patterns
     """
-    candidates: List[str] = []
+    candidates: list[str] = []
 
     def _extend(items: Iterable[str]) -> None:
         for item in items:

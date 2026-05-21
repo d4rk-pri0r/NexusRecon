@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Any
 
 from textual import work
 from textual.app import ComposeResult
@@ -12,9 +11,9 @@ from textual.screen import Screen
 from textual.widgets import Button, Footer, Header, Static
 
 from nexusrecon.tui.banner import (
+    render_attribution,
     render_banner,
     render_version,
-    render_attribution,
 )
 
 
@@ -143,13 +142,13 @@ class WelcomeScreen(Screen):
             # transitively pull in (CrewAI, LangGraph, LiteLLM,
             # structlog wrappers, etc.) lands in sys.modules now.
             import nexusrecon.core.campaign  # noqa: F401
-            import nexusrecon.core.scope  # noqa: F401
             import nexusrecon.core.campaign_runner  # noqa: F401
-            import nexusrecon.tools.registry  # noqa: F401
-            import nexusrecon.reports.engine  # noqa: F401
-            import nexusrecon.models.campaign  # noqa: F401
-            import nexusrecon.graph.workflow  # noqa: F401
+            import nexusrecon.core.scope  # noqa: F401
             import nexusrecon.graph.dynamic_dispatcher  # noqa: F401
+            import nexusrecon.graph.workflow  # noqa: F401
+            import nexusrecon.models.campaign  # noqa: F401
+            import nexusrecon.reports.engine  # noqa: F401
+            import nexusrecon.tools.registry  # noqa: F401
         except Exception:
             # If warmup fails it's not user-visible — the runner
             # will just hit the cold-import path itself.

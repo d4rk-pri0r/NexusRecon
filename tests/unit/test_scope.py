@@ -1,8 +1,8 @@
 """Tests for core/scope.py — scope enforcement."""
-from pathlib import Path
 import pytest
+
+from nexusrecon.core.scope import OutOfScopeError, ScopeGuard, TierViolationError, preflight_check
 from nexusrecon.models.scope import ScopeModel
-from nexusrecon.core.scope import ScopeGuard, OutOfScopeError, TierViolationError, preflight_check
 
 
 @pytest.fixture

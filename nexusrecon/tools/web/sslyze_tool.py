@@ -2,13 +2,13 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Dict, List
+from typing import Any
 
 from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
 
 
-def _run_sslyze_sync(target: str) -> Dict[str, Any]:
+def _run_sslyze_sync(target: str) -> dict[str, Any]:
     """Synchronous sslyze execution (wrapped in asyncio.to_thread)."""
     try:
         from sslyze import (
@@ -41,10 +41,10 @@ def _run_sslyze_sync(target: str) -> Dict[str, Any]:
         scanner = Scanner()
         scanner.queue_scans([request])
 
-        supported_protocols: List[str] = []
-        weak_ciphers: List[str] = []
-        vulnerabilities: List[str] = []
-        cert_chain: Dict[str, Any] = {}
+        supported_protocols: list[str] = []
+        weak_ciphers: list[str] = []
+        vulnerabilities: list[str] = []
+        cert_chain: dict[str, Any] = {}
 
         for scan_result in scanner.get_results():
             if scan_result.scan_status.name == "ERROR_NO_CONNECTIVITY":

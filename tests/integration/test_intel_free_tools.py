@@ -25,11 +25,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-import pytest
 import respx
 from httpx import Response
-
-from tests.fixtures import load_fixture, load_text_fixture
 
 from nexusrecon.tools.domain.asn_bgp_tool import ASNBGPTool
 from nexusrecon.tools.intel.abuseipdb_tool import AbuseIPDBTool
@@ -39,7 +36,7 @@ from nexusrecon.tools.intel.leakix_tool import LeakIXTool
 from nexusrecon.tools.intel.pastebin_tool import PastebinTool
 from nexusrecon.tools.intel.ransomwatch_tool import RansomwatchTool
 from nexusrecon.tools.intel.urlscan_tool import URLScanTool
-
+from tests.fixtures import load_fixture, load_text_fixture
 
 # ────────────────────────────────────────────────────────────────────────
 # AbuseIPDB — docs.abuseipdb.com (requires key)

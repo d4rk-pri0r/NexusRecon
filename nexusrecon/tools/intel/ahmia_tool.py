@@ -1,7 +1,7 @@
 """Ahmia — clearnet Tor search engine for dark-web mentions of a target domain."""
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any
 
 import httpx
 from bs4 import BeautifulSoup
@@ -27,7 +27,7 @@ class AhmiaTool(OSINTTool):
     dynamic_trigger_hints = ["dark web mention found", "onion service discovered"]
 
     async def run(self, target: str, **kwargs: Any) -> ToolResult:
-        onion_results: List[Dict[str, str]] = []
+        onion_results: list[dict[str, str]] = []
         try:
             async with httpx.AsyncClient(headers=_HEADERS, timeout=20.0, follow_redirects=True) as client:
                 resp = await client.get(

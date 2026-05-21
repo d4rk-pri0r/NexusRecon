@@ -11,17 +11,15 @@ Tests the full pipeline:
 import json
 import tempfile
 from pathlib import Path
+
 import pytest
-import yaml
 
-from nexusrecon.core.scope import ScopeModel, preflight_check, ScopeGuard
-from nexusrecon.core.entity_graph import EntityGraph
 from nexusrecon.core.audit import AuditLog
-from nexusrecon.reports.engine import ReportEngine
-from nexusrecon.graph.workflow import run_workflow, PHASE_ORDER
-from nexusrecon.models.campaign import CampaignMode
+from nexusrecon.core.entity_graph import EntityGraph
+from nexusrecon.core.scope import ScopeGuard, ScopeModel, preflight_check
+from nexusrecon.graph.workflow import run_workflow
 from nexusrecon.models.entities import EntityType, RelationshipType
-
+from nexusrecon.reports.engine import ReportEngine
 
 SCOPE_YAML = """engagement:
   client: E2ETestClient
@@ -451,7 +449,7 @@ class TestE2EEntityGraph:
     def test_entity_graph_build_and_query(self):
         g = EntityGraph("test", "E2E-2026-001")
         domain_id = g.add_domain("e2e-testcorp.com", source="whois")
-        sub_id = g.add_subdomain("api.e2e-testcorp.com", parent="e2e-testcorp.com", source="crtsh")
+        g.add_subdomain("api.e2e-testcorp.com", parent="e2e-testcorp.com", source="crtsh")
         ip_id = g.add_ip("10.0.0.1", source="dns")
         g.relate(domain_id, ip_id, RelationshipType.RESOLVES_TO)
         assert g.graph.number_of_nodes() == 3

@@ -1,7 +1,7 @@
 """OSV.dev — Google open-source vulnerability database."""
 from __future__ import annotations
 
-from typing import Any, Dict, List, Set
+from typing import Any
 
 import httpx
 
@@ -41,14 +41,14 @@ class OSVTool(OSINTTool):
                     )
 
                 raw = resp.json()
-                vulns: List[Dict[str, Any]] = raw.get("vulns", [])
+                vulns: list[dict[str, Any]] = raw.get("vulns", [])
 
-                parsed: List[Dict[str, Any]] = []
+                parsed: list[dict[str, Any]] = []
                 for v in vulns:
-                    affected: List[Dict[str, Any]] = []
+                    affected: list[dict[str, Any]] = []
                     for aff in v.get("affected", [])[:10]:
                         pkg = aff.get("package", {})
-                        fixed_versions: List[str] = []
+                        fixed_versions: list[str] = []
                         for r in aff.get("ranges", []):
                             for event in r.get("events", []):
                                 if "fixed" in event:
@@ -59,7 +59,7 @@ class OSVTool(OSINTTool):
                             "fixed_versions": fixed_versions,
                         })
 
-                    severity_list: List[Dict[str, Any]] = v.get("severity", [])
+                    severity_list: list[dict[str, Any]] = v.get("severity", [])
                     parsed.append({
                         "id": v.get("id"),
                         "summary": v.get("summary"),
@@ -71,14 +71,14 @@ class OSVTool(OSINTTool):
                         "references": [r.get("url") for r in v.get("references", [])[:5]],
                     })
 
-                ecosystems: Set[str] = {
+                ecosystems: set[str] = {
                     a["ecosystem"]
                     for v in parsed
                     for a in v.get("affected_packages", [])
                     if a.get("ecosystem")
                 }
 
-                data: Dict[str, Any] = {
+                data: dict[str, Any] = {
                     "cve": cve_id,
                     "vuln_count": len(parsed),
                     "ecosystems": sorted(ecosystems),

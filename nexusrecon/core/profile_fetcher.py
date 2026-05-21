@@ -36,8 +36,7 @@ from __future__ import annotations
 import asyncio
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
-from urllib.parse import urlparse
+from typing import Any
 
 import httpx
 import structlog
@@ -63,37 +62,37 @@ class ProfileData:
     url: str = ""
 
     # Identity fields used by attribution scoring.
-    display_name: Optional[str] = None
-    bio: Optional[str] = None
-    location: Optional[str] = None
-    company: Optional[str] = None
-    blog_url: Optional[str] = None
-    email: Optional[str] = None  # sometimes exposed by GitHub/GitLab
+    display_name: str | None = None
+    bio: str | None = None
+    location: str | None = None
+    company: str | None = None
+    blog_url: str | None = None
+    email: str | None = None  # sometimes exposed by GitHub/GitLab
 
     # Temporal signals (Phase C2 ── timeline clustering).
-    created_at: Optional[str] = None
-    last_active: Optional[str] = None
+    created_at: str | None = None
+    last_active: str | None = None
 
     # Reputation / activity signals (Phase C3 ── reputation-weighted
     # scoring). Per-service interpretation lives in the attribution
     # scorer; this field just carries the raw numbers across.
-    reputation: Optional[float] = None         # SO rep, Reddit karma, etc.
-    follower_count: Optional[int] = None       # GitHub followers, etc.
+    reputation: float | None = None         # SO rep, Reddit karma, etc.
+    follower_count: int | None = None       # GitHub followers, etc.
 
     # Linked-account references extracted from bio/blog (B4).
-    linked_accounts: List[Dict[str, str]] = field(default_factory=list)
+    linked_accounts: list[dict[str, str]] = field(default_factory=list)
 
     # Avatar URL for Phase C1 cross-service image hashing.
-    avatar_url: Optional[str] = None
+    avatar_url: str | None = None
 
     # Service-specific raw blob for the agent to read when needed.
-    raw_extras: Dict[str, Any] = field(default_factory=dict)
+    raw_extras: dict[str, Any] = field(default_factory=dict)
 
     # When the fetch failed.
-    error: Optional[str] = None
+    error: str | None = None
     fetched: bool = False
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """JSON-safe dict suitable for ToolResult.data fields."""
         return {
             "service": self.service,
@@ -121,7 +120,7 @@ class ProfileData:
         scanning (the attribution scorer uses this for bio/employer
         matching). Joins bio + location + company + display_name into
         a single lowercase string."""
-        parts: List[str] = []
+        parts: list[str] = []
         for field_value in (self.display_name, self.bio, self.location, self.company, self.blog_url):
             if field_value:
                 parts.append(str(field_value))
@@ -131,7 +130,7 @@ class ProfileData:
 # ── HTTP helper ──────────────────────────────────────────────────────
 
 
-async def _http_get_json(url: str, timeout: float = 8.0) -> Optional[Dict[str, Any]]:
+async def _http_get_json(url: str, timeout: float = 8.0) -> dict[str, Any] | None:
     """Fetch a URL expecting JSON. Returns ``None`` on error.
 
     Uses the campaign proxy (via ``proxy_kwargs``) and a rotated UA.
@@ -159,7 +158,7 @@ async def _http_get_json(url: str, timeout: float = 8.0) -> Optional[Dict[str, A
         return None
 
 
-async def _http_get_text(url: str, timeout: float = 8.0) -> Optional[str]:
+async def _http_get_text(url: str, timeout: float = 8.0) -> str | None:
     """Fetch a URL expecting HTML/text. Returns ``None`` on error."""
     headers = {
         "User-Agent": random_ua(),
@@ -411,7 +410,7 @@ async def _fetch_generic(service: str, username: str, url: str) -> ProfileData:
 
 
 # Map service name (case-insensitive) to a specialised fetcher.
-_SERVICE_FETCHERS: Dict[str, Any] = {
+_SERVICE_FETCHERS: dict[str, Any] = {
     "github": _fetch_github,
     "gitlab": _fetch_gitlab,
     "reddit": _fetch_reddit,
@@ -456,9 +455,9 @@ async def fetch_profile(
 
 
 async def fetch_profiles_batch(
-    hits: List[Dict[str, Any]],
+    hits: list[dict[str, Any]],
     max_concurrent: int = 5,
-) -> List[ProfileData]:
+) -> list[ProfileData]:
     """Fetch profile data for a list of maigret hits concurrently.
 
     Each hit is expected to be a dict with ``service``, ``username``,
@@ -470,7 +469,7 @@ async def fetch_profiles_batch(
     """
     sem = asyncio.Semaphore(max_concurrent)
 
-    async def _one(hit: Dict[str, Any]) -> ProfileData:
+    async def _one(hit: dict[str, Any]) -> ProfileData:
         async with sem:
             return await fetch_profile(
                 service=hit.get("service", ""),

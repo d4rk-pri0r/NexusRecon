@@ -60,8 +60,9 @@ from __future__ import annotations
 
 import asyncio
 import re
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from collections.abc import Sequence
+from dataclasses import dataclass
+from typing import Any
 
 import httpx
 import structlog
@@ -76,8 +77,8 @@ log = structlog.get_logger(__name__)
 # optional deps are missing. Operators without the deps get clean
 # no-ops; operators with them get full functionality.
 try:
-    from PIL import Image
     import imagehash
+    from PIL import Image
     _AVATAR_HASH_AVAILABLE = True
 except ImportError:
     Image = None  # type: ignore[assignment]
@@ -150,13 +151,13 @@ class AvatarFingerprint:
     image_url: str
     phash: str
     is_identicon: bool = False
-    error: Optional[str] = None
+    error: str | None = None
 
     @property
     def fetched(self) -> bool:
         return bool(self.phash) and self.error is None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "service": self.service,
             "username": self.username,
@@ -287,9 +288,9 @@ def _decode_and_hash(content: bytes) -> str:
 
 
 async def fetch_and_hash_batch(
-    avatars: List[Tuple[str, str, str]],
+    avatars: list[tuple[str, str, str]],
     max_concurrent: int = 5,
-) -> List[AvatarFingerprint]:
+) -> list[AvatarFingerprint]:
     """Fetch + hash a batch of avatars concurrently.
 
     Args:
@@ -311,7 +312,7 @@ async def fetch_and_hash_batch(
 
     sem = asyncio.Semaphore(max_concurrent)
 
-    async def _one(item: Tuple[str, str, str]) -> AvatarFingerprint:
+    async def _one(item: tuple[str, str, str]) -> AvatarFingerprint:
         service, username, url = item
         async with sem:
             return await fetch_and_hash_avatar(service, username, url)
@@ -339,7 +340,7 @@ def hamming_distance(hex_a: str, hex_b: str) -> int:
 def find_avatar_clusters(
     fingerprints: Sequence[AvatarFingerprint],
     threshold: int = _DEFAULT_DISTANCE_THRESHOLD,
-) -> List[List[AvatarFingerprint]]:
+) -> list[list[AvatarFingerprint]]:
     """Group fingerprints whose hashes are within ``threshold``
     Hamming distance of each other.
 
@@ -362,8 +363,8 @@ def find_avatar_clusters(
     if len(candidates) < 2:
         return []
 
-    visited: List[bool] = [False] * len(candidates)
-    clusters: List[List[AvatarFingerprint]] = []
+    visited: list[bool] = [False] * len(candidates)
+    clusters: list[list[AvatarFingerprint]] = []
 
     for i, fp_i in enumerate(candidates):
         if visited[i]:
@@ -383,8 +384,8 @@ def find_avatar_clusters(
 
 
 def annotate_hits_with_avatar_clusters(
-    hits: List[Dict[str, Any]],
-    clusters: List[List[AvatarFingerprint]],
+    hits: list[dict[str, Any]],
+    clusters: list[list[AvatarFingerprint]],
 ) -> None:
     """Mutate ``hits`` in place, attaching ``avatar_cluster_id`` and
     ``avatar_cluster_size`` to each hit whose fingerprint participated
@@ -394,7 +395,7 @@ def annotate_hits_with_avatar_clusters(
     same key as :func:`extract_linked_accounts.cross_reference_with_hits`.
     """
     # Build a (service, username) → cluster_id mapping.
-    lookup: Dict[Tuple[str, str], Tuple[int, int]] = {}
+    lookup: dict[tuple[str, str], tuple[int, int]] = {}
     for cluster_id, cluster in enumerate(clusters):
         for fp in cluster:
             key = (fp.service.lower(), fp.username.lower())

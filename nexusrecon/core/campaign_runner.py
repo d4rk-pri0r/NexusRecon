@@ -8,13 +8,12 @@ events to its live runner widget.
 """
 from __future__ import annotations
 
-import asyncio
+from collections.abc import Callable
 from datetime import datetime
-from typing import Any, Callable, Dict, Optional
-
+from typing import Any
 
 # (phase_id, display_name, tier_floor)
-_PHASE_TIER_FLOOR: Dict[str, int] = {
+_PHASE_TIER_FLOOR: dict[str, int] = {
     "phase1": 0,
     "phase2": 0,
     "phase3": 0,
@@ -29,11 +28,11 @@ _PHASE_TIER_FLOOR: Dict[str, int] = {
 
 
 async def run_campaign(
-    state: Dict[str, Any],
+    state: dict[str, Any],
     campaign: Any,
     scope_model: Any,
-    on_event: Optional[Callable[[Dict[str, Any]], None]] = None,
-) -> Dict[str, Any]:
+    on_event: Callable[[dict[str, Any]], None] | None = None,
+) -> dict[str, Any]:
     """
     Run the campaign through all authorized phases.
 
@@ -63,8 +62,8 @@ async def run_campaign(
         phase4_correlation,
         phase5_light_active,
         phase6_active,
-        phase7_vuln_pretext,
         phase7_5_harvest,
+        phase7_vuln_pretext,
         phase8_attack_surface,
         phase9_reporting,
         reflection_node,
@@ -84,7 +83,7 @@ async def run_campaign(
     ]
     max_tier = scope_model.tier_value()
 
-    def _emit(evt: Dict[str, Any]) -> None:
+    def _emit(evt: dict[str, Any]) -> None:
         if on_event:
             try:
                 on_event(evt)

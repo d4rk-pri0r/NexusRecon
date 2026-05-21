@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
@@ -29,7 +29,7 @@ class ArjunTool(OSINTTool):
             output_path = out_f.name
 
         try:
-            proc = self.run_subprocess(
+            self.run_subprocess(
                 [
                     "arjun",
                     "-u", url,
@@ -41,7 +41,7 @@ class ArjunTool(OSINTTool):
                 timeout_sec=180,
             )
 
-            parameters: List[Dict[str, Any]] = []
+            parameters: list[dict[str, Any]] = []
             out_file = Path(output_path)
             if out_file.exists():
                 try:
@@ -63,7 +63,7 @@ class ArjunTool(OSINTTool):
             Path(output_path).unlink(missing_ok=True)
             return ToolResult(success=False, source=self.name, error=str(exc))
 
-        data: Dict[str, Any] = {
+        data: dict[str, Any] = {
             "target": url,
             "parameter_count": len(parameters),
             "parameters": parameters,

@@ -29,9 +29,8 @@ import pytest
 import respx
 from httpx import Response
 
-from nexusrecon.opsec.profiles import StealthProfile, ProfileName, get_profile
 from nexusrecon.opsec.proxy import ProxyManager
-from nexusrecon.opsec.rate_limiter import RateLimiter, SourceRateLimiter
+from nexusrecon.opsec.rate_limiter import SourceRateLimiter
 from nexusrecon.tools.intel.shodan_tool import ShodanTool
 from nexusrecon.tools.intel.virustotal_tool import VirusTotalTool
 from nexusrecon.tools.registry import ToolRegistry
@@ -502,13 +501,14 @@ class TestProxySupportStructural:
         from inspect import getsourcefile
         from pathlib import Path
 
-        from nexusrecon.tools.base import BaseHTTPTool
-        # Import the tool modules so subclasses register themselves.
-        import nexusrecon.tools.intel.shodan_tool  # noqa: F401
-        import nexusrecon.tools.intel.virustotal_tool  # noqa: F401
         import nexusrecon.tools.intel.censys_tool  # noqa: F401
         import nexusrecon.tools.intel.fullhunt_tool  # noqa: F401
         import nexusrecon.tools.intel.greynoise_tool  # noqa: F401
+
+        # Import the tool modules so subclasses register themselves.
+        import nexusrecon.tools.intel.shodan_tool  # noqa: F401
+        import nexusrecon.tools.intel.virustotal_tool  # noqa: F401
+        from nexusrecon.tools.base import BaseHTTPTool
 
         violators = []
         for cls in BaseHTTPTool.__subclasses__():

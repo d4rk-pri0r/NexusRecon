@@ -1,7 +1,7 @@
 """RDAP — modern structured WHOIS replacement."""
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import httpx
 
@@ -53,15 +53,15 @@ class RDAPTool(OSINTTool):
 
     # ── Helpers ────────────────────────────────────────────────────────────────
 
-    def _vcard_field(self, vcard_array: List, field: str) -> Optional[str]:
+    def _vcard_field(self, vcard_array: list, field: str) -> str | None:
         for prop in vcard_array:
             if isinstance(prop, list) and prop and prop[0] == field:
                 return prop[3] if len(prop) > 3 else None
         return None
 
-    def _parse_entity(self, entity: Dict[str, Any]) -> Dict[str, Any]:
-        vcard_props: List = entity.get("vcardArray", [None, []])[1]
-        parsed: Dict[str, Any] = {
+    def _parse_entity(self, entity: dict[str, Any]) -> dict[str, Any]:
+        vcard_props: list = entity.get("vcardArray", [None, []])[1]
+        parsed: dict[str, Any] = {
             "handle": entity.get("handle"),
             "roles": entity.get("roles", []),
             "name": self._vcard_field(vcard_props, "fn"),
@@ -71,11 +71,11 @@ class RDAPTool(OSINTTool):
         }
         return {k: v for k, v in parsed.items() if v}
 
-    def _parse(self, raw: Dict[str, Any], target_type: str) -> Dict[str, Any]:
+    def _parse(self, raw: dict[str, Any], target_type: str) -> dict[str, Any]:
         events = {e.get("eventAction"): e.get("eventDate") for e in raw.get("events", [])}
         entities = [self._parse_entity(e) for e in raw.get("entities", [])]
 
-        data: Dict[str, Any] = {
+        data: dict[str, Any] = {
             "handle": raw.get("handle"),
             "name": raw.get("ldhName") or raw.get("name"),
             "status": raw.get("status", []),

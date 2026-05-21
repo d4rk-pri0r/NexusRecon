@@ -18,7 +18,6 @@ from nexusrecon.core.identity_graph import (
     derive_identity_id,
 )
 
-
 # ──────────────────────────────────────────────────────────────────────
 # LinkageStrength threshold bands
 # ──────────────────────────────────────────────────────────────────────
@@ -429,7 +428,9 @@ class TestDeriveIdentityId:
         id2 = derive_identity_id([])
         # Both should be valid hex strings of length 16.
         assert len(id1) == 16 and len(id2) == 16
-        int(id1, 16); int(id2, 16)  # parse as hex; raises if not
+        # Parse as hex; raises if either is not a valid hex string.
+        int(id1, 16)
+        int(id2, 16)
 
     def test_case_insensitive_seed(self):
         a = derive_identity_id([Identifier(value="Jane.Doe@GitLab.com",

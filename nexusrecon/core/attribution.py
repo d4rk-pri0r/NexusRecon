@@ -37,11 +37,11 @@ signals that exist for every hit. Service tier discriminates the next
 """
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any
 
 from nexusrecon.core.name_frequency import handle_commonness
-
 
 # ── Weights ──────────────────────────────────────────────────────────
 # Tunable. Sum to 1.0 so the final score stays in [0, 1].
@@ -232,7 +232,7 @@ _COMMON_HANDLES = frozenset(h.lower() for h in (
 # baseline confidence contribution.
 
 
-def _derivation_rank(email: Optional[str], handle: str) -> float:
+def _derivation_rank(email: str | None, handle: str) -> float:
     """Return derivation confidence in ``[0, 1]``.
 
     Logic:
@@ -425,9 +425,9 @@ def _build_profile_blob(profile_data: Any) -> str:
 
 
 def _profile_coherence(
-    email: Optional[str],
+    email: str | None,
     profile_data: Any,
-    harvested_names: Optional[Sequence[str]],
+    harvested_names: Sequence[str] | None,
     cross_referenced: bool = False,
 ) -> float:
     """Return profile-coherence signal in ``[0, 1]``.
@@ -512,7 +512,7 @@ class AttributionScore:
     """
 
     score: float
-    signals: Dict[str, float] = field(default_factory=dict)
+    signals: dict[str, float] = field(default_factory=dict)
     rationale: str = ""
 
     @property
@@ -531,11 +531,11 @@ class AttributionScore:
 
 
 def score_handle_attribution(
-    email: Optional[str],
+    email: str | None,
     handle: str,
     service: str,
     profile_data: Any = None,
-    harvested_names: Optional[Sequence[str]] = None,
+    harvested_names: Sequence[str] | None = None,
     cross_referenced: bool = False,
 ) -> AttributionScore:
     """Compute multi-signal attribution confidence for a maigret hit.
@@ -619,7 +619,7 @@ def _build_rationale(
     prof: float,
 ) -> str:
     """Compose a short human-readable rationale for an LLM to cite."""
-    parts: List[str] = []
+    parts: list[str] = []
     if deriv >= 0.9:
         parts.append("handle matches email local-part exactly")
     elif deriv >= 0.7:
@@ -653,7 +653,7 @@ def _build_rationale(
     return "; ".join(parts)
 
 
-def filter_actionable(hits: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def filter_actionable(hits: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
     """Return only hits whose ``confidence`` field is at or above the
     actionable threshold. Convenience for callers that don't want to
     spread the threshold logic across the codebase."""

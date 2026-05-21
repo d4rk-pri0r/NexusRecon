@@ -15,11 +15,9 @@ from __future__ import annotations
 
 import abc
 import subprocess
-import time
 from dataclasses import dataclass, field
-from enum import Enum
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Type, TypeVar
+from enum import StrEnum
+from typing import Any, TypeVar
 
 import httpx
 import structlog
@@ -29,14 +27,14 @@ from nexusrecon.core.config import get_config
 log = structlog.get_logger(__name__)
 
 
-class Tier(str, Enum):
+class Tier(StrEnum):
     T0 = "T0"
     T1 = "T1"
     T2 = "T2"
     T3 = "T3"
 
 
-class Category(str, Enum):
+class Category(StrEnum):
     DOMAIN = "domain"
     SUBDOMAIN = "subdomain"
     DNS = "dns"
@@ -71,13 +69,13 @@ class ToolResult:
     success: bool
     source: str
     data: Any = None
-    error: Optional[str] = None
-    raw_output: Optional[str] = None
+    error: str | None = None
+    raw_output: str | None = None
     runtime_ms: int = 0
     cached: bool = False
     result_count: int = 0
     tier: str = "T0"
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class OSINTTool(abc.ABC):
@@ -96,11 +94,11 @@ class OSINTTool(abc.ABC):
     cost_per_run_usd: float = 0.0
     avg_runtime_sec: int = 30
     reliability: float = 0.95
-    requires_keys: List[str] = []
-    binary_required: Optional[str] = None
+    requires_keys: list[str] = []
+    binary_required: str | None = None
     description: str = ""
-    target_types: List[str] = ["domain"]  # domain, ip, email, etc.
-    dynamic_trigger_hints: List[str] = []  # hints for dynamic dispatcher (Move 4)
+    target_types: list[str] = ["domain"]  # domain, ip, email, etc.
+    dynamic_trigger_hints: list[str] = []  # hints for dynamic dispatcher (Move 4)
 
     def __init__(self) -> None:
         self.config = get_config()
@@ -124,9 +122,9 @@ class OSINTTool(abc.ABC):
 
     def run_subprocess(
         self,
-        cmd: List[str],
+        cmd: list[str],
         timeout_sec: int = 300,
-        cwd: Optional[str] = None,
+        cwd: str | None = None,
     ) -> subprocess.CompletedProcess:
         """Run a subprocess (for CLI tools like subfinder, gitleaks, etc.)."""
         log.debug("Running subprocess", cmd=cmd)
@@ -187,15 +185,15 @@ class BaseHTTPTool(OSINTTool):
                     return ToolResult(success=False, source=self.name, error=str(exc))
     """
 
-    provider_label: Optional[str] = None
-    soft_failure_codes: Tuple[int, ...] = ()
+    provider_label: str | None = None
+    soft_failure_codes: tuple[int, ...] = ()
 
     @property
     def _provider(self) -> str:
         return self.provider_label or self.name.replace("_", " ").title()
 
     @staticmethod
-    def _proxy_kwargs() -> Dict[str, Any]:
+    def _proxy_kwargs() -> dict[str, Any]:
         """Return httpx-compatible proxy kwargs for the active campaign.
 
         Thin wrapper around :func:`nexusrecon.opsec.context.proxy_kwargs`
@@ -212,7 +210,7 @@ class BaseHTTPTool(OSINTTool):
         self,
         resp: httpx.Response,
         endpoint: str = "",
-    ) -> Optional[ToolResult]:
+    ) -> ToolResult | None:
         """
         Convert provider error codes into explicit ``ToolResult`` failures.
 

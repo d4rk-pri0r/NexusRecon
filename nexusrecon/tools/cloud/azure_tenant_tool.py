@@ -1,7 +1,7 @@
 """Azure tenant enumeration — tenant ID, federation, and OAuth discovery."""
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import httpx
 
@@ -23,7 +23,7 @@ class AzureTenantTool(OSINTTool):
     target_types = ["domain"]
 
     async def run(self, target: str, **kwargs: Any) -> ToolResult:
-        data: Dict[str, Any] = {"domain": target}
+        data: dict[str, Any] = {"domain": target}
 
         try:
             async with httpx.AsyncClient(
@@ -69,7 +69,7 @@ class AzureTenantTool(OSINTTool):
 
                 # 3. Check for *.onmicrosoft.com tenant name
                 stem = target.split(".")[0]
-                onmicrosoft_domains: List[str] = []
+                onmicrosoft_domains: list[str] = []
                 for candidate in [stem, stem.replace("-", ""), stem.replace(".", "")]:
                     ms_resp = await client.head(f"https://{candidate}.sharepoint.com")
                     if ms_resp.status_code in (200, 302, 403):

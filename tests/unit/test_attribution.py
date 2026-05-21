@@ -1,16 +1,12 @@
 """Tests for nexusrecon.core.attribution: handle-attribution scoring."""
 from __future__ import annotations
 
-import pytest
-
 from nexusrecon.core.attribution import (
-    AttributionScore,
-    HIGH_CONFIDENCE_THRESHOLD,
     MEDIUM_CONFIDENCE_THRESHOLD,
+    AttributionScore,
     filter_actionable,
     score_handle_attribution,
 )
-
 
 # ──────────────────────────────────────────────────────────────────────
 # Final score behaviour ── the "John Smith" case

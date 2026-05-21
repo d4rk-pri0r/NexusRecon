@@ -63,7 +63,7 @@ firing real tools.
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any
 
 import structlog
 
@@ -72,7 +72,6 @@ from nexusrecon.core.identity_graph import (
     CredentialExposure,
     Identifier,
     IdentifierType,
-    Identity,
     IdentityGraph,
 )
 from nexusrecon.core.personal_handle_derivation import (
@@ -191,12 +190,12 @@ class PersonalPivotTool(OSINTTool):
         )
 
         # Optionally probe the candidates via existing tools.
-        handle_hits: List[Dict[str, Any]] = []
+        handle_hits: list[dict[str, Any]] = []
         if kwargs.get("probe_handles", True) and handle_candidates:
             handle_hits = await self._probe_handles(handle_candidates)
 
-        email_hits: List[Dict[str, Any]] = []
-        credential_exposures: List[CredentialExposure] = []
+        email_hits: list[dict[str, Any]] = []
+        credential_exposures: list[CredentialExposure] = []
         if kwargs.get("probe_emails", True) and email_candidates:
             email_hits, credential_exposures = await self._probe_emails(
                 email_candidates,
@@ -238,8 +237,8 @@ class PersonalPivotTool(OSINTTool):
 
     async def _probe_handles(
         self,
-        candidates: List[HandleCandidate],
-    ) -> List[Dict[str, Any]]:
+        candidates: list[HandleCandidate],
+    ) -> list[dict[str, Any]]:
         """Fire maigret against personal-handle candidates.
 
         Uses the registry's ``execute`` path so OPSEC + audit apply.
@@ -250,7 +249,7 @@ class PersonalPivotTool(OSINTTool):
         from nexusrecon.tools.registry import get_registry
         registry = get_registry()
 
-        results: List[Dict[str, Any]] = []
+        results: list[dict[str, Any]] = []
         sem = asyncio.Semaphore(2)  # be polite to maigret subprocesses
 
         async def _run_one(cand: HandleCandidate) -> None:
@@ -283,8 +282,8 @@ class PersonalPivotTool(OSINTTool):
 
     async def _probe_emails(
         self,
-        candidates: List[EmailCandidate],
-    ) -> tuple[List[Dict[str, Any]], List[CredentialExposure]]:
+        candidates: list[EmailCandidate],
+    ) -> tuple[list[dict[str, Any]], list[CredentialExposure]]:
         """Fire breach DB tools against personal email candidates.
 
         Returns ``(email_hits, credential_exposures)``:
@@ -303,8 +302,8 @@ class PersonalPivotTool(OSINTTool):
         from nexusrecon.tools.registry import get_registry
         registry = get_registry()
 
-        email_hits: List[Dict[str, Any]] = []
-        exposures: List[CredentialExposure] = []
+        email_hits: list[dict[str, Any]] = []
+        exposures: list[CredentialExposure] = []
         sem = asyncio.Semaphore(3)
 
         async def _probe_one(cand: EmailCandidate) -> None:
@@ -345,7 +344,7 @@ class PersonalPivotTool(OSINTTool):
 
     @staticmethod
     async def _safe_execute(registry, tool_name: str, target: str,
-                            target_type: str) -> Optional[ToolResult]:
+                            target_type: str) -> ToolResult | None:
         """Wrapper around ``registry.execute`` that swallows the
         ``tool not registered`` / ``prereqs not met`` error cases
         rather than counting them as failures. The personal pivot
@@ -365,11 +364,11 @@ class PersonalPivotTool(OSINTTool):
 
     def _build_extensions(
         self,
-        handle_hits: List[Dict[str, Any]],
-        email_hits: List[Dict[str, Any]],
-        handle_candidates: List[HandleCandidate],
-        email_candidates: List[EmailCandidate],
-    ) -> List[Dict[str, Any]]:
+        handle_hits: list[dict[str, Any]],
+        email_hits: list[dict[str, Any]],
+        handle_candidates: list[HandleCandidate],
+        email_candidates: list[EmailCandidate],
+    ) -> list[dict[str, Any]]:
         """Build the per-finding identity-extension records.
 
         Each extension is a dict shaped like an :class:`Identifier`
@@ -377,11 +376,11 @@ class PersonalPivotTool(OSINTTool):
         score. The caller (Phase 2.5 / the credential_correlation
         step) consumes these to extend the IdentityGraph.
         """
-        out: List[Dict[str, Any]] = []
+        out: list[dict[str, Any]] = []
 
         # Tally cross-service handle convergence ── same handle on N
         # services raises confidence.
-        convergence: Dict[str, int] = {}
+        convergence: dict[str, int] = {}
         for hit in handle_hits:
             uname = (hit.get("username") or "").lower()
             convergence[uname] = convergence.get(uname, 0) + 1
@@ -435,8 +434,8 @@ class PersonalPivotTool(OSINTTool):
 
     @staticmethod
     def _score_handle_hit(
-        hit: Dict[str, Any],
-        convergence: Dict[str, int],
+        hit: dict[str, Any],
+        convergence: dict[str, int],
     ) -> float:
         """Cross-domain confidence that this personal-tier hit is
         attributable to the corp identity the pivot started from.
@@ -486,7 +485,7 @@ class PersonalPivotTool(OSINTTool):
         return max(0.0, min(1.0, score))
 
     @staticmethod
-    def _score_email_hit(hit: Dict[str, Any]) -> float:
+    def _score_email_hit(hit: dict[str, Any]) -> float:
         """Cross-domain confidence that this personal-email candidate
         belongs to the corp identity, given a breach DB found it.
 
@@ -517,7 +516,7 @@ class PersonalPivotTool(OSINTTool):
 # ──────────────────────────────────────────────────────────────────────
 
 
-def _summarise_breach_data(data: Dict[str, Any]) -> Dict[str, Any]:
+def _summarise_breach_data(data: dict[str, Any]) -> dict[str, Any]:
     """Reduce a breach-DB tool's ``ToolResult.data`` to a non-
     sensitive summary suitable for the ``email_hits`` field. Never
     include credential values here ── those go to credential_exposures
@@ -541,8 +540,8 @@ def _summarise_breach_data(data: Dict[str, Any]) -> Dict[str, Any]:
 def _extract_credential_exposures(
     tool_name: str,
     email: str,
-    data: Dict[str, Any],
-) -> List[CredentialExposure]:
+    data: dict[str, Any],
+) -> list[CredentialExposure]:
     """Convert a breach-DB tool's raw ``data`` into typed
     :class:`CredentialExposure` records.
 
@@ -556,7 +555,7 @@ def _extract_credential_exposures(
     """
     if not isinstance(data, dict):
         return []
-    out: List[CredentialExposure] = []
+    out: list[CredentialExposure] = []
 
     if tool_name == "dehashed":
         # DeHashed returns a list of records with optional 'password'
@@ -732,7 +731,7 @@ def _extract_credential_exposures(
 def apply_extensions_to_graph(
     graph: IdentityGraph,
     corp_identity_id: str,
-    pivot_result: Dict[str, Any],
+    pivot_result: dict[str, Any],
 ) -> None:
     """Attach the personal_pivot tool's extensions to an Identity in
     the graph.

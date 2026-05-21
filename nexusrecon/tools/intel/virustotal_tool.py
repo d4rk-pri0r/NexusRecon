@@ -1,8 +1,11 @@
 """VirusTotal API tool, domain, IP, and URL enrichment."""
 from __future__ import annotations
+
 import base64
-from typing import Any, Dict
+from typing import Any
+
 import httpx
+
 from nexusrecon.tools.base import BaseHTTPTool, Category, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
 
@@ -52,7 +55,7 @@ class VirusTotalTool(BaseHTTPTool):
 
                 r = resp.json()
                 attrs = r.get("data", {}).get("attributes", {})
-                data: Dict[str, Any] = {
+                data: dict[str, Any] = {
                     "reputation": attrs.get("reputation"),
                     "categories": attrs.get("categories", {}),
                     "last_analysis_stats": attrs.get("last_analysis_stats", {}),

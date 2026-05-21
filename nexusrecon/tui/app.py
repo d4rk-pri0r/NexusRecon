@@ -41,7 +41,7 @@ class NexusReconApp(App):
         self.push_screen(WelcomeScreen())
 
 
-def _open_session_log() -> tuple[Path, "object"]:
+def _open_session_log() -> tuple[Path, object]:
     """Open a per-session log file under `~/.nexusrecon/logs/`.
 
     Returns (path, file_object). Caller is responsible for closing the
