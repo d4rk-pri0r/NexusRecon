@@ -484,6 +484,8 @@ class TestCredentialExposureExtraction:
         assert "5f4dcc" in out[0].credential_value
 
     def test_extract_credentials_hudsonrock_compromised(self):
+        """Community-tier domain check: stealer without captured_credentials
+        produces one presence_only record per stealer session."""
         out = _extract_credential_exposures(
             tool_name="hudsonrock",
             email="jane@gmail.com",
@@ -502,6 +504,109 @@ class TestCredentialExposureExtraction:
         assert "RedLine" in out[0].breach_source
         # Provenance carries the stealer metadata for the audit trail.
         assert out[0].provenance["computer_name"] == "DESKTOP-XYZ"
+
+    def test_extract_credentials_hudsonrock_paid_tier_email_check(self):
+        """D6: paid-tier email check exposes ``captured_credentials`` —
+        each entry must become a password CredentialExposure."""
+        out = _extract_credential_exposures(
+            tool_name="hudsonrock",
+            email="jane@gmail.com",
+            data={
+                "compromised": True,
+                "stealer_family": "Vidar",
+                "date_compromised": "2024-06-01",
+                "computer_name": "LAPTOP-A",
+                "operating_system": "Windows 11",
+                "external_ip": "1.2.3.4",
+                "captured_credentials": [
+                    {
+                        "url": "https://mail.corp.com/owa/",
+                        "username": "jane.doe@corp.com",
+                        "password": "Summer2024!",
+                    },
+                    {
+                        "url": "https://github.com/login",
+                        "username": "janedoe82",
+                        "password": "GitHub#456",
+                    },
+                ],
+            },
+        )
+        assert len(out) == 2
+        assert all(e.credential_kind == "password" for e in out)
+        values = {e.credential_value for e in out}
+        assert "Summer2024!" in values
+        assert "GitHub#456" in values
+        # Each carries the captured URL in provenance for D4 targeting.
+        urls = {e.provenance.get("captured_url") for e in out}
+        assert "https://mail.corp.com/owa/" in urls
+        assert "https://github.com/login" in urls
+        # Confidence escalated to VERIFIED for paid-tier passwords.
+        assert all(e.confidence == BreachConfidence.VERIFIED for e in out)
+
+    def test_extract_credentials_hudsonrock_paid_tier_domain_check(self):
+        """D6: paid-tier domain check — per-stealer captured_credentials lifted."""
+        out = _extract_credential_exposures(
+            tool_name="hudsonrock",
+            email="corp.com",
+            data={
+                "compromised": True,
+                "stealers": [
+                    {
+                        "stealer_family": "RedLine",
+                        "date_compromised": "2024-05-01",
+                        "computer_name": "PC-1",
+                        "operating_system": "Windows 10",
+                        "captured_credentials": [
+                            {
+                                "url": "https://adfs.corp.com/adfs/ls",
+                                "username": "alice@corp.com",
+                                "password": "AlicePass!",
+                            },
+                        ],
+                    },
+                    {
+                        "stealer_family": "Vidar",
+                        "date_compromised": "2024-06-01",
+                        "computer_name": "PC-2",
+                        "operating_system": "Windows 11",
+                        # No credentials array → presence_only fallback
+                    },
+                ],
+            },
+        )
+        # Two records: one password (PC-1) + one presence_only (PC-2)
+        assert len(out) == 2
+        passwords = [e for e in out if e.credential_kind == "password"]
+        presence = [e for e in out if e.credential_kind == "presence_only"]
+        assert len(passwords) == 1
+        assert len(presence) == 1
+        assert passwords[0].credential_value == "AlicePass!"
+        assert passwords[0].provenance["captured_url"] == "https://adfs.corp.com/adfs/ls"
+
+    def test_extract_credentials_hudsonrock_empty_password_is_presence(self):
+        """A captured_credentials entry with empty password → presence_only,
+        not password — confidence drops to LIKELY since we have URL+username."""
+        out = _extract_credential_exposures(
+            tool_name="hudsonrock",
+            email="jane@gmail.com",
+            data={
+                "compromised": True,
+                "stealer_family": "Raccoon",
+                "date_compromised": "2024-01-01",
+                "captured_credentials": [
+                    {
+                        "url": "https://service.example.com/login",
+                        "username": "janedoe",
+                        "password": "",  # cleared by the stealer logger
+                    },
+                ],
+            },
+        )
+        assert len(out) == 1
+        assert out[0].credential_kind == "presence_only"
+        assert out[0].credential_value == ""
+        assert out[0].confidence == BreachConfidence.LIKELY
 
     def test_extract_credentials_intelx_with_password(self):
         out = _extract_credential_exposures(

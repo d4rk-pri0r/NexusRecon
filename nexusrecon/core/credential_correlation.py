@@ -244,6 +244,17 @@ def extract_auth_endpoints(cloud_intel: Dict[str, Any]) -> List[AuthEndpoint]:
 
     The caller (``correlate_credentials``) handles the case where no
     endpoints are discovered by synthesising a generic fallback set.
+
+    Shape contract — reads from the actual ``azure_m365_recon`` output:
+      - ``data["user_realm"]["is_federated"]``      bool (Microsoft realm API)
+      - ``data["user_realm"]["federation_protocol"]`` str (WSTrust, SAML, …)
+      - ``data["adfs"]["endpoints"]``               list of detected
+            ADFS subdomain probes (each: ``{subdomain, url, status,
+            likely_adfs}``).
+      - Hudson Rock additions:
+        ``data["captured_urls"]`` / ``data["all_captured_urls"]``    str list.
+      - Future-compatible (no-op when absent):
+        ``data["owa_url"]``, ``data["vpn_url"]``, ``data["mfa_enforced"]``.
     """
     endpoints: List[AuthEndpoint] = []
     seen_urls: set[str] = set()
@@ -261,53 +272,114 @@ def extract_auth_endpoints(cloud_intel: Dict[str, Any]) -> List[AuthEndpoint]:
         # Derive the domain from the cloud_intel key (e.g. "azure/gitlab.com")
         domain = _domain_from_key(intel_key)
 
-        # ── Azure / M365 ─────────────────────────────────────────────
+        # ── Azure / M365 federation realm ────────────────────────────
 
         user_realm = data.get("user_realm") or {}
+        is_federated = False
+        federation_protocol = ""
         if isinstance(user_realm, dict) and user_realm.get("found"):
             is_federated = bool(user_realm.get("is_federated"))
-            auth_url = (user_realm.get("auth_url") or "").strip()
-            mex_uri = (user_realm.get("mex_uri") or "").strip()
-            mfa_flag = bool(
-                data.get("mfa_enforced") or
-                data.get("conditional_access") or
-                user_realm.get("mfa_required")
-            )
+            federation_protocol = (user_realm.get("federation_protocol") or "").strip()
 
-            if is_federated and auth_url:
-                ep_type = _classify_url(auth_url) or "adfs"
+        # MFA signal is rarely surfaced by Microsoft's realm API.  We
+        # accept any of these field names as "MFA expected" but tolerate
+        # their absence.  ``conditional_access_likely`` is an inferred
+        # signal that future Azure-tool work may add.
+        mfa_flag = bool(
+            data.get("mfa_enforced") or
+            data.get("conditional_access") or
+            data.get("conditional_access_likely") or
+            (isinstance(user_realm, dict) and user_realm.get("mfa_required"))
+        )
+
+        # An explicit ``auth_url`` is rare — kept for compatibility with
+        # tooling that supplies it directly.
+        explicit_auth_url = ""
+        if isinstance(user_realm, dict):
+            explicit_auth_url = (user_realm.get("auth_url") or "").strip()
+        if is_federated and explicit_auth_url:
+            ep_type = _classify_url(explicit_auth_url) or "adfs"
+            _add(AuthEndpoint(
+                url=explicit_auth_url,
+                endpoint_type=ep_type,
+                domain=domain,
+                mfa_expected=mfa_flag,
+                lockout_policy_unknown=True,
+                notes=f"Azure federation; protocol={federation_protocol or 'unknown'}",
+            ))
+
+        # ── ADFS endpoints discovered by ``_detect_adfs`` ────────────
+        #
+        # azure_m365_recon stores its ADFS probe results at
+        # ``data["adfs"]["endpoints"]`` — a list of probed subdomain
+        # patterns (adfs/sts/login/sso).  Only the entries flagged
+        # ``likely_adfs`` came back with content matching ADFS markers.
+
+        adfs_data = data.get("adfs") or {}
+        if isinstance(adfs_data, dict):
+            for ep_data in (adfs_data.get("endpoints") or []):
+                if not isinstance(ep_data, dict):
+                    continue
+                url = (ep_data.get("url") or "").strip()
+                if not url:
+                    continue
+                # Keep only endpoints that actually responded with ADFS
+                # content; bare 200 responses on unrelated services
+                # would otherwise pollute the punch list.
+                likely = bool(ep_data.get("likely_adfs"))
+                status = ep_data.get("status")
+                if not likely and status not in (200, 302, 401, 403):
+                    continue
                 _add(AuthEndpoint(
-                    url=auth_url,
-                    endpoint_type=ep_type,
+                    url=url,
+                    endpoint_type="adfs",
                     domain=domain,
                     mfa_expected=mfa_flag,
                     lockout_policy_unknown=True,
                     notes=(
-                        f"Azure federation; protocol="
-                        f"{user_realm.get('federation_protocol', 'unknown')}"
+                        f"ADFS probe ({ep_data.get('subdomain', 'n/a')}, "
+                        f"likely_adfs={likely})"
                     ),
                 ))
-                if mex_uri:
-                    _add(AuthEndpoint(
-                        url=mex_uri,
-                        endpoint_type="adfs",
-                        domain=domain,
-                        mfa_expected=mfa_flag,
-                        notes="MEX/WS-Trust endpoint (alternate ADFS path)",
-                    ))
 
-            elif not is_federated:
-                # Managed M365 — spray via the token endpoint.
+        # ── Synthesized ADFS fallback for federated tenants ──────────
+        #
+        # When the realm API says "federated" but no concrete ADFS URL
+        # came back from the probe, synthesize the common subdomain
+        # pattern so the punch list still has a candidate to test
+        # against.  Marked as a synthesised guess in the notes.
+
+        if is_federated and not any(
+            ep.endpoint_type == "adfs" and ep.domain == domain
+            for ep in endpoints
+        ):
+            for sub in ("sts", "adfs", "login", "sso"):
                 _add(AuthEndpoint(
-                    url="https://login.microsoftonline.com/common/oauth2/token",
-                    endpoint_type="o365_managed",
+                    url=f"https://{sub}.{domain}/adfs/ls/",
+                    endpoint_type="adfs",
                     domain=domain,
                     mfa_expected=mfa_flag,
                     lockout_policy_unknown=True,
-                    notes=f"O365 managed tenant ({domain})",
+                    notes=(
+                        f"Synthesised ADFS pattern ({sub}); federation "
+                        f"protocol={federation_protocol or 'unknown'}"
+                    ),
                 ))
 
-        # ── OWA ──────────────────────────────────────────────────────
+        # ── Managed M365 token endpoint ──────────────────────────────
+
+        if isinstance(user_realm, dict) and user_realm.get("found") and not is_federated:
+            # Managed M365 — spray via the per-tenant token endpoint.
+            _add(AuthEndpoint(
+                url=f"https://login.microsoftonline.com/{domain}/oauth2/token",
+                endpoint_type="o365_managed",
+                domain=domain,
+                mfa_expected=mfa_flag,
+                lockout_policy_unknown=True,
+                notes=f"O365 managed tenant ({domain})",
+            ))
+
+        # ── OWA (future-compatible: harmless when absent) ─────────────
 
         for owa_field in ("owa_url", "exchange_url", "mail_url"):
             owa_url = (data.get(owa_field) or "").strip()
@@ -316,11 +388,11 @@ def extract_auth_endpoints(cloud_intel: Dict[str, Any]) -> List[AuthEndpoint]:
                     url=owa_url,
                     endpoint_type="owa",
                     domain=domain,
-                    mfa_expected=False,
+                    mfa_expected=mfa_flag,
                     notes="OWA / Exchange Web Services",
                 ))
 
-        # ── VPN / remote access ───────────────────────────────────────
+        # ── VPN / remote access (future-compatible) ───────────────────
 
         for vpn_field in ("vpn_url", "remote_access_url", "ssl_vpn_url"):
             vpn_url = (data.get(vpn_field) or "").strip()
@@ -589,8 +661,7 @@ def correlate_credentials(
                     breach_source=exposure.breach_source,
                     credential_kind=exposure.credential_kind,
                     endpoint_type=endpoint.endpoint_type,
-                    endpoint_url=endpoint.test_endpoint_url
-                    if hasattr(endpoint, "test_endpoint_url") else endpoint.url,
+                    endpoint_url=endpoint.url,
                     mfa_expected=endpoint.mfa_expected,
                     confidence=conf,
                 )

@@ -581,34 +581,108 @@ def _extract_credential_exposures(
             ))
 
     elif tool_name == "hudsonrock":
-        # Hudson Rock infostealer ── ``data["compromised"]`` boolean
-        # plus per-machine stealer records. The basic free tier
-        # doesn't return passwords; the paid Cavalier API does.
+        # Hudson Rock infostealer ── ``data["compromised"]`` boolean.
+        #
+        # Shape varies by check type + tier (D6 enhancements):
+        #
+        #  • email-check, paid tier:
+        #      data["captured_credentials"] = [{url, username, password}]
+        #      data["stealer_family"]/computer_name/etc at top level
+        #
+        #  • email-check, community tier:
+        #      data["captured_credentials"] = []  (no detail)
+        #      stealer-session top-level fields still present
+        #
+        #  • domain-check (either tier):
+        #      data["stealers"] = [{..., captured_credentials: [...]}]
+        #      each stealer is one infected machine
+        #
+        # We extract REAL credentials when ``captured_credentials`` is
+        # populated (paid tier) and fall back to one ``presence_only``
+        # record per stealer otherwise.
         if data.get("compromised"):
-            for s in data.get("stealers", []) or []:
+            stealer_family_top = data.get("stealer_family")
+            date_top = data.get("date_compromised")
+
+            # ── email-check path: top-level captured_credentials ──
+            top_creds = data.get("captured_credentials") or []
+            if isinstance(top_creds, list) and top_creds:
+                for c in top_creds:
+                    if not isinstance(c, dict):
+                        continue
+                    pwd = (c.get("password") or "").strip()
+                    out.append(CredentialExposure(
+                        breach_source=f"HudsonRock:{stealer_family_top or 'unknown'}",
+                        breach_date=date_top,
+                        observed_at_identifier=email,
+                        credential_kind="password" if pwd else "presence_only",
+                        credential_value=pwd,
+                        confidence=BreachConfidence.VERIFIED if pwd else BreachConfidence.LIKELY,
+                        provenance={
+                            "captured_url": c.get("url"),
+                            "captured_username": c.get("username"),
+                            "computer_name": data.get("computer_name"),
+                            "operating_system": data.get("operating_system"),
+                            "external_ip": data.get("external_ip"),
+                        },
+                    ))
+
+            # ── domain-check path: per-stealer records ──
+            stealers = data.get("stealers") or []
+            for s in stealers:
                 if not isinstance(s, dict):
                     continue
+                family = s.get("stealer_family") or "unknown"
+                date_s = s.get("date_compromised")
+                provenance_base = {
+                    "computer_name": s.get("computer_name"),
+                    "operating_system": s.get("operating_system"),
+                    "antiviruses": s.get("antiviruses"),
+                    "external_ip": s.get("external_ip"),
+                }
+                cap = s.get("captured_credentials") or []
+                if isinstance(cap, list) and cap:
+                    for c in cap:
+                        if not isinstance(c, dict):
+                            continue
+                        pwd = (c.get("password") or "").strip()
+                        prov = dict(provenance_base)
+                        prov["captured_url"] = c.get("url")
+                        prov["captured_username"] = c.get("username")
+                        out.append(CredentialExposure(
+                            breach_source=f"HudsonRock:{family}",
+                            breach_date=date_s,
+                            observed_at_identifier=email,
+                            credential_kind="password" if pwd else "presence_only",
+                            credential_value=pwd,
+                            confidence=BreachConfidence.VERIFIED if pwd else BreachConfidence.LIKELY,
+                            provenance=prov,
+                        ))
+                else:
+                    # Community tier — stealer record without credential detail.
+                    out.append(CredentialExposure(
+                        breach_source=f"HudsonRock:{family}",
+                        breach_date=date_s,
+                        observed_at_identifier=email,
+                        credential_kind="presence_only",
+                        credential_value="",
+                        confidence=BreachConfidence.VERIFIED,
+                        provenance=provenance_base,
+                    ))
+
+            # ── Last-resort presence record ──
+            #
+            # Compromised flag set but neither top-level nor per-stealer
+            # detail extracted — record presence so D4 still surfaces
+            # the identity as exposed.
+            if not out:
                 out.append(CredentialExposure(
-                    breach_source=f"HudsonRock:{s.get('stealer_family', 'unknown')}",
-                    breach_date=s.get("date_compromised"),
+                    breach_source=f"HudsonRock:{stealer_family_top or 'Cavalier'}",
+                    breach_date=date_top,
                     observed_at_identifier=email,
                     credential_kind="presence_only",
                     credential_value="",
-                    confidence=BreachConfidence.VERIFIED,
-                    provenance={
-                        "computer_name": s.get("computer_name"),
-                        "operating_system": s.get("operating_system"),
-                        "antiviruses": s.get("antiviruses"),
-                    },
-                ))
-            if not data.get("stealers"):
-                out.append(CredentialExposure(
-                    breach_source="HudsonRock:Cavalier",
-                    breach_date=None,
-                    observed_at_identifier=email,
-                    credential_kind="presence_only",
-                    credential_value="",
-                    confidence=BreachConfidence.UNVERIFIED,
+                    confidence=BreachConfidence.LIKELY,
                     provenance={"message": data.get("message")},
                 ))
 

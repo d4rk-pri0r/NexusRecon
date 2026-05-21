@@ -89,15 +89,29 @@ def _make_cloud_intel(
     domain: str = "corp.com",
     is_federated: bool = True,
     mfa: bool = False,
+    with_adfs_probe: bool = False,
 ) -> dict:
+    """Build a cloud_intel entry shaped like ``azure_m365_recon`` output."""
     data: dict = {
         "user_realm": {
             "found": True,
             "is_federated": is_federated,
+            "federation_protocol": "WSTrust" if is_federated else None,
         },
     }
-    if is_federated:
-        data["user_realm"]["auth_url"] = f"https://sts.{domain}/adfs/ls"
+    if is_federated and with_adfs_probe:
+        # Mirror the actual ADFS probe output from azure_tool._detect_adfs.
+        data["adfs"] = {
+            "found": True,
+            "endpoints": [
+                {
+                    "subdomain": "sts",
+                    "url": f"https://sts.{domain}/adfs/ls/idpinitiatedsignon.aspx",
+                    "status": 200,
+                    "likely_adfs": True,
+                },
+            ],
+        }
     if mfa:
         data["mfa_enforced"] = True
     return {f"azure/{domain}": data}
@@ -144,16 +158,64 @@ class TestURLHelpers:
 
 class TestExtractAuthEndpoints:
     def test_federated_adfs_extracts_endpoint(self):
+        """Federated tenant w/o explicit URL: synthesised ADFS pattern."""
         cloud_intel = _make_cloud_intel("corp.com", is_federated=True)
         eps = extract_auth_endpoints(cloud_intel)
         assert any(ep.endpoint_type == "adfs" for ep in eps)
-        assert any("adfs" in ep.url for ep in eps)
+        assert any("corp.com" in ep.url for ep in eps)
+
+    def test_adfs_probe_endpoint_extracted(self):
+        """When azure_m365_recon's _detect_adfs found a real ADFS subdomain,
+        that URL must be promoted to an AuthEndpoint."""
+        cloud_intel = _make_cloud_intel("corp.com", is_federated=True,
+                                         with_adfs_probe=True)
+        eps = extract_auth_endpoints(cloud_intel)
+        adfs_eps = [ep for ep in eps if ep.endpoint_type == "adfs"]
+        assert adfs_eps
+        # The discovered URL from the probe should be present.
+        urls = [ep.url for ep in adfs_eps]
+        assert any("idpinitiatedsignon.aspx" in u for u in urls)
+
+    def test_adfs_probe_not_likely_adfs_skipped(self):
+        """A probe that responded but didn't look like ADFS shouldn't pollute the list."""
+        cloud_intel = {
+            "azure/corp.com": {
+                "user_realm": {"found": True, "is_federated": False},
+                "adfs": {
+                    "found": False,
+                    "endpoints": [
+                        {
+                            "subdomain": "login",
+                            "url": "https://login.corp.com/adfs/ls/x",
+                            "status": 500,            # error, not ADFS
+                            "likely_adfs": False,
+                        },
+                    ],
+                },
+            },
+        }
+        eps = extract_auth_endpoints(cloud_intel)
+        # Should not include the 500-status non-ADFS endpoint
+        adfs_eps = [ep for ep in eps if ep.endpoint_type == "adfs"]
+        assert not adfs_eps
+
+    def test_synthesised_adfs_fallback_for_federated_no_probe(self):
+        """Federated tenant without ADFS probe results gets synthesised endpoints."""
+        cloud_intel = _make_cloud_intel("corp.com", is_federated=True)
+        eps = extract_auth_endpoints(cloud_intel)
+        synthesised = [ep for ep in eps if "Synthesised" in ep.notes]
+        assert synthesised
+        # Should cover at least one common subdomain pattern.
+        urls = [ep.url for ep in synthesised]
+        assert any("sts.corp.com" in u for u in urls) or \
+               any("adfs.corp.com" in u for u in urls)
 
     def test_managed_o365_extracts_token_endpoint(self):
         cloud_intel = _make_cloud_intel("corp.com", is_federated=False)
         eps = extract_auth_endpoints(cloud_intel)
         assert any(ep.endpoint_type == "o365_managed" for ep in eps)
-        assert any("microsoftonline.com" in ep.url for ep in eps)
+        # Per-tenant endpoint, not /common
+        assert any("microsoftonline.com/corp.com" in ep.url for ep in eps)
 
     def test_mfa_flag_propagated(self):
         cloud_intel = _make_cloud_intel("corp.com", is_federated=True, mfa=True)
@@ -161,6 +223,41 @@ class TestExtractAuthEndpoints:
         adfs_eps = [ep for ep in eps if ep.endpoint_type == "adfs"]
         assert adfs_eps
         assert adfs_eps[0].mfa_expected is True
+
+    def test_realistic_azure_tool_output(self):
+        """End-to-end with a payload matching real azure_m365_recon output."""
+        cloud_intel = {
+            "azure/realcorp.com": {
+                "openid_config": {"found": True, "tenant_id": "abc-123"},
+                "user_realm": {
+                    "found": True,
+                    "namespace_type": "Federated",
+                    "is_federated": True,
+                    "federation_type": "Federated (ADFS)",
+                    "federation_brand_name": "RealCorp",
+                    "federation_protocol": "WSTrust",
+                    "attribution_confidence": 1.0,
+                },
+                "adfs": {
+                    "found": True,
+                    "endpoints": [
+                        {
+                            "subdomain": "adfs",
+                            "url": "https://adfs.realcorp.com/adfs/ls/idpinitiatedsignon.aspx",
+                            "status": 200,
+                            "likely_adfs": True,
+                        },
+                    ],
+                },
+                "attribution_confidence": 1.0,
+            },
+        }
+        eps = extract_auth_endpoints(cloud_intel)
+        # The probed ADFS URL must be present.
+        urls = [ep.url for ep in eps]
+        assert "https://adfs.realcorp.com/adfs/ls/idpinitiatedsignon.aspx" in urls
+        # The synthesised fallback should also fire for other subdomain patterns.
+        assert len([ep for ep in eps if ep.endpoint_type == "adfs"]) >= 1
 
     def test_owa_url_field_extracted(self):
         cloud_intel = {
