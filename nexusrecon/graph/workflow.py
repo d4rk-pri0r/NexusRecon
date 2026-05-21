@@ -20,6 +20,7 @@ from nexusrecon.graph.nodes import (
     phase5_light_active,
     phase6_active,
     phase7_5_harvest,
+    phase7_7_pretext_intelligence,
     phase7_vuln_pretext,
     phase8_attack_surface,
     phase9_reporting,
@@ -30,13 +31,15 @@ from nexusrecon.models.campaign import CampaignMode
 
 PHASE_ORDER: list[str] = [
     "phase1", "phase2", "phase2_5", "phase3", "phase4",
-    "phase5", "phase6", "phase7", "phase7_5", "phase8", "phase9",
+    "phase5", "phase6", "phase7", "phase7_5", "phase7_7",
+    "phase8", "phase9",
 ]
 
 # Minimum tier required to run each phase (F-009)
 PHASE_TIERS: dict[str, int] = {
     "phase1": 0, "phase2": 0, "phase2_5": 0, "phase3": 0, "phase4": 0,
-    "phase5": 2, "phase6": 3, "phase7": 0, "phase7_5": 0, "phase8": 0, "phase9": 0,
+    "phase5": 2, "phase6": 3, "phase7": 0, "phase7_5": 0, "phase7_7": 0,
+    "phase8": 0, "phase9": 0,
 }
 
 # Maximum tier allowed per campaign mode (F-009)
@@ -57,6 +60,7 @@ PHASE_NODES = {
     "phase6": phase6_active,
     "phase7": phase7_vuln_pretext,
     "phase7_5": phase7_5_harvest,
+    "phase7_7": phase7_7_pretext_intelligence,
     "phase8": phase8_attack_surface,
     "phase9": phase9_reporting,
 }

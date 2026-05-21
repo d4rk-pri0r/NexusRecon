@@ -162,6 +162,7 @@ def run(
     validate_creds: bool = typer.Option(False, "--validate-creds", help="Validate harvested credentials via read-only API calls (AWS sts, GitHub /user, etc.). Off by default."),
     generate_phishing: bool = typer.Option(False, "--generate-phishing", help="Generate per-target phishing email drafts. Authorized engagements only."),
     dispatch_mode: str = typer.Option("lite", "--dispatch-mode", help="Dynamic dispatch mode: lite (default), full, or off."),
+    pretext_targets: str | None = typer.Option(None, "--pretext-targets", help="Comma-separated identity IDs to score pretexts for (Phase 7.7). Default: all identities."),
 ) -> None:
     """
     Launch a NexusRecon reconnaissance campaign.
@@ -270,6 +271,10 @@ def run(
         "validate_credentials": validate_creds,
         "generate_phishing_drafts": generate_phishing,
         "dispatch_mode": dispatch_mode if dispatch_mode in ("lite", "full", "off") else "lite",
+        "pretext_targets": (
+            [t.strip() for t in pretext_targets.split(",") if t.strip()]
+            if pretext_targets else []
+        ),
         "llm_cost_usd": 0.0,
         "max_llm_cost_usd": getattr(scope_model.constraints, "max_llm_cost_usd", 10.0),
         "tool_cost_usd": 0.0,

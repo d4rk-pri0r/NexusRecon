@@ -54,11 +54,13 @@ class TestPhaseOrder:
     def test_phases_in_order(self):
         assert PHASE_ORDER == [
             "phase1", "phase2", "phase2_5", "phase3", "phase4",
-            "phase5", "phase6", "phase7", "phase7_5", "phase8", "phase9",
+            "phase5", "phase6", "phase7", "phase7_5", "phase7_7",
+            "phase8", "phase9",
         ]
 
     def test_all_phases_present(self):
-        assert len(PHASE_ORDER) == 11  # includes phase2_5 (D7)
+        # 12 phases: includes phase2_5 (D7) + phase7_7 (E11).
+        assert len(PHASE_ORDER) == 12
 
 
 class TestRouteToNextPhase:

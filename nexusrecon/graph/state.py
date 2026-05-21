@@ -56,6 +56,13 @@ class CampaignGraphState(TypedDict, total=False):
     # (E1 added the slot; E2-E8 tools populate it via the
     # ``RelationshipGraph.add_edge`` API; E11 commits it to state).
     relationship_graph: dict[str, Any]
+    # Pretext scoring output — ranked PretextCandidate dicts produced
+    # by Phase 7.7 (E11) from the relationship graph + recent activity.
+    pretext_scores: list[dict[str, Any]]
+    # Per-target spear-phishing dossiers (E11 deliverable). Always
+    # written when Phase 7.7 runs; the per-target ``draft`` field is
+    # populated only when ``generate_phishing_drafts`` is True.
+    spear_phishing_intelligence: dict[str, Any]
     # Dark-web / paste / ransomwatch intel (Move 1)
     dark_intel: dict[str, Any]
     # Breach/infostealer intel — populated by dynamic dispatch (breach category tools)
@@ -87,6 +94,10 @@ class CampaignGraphState(TypedDict, total=False):
     validate_credentials: bool
     generate_phishing_drafts: bool
     dispatch_mode: str  # "lite" | "full" | "off"
+    # Optional narrowing of which identities Phase 7.7 scores pretexts
+    # for. None / absent = all identities (default). Comma-separated
+    # via the --pretext-targets CLI flag, parsed into a list.
+    pretext_targets: list[str]
 
     # ── Report paths (set at end) ────────────────────────────────────
     report_paths: dict[str, str]

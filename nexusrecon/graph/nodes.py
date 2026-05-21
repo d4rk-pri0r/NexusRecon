@@ -1203,6 +1203,339 @@ async def phase7_5_harvest(state: CampaignGraphState) -> CampaignGraphState:
     return state
 
 
+# ── Phase 7.7: Pretext Intelligence (E11) ────────────────────────────────────
+
+
+# Per-target hard caps for Phase 7.7. Matches Phase 2.5's discipline of
+# bounding wall-clock by capping fan-out. A 50-employee org × 5 social
+# tools = 250 calls; capping at 20 identities keeps it to ~100.
+_PHASE_7_7_MAX_IDENTITIES = 20
+
+
+async def phase7_7_pretext_intelligence(
+    state: CampaignGraphState,
+) -> CampaignGraphState:
+    """Phase 7.7 — Pretext intelligence (relationship graph + scoring +
+    optional drafts).
+
+    Locked-in slot between Phase 7.5 (credential harvest) and Phase 8
+    (attack-surface scoring) so pretext quality feeds the attack-
+    surface ranking.
+
+    Steps:
+      1. Reload the :class:`IdentityGraph` from state (Phase 2.5 wrote
+         it as ``state["identity_graph"]``). Falls back to building
+         from ``email_intel`` when 2.5 didn't run.
+      2. Build a fresh :class:`RelationshipGraph` attached to the
+         graph and orchestrate the E2-E8 tools:
+         - Per identity (capped at 20): fire the social tools
+           (github / mastodon / bluesky / linkedin) when matching
+           handle identifiers exist; fire conference_speaker when a
+           real-name identifier exists.
+         - Per unique corp-email domain: fire business_partner +
+           news_intel once.
+         Each tool's edge-extraction adapter feeds the
+         RelationshipGraph; news_intel's RecentActivity records go
+         to the scoring engine.
+      3. Score pretext candidates via :func:`score_pretext_candidates`,
+         honoring the optional ``pretext_targets`` narrowing.
+      4. Build per-target dossiers (one dict per target with sender
+         summary + top pretexts + activity timeline). When
+         ``generate_phishing_drafts`` is set, invoke the
+         phishing_drafter agent to populate the per-target ``draft``
+         field.
+      5. Commit state slots: ``relationship_graph``, ``pretext_scores``,
+         ``spear_phishing_intelligence``.
+
+    Wall-clock budget: 20 identity caps + per-tool internal limits
+    keep total HTTP calls in the low hundreds. The OPSEC rate limiter
+    applies per registry.execute() so the throttle is whatever the
+    operator's stealth profile dictates.
+    """
+    log.info("Phase 7.7: Pretext intelligence")
+    state["current_phase"] = "phase7_7"
+
+    from nexusrecon.core.identity_graph import (
+        IdentifierType,
+        IdentityGraph,
+        build_from_email_intel,
+    )
+    from nexusrecon.core.pretext_scoring import (
+        group_candidates_by_target,
+        score_pretext_candidates,
+        summarise_candidates,
+    )
+    from nexusrecon.core.recent_activity import RecentActivity
+    from nexusrecon.core.relationship_graph import RelationshipGraph
+    from nexusrecon.tools.identity.bluesky_social_tool import (
+        extract_edges_from_bluesky,
+    )
+    from nexusrecon.tools.identity.github_social_tool import (
+        extract_edges_from_github_social,
+    )
+    from nexusrecon.tools.identity.linkedin_social_tool import (
+        extract_edges_from_linkedin,
+    )
+    from nexusrecon.tools.identity.mastodon_social_tool import (
+        extract_edges_from_mastodon,
+    )
+    from nexusrecon.tools.intel.business_partner_tool import (
+        extract_org_edges_from_business_partner,
+    )
+    from nexusrecon.tools.pretext.conference_speaker_tool import (
+        extract_edges_from_conference_speaker,
+    )
+
+    registry = get_registry()
+
+    # ── 1. Reload IdentityGraph ─────────────────────────────────────
+    identity_graph_data = state.get("identity_graph") or {}
+    if identity_graph_data.get("identities"):
+        identity_graph = IdentityGraph.from_dict(identity_graph_data)
+    else:
+        # Fallback: Phase 2.5 didn't run. Build from email_intel.
+        email_intel = state.get("email_intel") or {}
+        identity_graph = build_from_email_intel(email_intel)
+
+    identities = identity_graph.all()
+    if not identities:
+        log.info("Phase 7.7: no identities, skipping")
+        state["relationship_graph"] = RelationshipGraph().to_dict()
+        state["pretext_scores"] = []
+        state["spear_phishing_intelligence"] = {
+            "summary": summarise_candidates([]),
+            "targets": {},
+        }
+        state["completed_phases"] = list(state.get("completed_phases", [])) + ["phase7_7"]
+        return state
+
+    # Cap on identity-level fan-out.
+    crawl_identities = identities[:_PHASE_7_7_MAX_IDENTITIES]
+
+    relationship_graph = RelationshipGraph(identity_graph=identity_graph)
+    recent_activities: list[RecentActivity] = []
+    fan_sem = asyncio.Semaphore(3)  # bound concurrent tool calls
+
+    # ── 2a. Per-identity social-tool fan-out ────────────────────────
+
+    async def _fire_social_tools_for(identity: Any) -> None:
+        # GitHub
+        gh_handles = [
+            i for i in identity.identifiers
+            if i.identifier_type == IdentifierType.HANDLE
+            and (i.service or "").lower() == "github"
+        ]
+        if gh_handles:
+            async with fan_sem:
+                result = await registry.execute(
+                    "github_social", gh_handles[0].value, "handle",
+                )
+            if result.success and result.data:
+                for src_id, edge in extract_edges_from_github_social(
+                    result.data, identity.identity_id, identity_graph,
+                ):
+                    relationship_graph.add_edge(src_id, edge)
+
+        # Mastodon
+        mast_handles = [
+            i for i in identity.identifiers
+            if i.identifier_type == IdentifierType.HANDLE
+            and (i.service or "").lower() == "mastodon"
+        ]
+        if mast_handles:
+            async with fan_sem:
+                result = await registry.execute(
+                    "mastodon_social", mast_handles[0].value, "handle",
+                )
+            if result.success and result.data:
+                for src_id, edge in extract_edges_from_mastodon(
+                    result.data, identity.identity_id, identity_graph,
+                ):
+                    relationship_graph.add_edge(src_id, edge)
+
+        # Bluesky
+        bsky_handles = [
+            i for i in identity.identifiers
+            if i.identifier_type == IdentifierType.HANDLE
+            and (i.service or "").lower() == "bluesky"
+        ]
+        if bsky_handles:
+            async with fan_sem:
+                result = await registry.execute(
+                    "bluesky_social", bsky_handles[0].value, "handle",
+                )
+            if result.success and result.data:
+                for src_id, edge in extract_edges_from_bluesky(
+                    result.data, identity.identity_id, identity_graph,
+                ):
+                    relationship_graph.add_edge(src_id, edge)
+
+        # LinkedIn — only fires if auth is configured (is_available()
+        # returns False when both auth pairs are missing, so the
+        # registry returns the prereqs-not-met error and we skip).
+        li_handles = [
+            i for i in identity.identifiers
+            if i.identifier_type == IdentifierType.HANDLE
+            and (i.service or "").lower() == "linkedin"
+        ]
+        if li_handles:
+            async with fan_sem:
+                result = await registry.execute(
+                    "linkedin_social", li_handles[0].value, "handle",
+                )
+            if result.success and result.data:
+                for src_id, edge in extract_edges_from_linkedin(
+                    result.data, identity.identity_id, identity_graph,
+                ):
+                    relationship_graph.add_edge(src_id, edge)
+
+        # Conference speaker — by name
+        name_ident = identity.best_identifier_for(IdentifierType.REAL_NAME)
+        if name_ident and name_ident.value:
+            async with fan_sem:
+                result = await registry.execute(
+                    "conference_speaker", name_ident.value, "name",
+                )
+            if result.success and result.data:
+                for src_id, edge in extract_edges_from_conference_speaker(
+                    result.data, identity.identity_id, identity_graph,
+                ):
+                    relationship_graph.add_edge(src_id, edge)
+
+    await asyncio.gather(
+        *(_fire_social_tools_for(i) for i in crawl_identities),
+        return_exceptions=True,
+    )
+
+    # ── 2b. Per-corp-domain org tools (business_partner + news) ─────
+
+    corp_domains: set[str] = set()
+    for identity in crawl_identities:
+        corp_ident = identity.best_identifier_for(IdentifierType.CORP_EMAIL)
+        if corp_ident and "@" in corp_ident.value:
+            corp_domains.add(corp_ident.value.split("@", 1)[1].lower())
+
+    async def _fire_org_tools_for(domain: str) -> None:
+        # business_partner
+        async with fan_sem:
+            bp_result = await registry.execute(
+                "business_partner", domain, "domain",
+            )
+        if bp_result.success and bp_result.data:
+            # Org edges are between organisations. Use the domain-stub
+            # identity as the "target" of edges. We materialise a
+            # bare org identity here so the graph stays connected.
+            from nexusrecon.core.identity_graph import (
+                Identifier,
+                Identity,
+                derive_identity_id,
+            )
+            org_ident = Identifier(
+                value=domain,
+                identifier_type=IdentifierType.DOMAIN,
+                source="business_partner",
+                confidence=0.9,
+            )
+            org_id = derive_identity_id([org_ident])
+            if org_id not in identity_graph:
+                identity_graph.add_identity(Identity(
+                    identity_id=org_id,
+                    primary_label=domain,
+                    identifiers=[org_ident],
+                    metadata={"entity_type": "org"},
+                ))
+            for src_id, edge in extract_org_edges_from_business_partner(
+                bp_result.data, org_id, identity_graph,
+            ):
+                relationship_graph.add_edge(src_id, edge)
+
+        # news_intel — collect RecentActivity records
+        async with fan_sem:
+            news_result = await registry.execute(
+                "news_intel", domain, "domain",
+            )
+        if news_result.success and news_result.data:
+            for rec_dict in (news_result.data.get("recent_activity_records") or []):
+                try:
+                    recent_activities.append(RecentActivity.from_dict(rec_dict))
+                except (KeyError, TypeError) as exc:
+                    log.debug(
+                        "Phase 7.7: malformed recent_activity record skipped",
+                        error=str(exc),
+                    )
+
+    await asyncio.gather(
+        *(_fire_org_tools_for(d) for d in corp_domains),
+        return_exceptions=True,
+    )
+
+    # ── 3. Score pretext candidates ─────────────────────────────────
+
+    pretext_targets = state.get("pretext_targets") or None
+    candidates = score_pretext_candidates(
+        identity_graph=identity_graph,
+        relationship_graph=relationship_graph,
+        recent_activities=recent_activities,
+        target_ids=pretext_targets,
+    )
+
+    # ── 4. Per-target dossiers + optional drafter agent ─────────────
+
+    grouped = group_candidates_by_target(candidates)
+    target_dossiers: dict[str, Any] = {}
+    for target_id, target_candidates in grouped.items():
+        target_identity = identity_graph.get(target_id)
+        target_dossiers[target_id] = {
+            "target_identity_id": target_id,
+            "target_label": (
+                target_identity.primary_label if target_identity else target_id
+            ),
+            "top_candidates": [c.to_dict() for c in target_candidates],
+            "draft": None,
+        }
+
+    # Drafter is gated on --generate-phishing.
+    if state.get("generate_phishing_drafts") and target_dossiers:
+        executor = _get_executor()
+        for target_id, dossier in target_dossiers.items():
+            try:
+                agent_result = await executor.run_agent(
+                    "phishing_drafter",
+                    task_data={
+                        "target_identity_id": target_id,
+                        "target_label": dossier["target_label"],
+                        "top_pretext_candidates": dossier["top_candidates"][:3],
+                    },
+                    task_prompt=(
+                        "Produce ONE spear-phishing draft for the target "
+                        "identity, following the JSON schema in your "
+                        "backstory. Use only the supplied OSINT signals; "
+                        "do not invent prior interactions. If the "
+                        "top pretext candidate has combined_score < 0.15, "
+                        "return the no-draft fallback shape."
+                    ),
+                    state=state,
+                )
+                dossier["draft"] = agent_result.get("output", "")
+            except Exception as exc:
+                log.warning(
+                    "Phase 7.7 drafter failed",
+                    target_id=target_id, error=str(exc),
+                )
+
+    # ── 5. Commit state ─────────────────────────────────────────────
+
+    state["identity_graph"] = identity_graph.to_dict(redact_credentials=True)
+    state["relationship_graph"] = relationship_graph.to_dict()
+    state["pretext_scores"] = [c.to_dict() for c in candidates]
+    state["spear_phishing_intelligence"] = {
+        "summary": summarise_candidates(candidates),
+        "targets": target_dossiers,
+    }
+    state["completed_phases"] = list(state.get("completed_phases", [])) + ["phase7_7"]
+    return state
+
+
 # ── Phase 8: Attack Surface Prioritization ────────────────────────────────────
 
 async def phase8_attack_surface(state: CampaignGraphState) -> CampaignGraphState:

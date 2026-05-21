@@ -66,6 +66,10 @@ class ReportEngine:
         self.report_paths["harvested_credentials"] = self._harvested_credentials(state)
         # D7: credential exposure paths — personal pivot + punch list
         self.report_paths["credential_exposure_paths"] = self._credential_exposure_paths(state)
+        # E11: spear-phishing intelligence — per-target pretext dossiers
+        md_path, json_path = self._spear_phishing_intelligence(state)
+        self.report_paths["spear_phishing_intelligence"] = md_path
+        self.report_paths["pretext_candidates_json"] = json_path
         # V3 Move 2: master_report runs LAST so it can link to every other report
         self.report_paths["master_report"] = self._master_report(state)
 
@@ -1684,6 +1688,26 @@ class ReportEngine:
         )
 
         return str(path)
+
+    # ── Spear-Phishing Intelligence (Phase E11) ────────────────────────────────
+
+    def _spear_phishing_intelligence(
+        self, state: dict[str, Any],
+    ) -> tuple[str, str]:
+        """Phase E11 deliverable: per-target pretext dossiers + raw
+        candidate JSON. Always emits both files (empty content when
+        no candidates surfaced) so the path is stable for the master
+        report's links."""
+        from nexusrecon.reports.spear_phishing_intelligence import (
+            build_spear_phishing_intelligence_md,
+        )
+
+        return build_spear_phishing_intelligence_md(
+            campaign_id=self.campaign_id,
+            engagement_id=self.engagement_id,
+            state=state,
+            output_dir=self.output_dir,
+        )
 
     # ── Master Report (V3 Move 2) ──────────────────────────────────────────────
 
