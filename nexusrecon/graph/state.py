@@ -52,6 +52,10 @@ class CampaignGraphState(TypedDict, total=False):
     vuln_intel: dict[str, Any]
     # Pretext intelligence
     pretext_intel: dict[str, Any]
+    # Relationship graph — human-to-human edges populated by Phase E
+    # (E1 added the slot; E2-E8 tools populate it via the
+    # ``RelationshipGraph.add_edge`` API; E11 commits it to state).
+    relationship_graph: dict[str, Any]
     # Dark-web / paste / ransomwatch intel (Move 1)
     dark_intel: dict[str, Any]
     # Breach/infostealer intel — populated by dynamic dispatch (breach category tools)
