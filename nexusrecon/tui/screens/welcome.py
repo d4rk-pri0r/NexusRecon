@@ -279,7 +279,7 @@ class WelcomeScreen(Screen):
                 with Center():
                     yield Static(
                         "[dim]↑/↓ navigate · Enter select · "
-                        "n/r/p/c/t quick · ? help · q quit[/dim]",
+                        "n/r/p/c/t quick · Ctrl+P palette · ? help · q quit[/dim]",
                         id="welcome-hint",
                     )
                 with Center():
@@ -398,7 +398,11 @@ class WelcomeScreen(Screen):
         await self.app.push_screen(ConfigScreen())
 
     async def action_menu_tools(self) -> None:
-        from nexusrecon.tui.screens.config import ToolsScreen
+        # TUI-2: the new three-pane tools browser. The legacy flat
+        # ToolsScreen in screens/config.py still exists for any
+        # imports we missed, but the menu points operators at the
+        # new experience.
+        from nexusrecon.tui.screens.tools import ToolsScreen
         await self.app.push_screen(ToolsScreen())
 
     def action_quit_app(self) -> None:
