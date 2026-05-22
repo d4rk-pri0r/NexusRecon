@@ -313,6 +313,92 @@ async def test_phase_7_7_drafter_gated_on_flag():
         assert dossier.get("draft") is None
 
 
+@pytest.mark.asyncio
+async def test_phase_7_7_drafter_invoked_when_flag_set():
+    """Positive gate: ``generate_phishing_drafts=True`` AND at least
+    one target → drafter runs once per target and its output lands
+    in that target's dossier under the ``draft`` field.
+
+    Pairs with ``test_phase_7_7_drafter_gated_on_flag`` (the negative
+    gate). Together they pin the binary contract the
+    ``--generate-phishing`` CLI flag makes to operators."""
+    alice = _identity("alice", with_github=True)
+    bob = _identity("bob", with_github=True)
+    state = {
+        "identity_graph": _seed_identity_graph_state([alice, bob]),
+        "generate_phishing_drafts": True,
+        "completed_phases": [],
+    }
+
+    async def _execute(name, target, target_type=None, **kw):
+        # Wire enough signal that the scoring engine produces at
+        # least one candidate per target: alice follows bob on
+        # github (co-interaction) + a recent news article ties to
+        # the corp domain so the timing axis is non-zero.
+        if name == "github_social" and target == "alice-gh":
+            return MagicMock(success=True, data={
+                "username": "alice-gh",
+                "followers": [{"login": "bob-gh", "id": 2}],
+                "following": [{"login": "bob-gh", "id": 2}],
+                "repositories": [],
+            })
+        if name == "github_social" and target == "bob-gh":
+            return MagicMock(success=True, data={
+                "username": "bob-gh",
+                "followers": [{"login": "alice-gh", "id": 1}],
+                "following": [{"login": "alice-gh", "id": 1}],
+                "repositories": [],
+            })
+        if name == "news_intel":
+            return MagicMock(success=True, data={
+                "target": "acme.com", "total_articles": 1,
+                "sources_used": ["rss"], "articles": [],
+                "recent_activity_records": [{
+                    "target": "acme.com", "kind": "news_article",
+                    "source": "rss", "title": "Acme announces X",
+                    "url": "https://example.com/n",
+                    "summary": "Acme announced X today.",
+                    "published_at": "2024-06-25T00:00:00+00:00",
+                    "raw": {},
+                }],
+                "time_window_days": 90,
+            })
+        return MagicMock(success=True, data={"username": target,
+                                              "followers": [], "following": [],
+                                              "repositories": []})
+
+    mock_registry = MagicMock()
+    mock_registry.execute = _execute
+
+    canned_draft = '{"target_identity_id":"x","subject":"hello"}'
+    mock_executor = MagicMock()
+    mock_executor.run_agent = AsyncMock(return_value={
+        "output": canned_draft, "agent": "phishing_drafter",
+        "step_count": 1, "findings": [],
+    })
+
+    with patch("nexusrecon.graph.nodes.get_registry", return_value=mock_registry), \
+         patch("nexusrecon.graph.nodes._get_executor", return_value=mock_executor):
+        out = await phase7_7_pretext_intelligence(state)
+
+    targets = out["spear_phishing_intelligence"]["targets"]
+    # At least one target should have been scored — both Alice and
+    # Bob exchange interactions, so at least one candidate per
+    # ordered pair should be produced.
+    assert targets, "expected at least one target dossier"
+    # The drafter was invoked at least once and the canned output
+    # landed in every dossier that got a draft.
+    assert mock_executor.run_agent.call_count >= 1
+    # Every call MUST be addressed to the drafter agent (not some
+    # other agent the phase might invoke later).
+    for call in mock_executor.run_agent.await_args_list:
+        args, kwargs = call
+        assert (args[0] if args else kwargs.get("agent_name")) == "phishing_drafter"
+    drafted = [d for d in targets.values() if d.get("draft")]
+    assert drafted, "expected at least one drafted target"
+    assert all(d["draft"] == canned_draft for d in drafted)
+
+
 # ──────────────────────────────────────────────────────────────────────
 # Report builder
 # ──────────────────────────────────────────────────────────────────────
