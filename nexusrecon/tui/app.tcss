@@ -771,6 +771,17 @@ CommandPaletteScreen {
     height: auto;
 }
 
+.dashboard-stat-hint {
+    color: $nx-text-dim;
+    margin-top: 1;
+    height: auto;
+}
+
+#dashboard-next-step {
+    color: $foreground;
+    height: auto;
+}
+
 #dashboard-tools {
     color: $nx-text-muted;
     height: auto;

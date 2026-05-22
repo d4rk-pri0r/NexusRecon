@@ -218,3 +218,18 @@ def find_var(key: str) -> ConfigVar | None:
             if v.key == key:
                 return v
     return None
+
+
+def find_category_for_var(key: str) -> tuple[ConfigCategory, ConfigVar] | None:
+    """Return the ``(category, var)`` pair that owns ``key``, or
+    ``None`` when the key isn't in the schema.
+
+    Used by the Tools browser's deep-link ── pressing ``c`` on a
+    tool jumps the operator straight to that env var's row in the
+    Config screen, not back to the top-level category list.
+    """
+    for cat in CATEGORIES:
+        for v in cat.vars:
+            if v.key == key:
+                return cat, v
+    return None

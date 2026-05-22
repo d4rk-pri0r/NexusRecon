@@ -295,12 +295,41 @@ class ToolsScreen(Screen):
         title_widget.update(f"[bold $primary]{name}[/bold $primary]")
         meta_widget.update("\n".join(meta_lines))
         desc_widget.update((tool.get("description") or "").strip())
-        # Action footer surfaces the bindings relevant to the
-        # highlighted tool. We keep this static for now; the per-
-        # tool live "test connection" action lands in a follow-up.
-        actions_widget.update(
-            "[dim]c[/dim] config keys   "
-            "[dim]Esc[/dim] back",
+        # Action footer is concrete: when the tool needs a key the
+        # operator can set, we name it ── "Press c to set
+        # GITHUB_TOKEN". When there's no setable env var (binary-
+        # only tool, or no missing key) the hint stays generic.
+        action_hint = self._action_hint_for(tool)
+        actions_widget.update(action_hint)
+
+    def _action_hint_for(self, tool: dict[str, Any]) -> str:
+        """Build the right-pane action hint string for ``tool``.
+
+        Mentions the first edit-able env var by name so pressing
+        ``c`` produces no surprise. Binary-only ``requires`` rows
+        like ``bin:gowitness`` are skipped because the config
+        screen can't edit those.
+        """
+        try:
+            from nexusrecon.tui.config_schema import find_category_for_var
+        except Exception:
+            find_category_for_var = lambda _k: None  # noqa: E731
+        requires = tool.get("requires", "") or ""
+        target_key: str | None = None
+        for raw in requires.split(","):
+            cand = raw.strip()
+            if not cand or cand.startswith("bin:"):
+                continue
+            if find_category_for_var(cand) is not None:
+                target_key = cand
+                break
+        if target_key:
+            return (
+                f"[bold]c[/bold] set [bold $primary]{target_key}[/bold $primary]   "
+                "[dim]Esc[/dim] back"
+            )
+        return (
+            "[dim]c config screen   Esc back[/dim]"
         )
 
     # ── Event handlers ──────────────────────────────────────────────
@@ -361,14 +390,61 @@ class ToolsScreen(Screen):
             pass
 
     def action_jump_to_config(self) -> None:
-        """Open the Config screen. The selected tool's first
-        required key is currently surfaced in the detail pane;
-        deep-link selection lands in a follow-up TUI pass."""
+        """Deep-link into the Config screen for the highlighted
+        tool's first required env var.
+
+        Pre-`c` behaviour was to push a blank ConfigScreen and let
+        the operator navigate to the relevant key themselves. That's
+        backwards — the only reason to press `c` from the tools
+        browser is *because* you want to set the missing key for the
+        current tool. The screen now pre-selects the category and
+        opens the edit modal directly. When the tool requires no
+        key at all (binary-only tools, etc.) we just push the
+        screen at its default.
+        """
         try:
+            from nexusrecon.tui.config_schema import find_category_for_var
             from nexusrecon.tui.screens.config import ConfigScreen
-            self.app.push_screen(ConfigScreen())
+            target_var: str | None = None
+            target_cat: str | None = None
+            # Resolve the highlighted tool's first required env var.
+            if (
+                self._visible
+                and 0 <= self._current_idx() < len(self._visible)
+            ):
+                tool = self._visible[self._current_idx()]
+                requires = tool.get("requires", "") or ""
+                # ``requires`` is a comma-separated string like
+                # "GITHUB_TOKEN, bin:gowitness". Filter out
+                # ``bin:`` entries — those aren't env vars; the
+                # config screen can't edit a binary install.
+                for raw in requires.split(","):
+                    cand = raw.strip()
+                    if not cand or cand.startswith("bin:"):
+                        continue
+                    pair = find_category_for_var(cand)
+                    if pair is not None:
+                        target_cat = pair[0].id
+                        target_var = pair[1].key
+                        break
+            self.app.push_screen(ConfigScreen(
+                initial_category_id=target_cat,
+                initial_key=target_var,
+            ))
         except Exception:
-            pass
+            try:
+                from nexusrecon.tui.screens.config import ConfigScreen
+                self.app.push_screen(ConfigScreen())
+            except Exception:
+                pass
+
+    def _current_idx(self) -> int:
+        """Index of the highlighted tool in ``self._visible`` (-1 if
+        the centre list has no selection)."""
+        try:
+            return self.query_one("#tools-list", ListView).index or 0
+        except Exception:
+            return -1
 
     def action_back(self) -> None:
         try:

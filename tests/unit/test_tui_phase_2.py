@@ -456,6 +456,76 @@ class TestPilotIntegration:
 # ──────────────────────────────────────────────────────────────────────
 
 
+class TestConfigDeepLink:
+    """Regression for the Tools → Config navigation bug.
+
+    Pressing `c` in the tools browser used to dump the operator
+    into the generic ConfigScreen — they then had to navigate to
+    the right category AND the right row themselves. The fix:
+    ConfigScreen now accepts ``initial_category_id`` +
+    ``initial_key`` and, on mount, pre-selects that category +
+    immediately opens the edit modal on the targeted row.
+    """
+
+    def test_find_category_for_var_locates_known_key(self):
+        from nexusrecon.tui.config_schema import find_category_for_var
+        pair = find_category_for_var("GITHUB_TOKEN")
+        assert pair is not None
+        cat, var = pair
+        # GITHUB_TOKEN lives in the "code" category.
+        assert var.key == "GITHUB_TOKEN"
+        assert cat.id == "code"
+
+    def test_find_category_for_var_returns_none_for_unknown(self):
+        from nexusrecon.tui.config_schema import find_category_for_var
+        assert find_category_for_var("NOT_A_REAL_KEY_xyz") is None
+
+    def test_config_screen_accepts_deep_link_args(self):
+        """ConfigScreen.__init__ must accept the new kwargs without
+        crashing. Defensive check against a future refactor that
+        removes them."""
+        from nexusrecon.tui.screens.config import ConfigScreen
+        screen = ConfigScreen(
+            initial_category_id="code",
+            initial_key="GITHUB_TOKEN",
+        )
+        # The screen stashes the requested key + finds the right
+        # category index.
+        assert screen._initial_key == "GITHUB_TOKEN"
+        assert screen._cats[screen._current_cat_idx].id == "code"
+
+    def test_config_screen_deep_link_opens_edit_modal(self):
+        """Full integration: pushing ConfigScreen with deep-link
+        kwargs results in the EditKeyModal being on top of the
+        stack (i.e. the operator lands directly on the edit
+        surface for the targeted key, not on the category list).
+        """
+        import asyncio as _asyncio
+
+        from nexusrecon.tui.app import NexusReconApp
+        from nexusrecon.tui.screens.config import ConfigScreen
+
+        async def _drive():
+            app = NexusReconApp()
+            async with app.run_test(headless=True) as pilot:
+                await pilot.pause(0.5)
+                await app.push_screen(ConfigScreen(
+                    initial_category_id="code",
+                    initial_key="GITHUB_TOKEN",
+                ))
+                await pilot.pause(0.5)
+                # Modal pushed automatically — its class name is
+                # EditKeyModal in nexusrecon.tui.screens.edit_key.
+                assert type(app.screen).__name__ == "EditKeyModal", (
+                    f"expected deep-link to open EditKeyModal; got "
+                    f"{type(app.screen).__name__}"
+                )
+                app.exit()
+                await pilot.pause(0.1)
+
+        _asyncio.run(_drive())
+
+
 class TestToolsScreenHelpers:
     def test_load_tools_returns_list(self):
         from nexusrecon.tui.screens.tools import _load_tools

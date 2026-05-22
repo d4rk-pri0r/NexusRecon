@@ -267,6 +267,46 @@ class TestDashboardPilot:
 
         asyncio.run(_drive())
 
+    def test_dashboard_has_no_duplicate_button_menu(self):
+        """Regression for the duplicate-nav bug: dashboard had both
+        the Sidebar AND a button menu listing the same destinations.
+        Operator called it out. The button menu (#dashboard-menu /
+        btn-new/btn-resume/btn-past/btn-tools/btn-config) is gone;
+        the Sidebar carries the navigation surface."""
+        from textual.widgets import Button
+
+        from nexusrecon.tui.app import NexusReconApp
+
+        async def _drive():
+            app = NexusReconApp()
+            async with app.run_test(headless=True) as pilot:
+                await pilot.pause(0.8)
+                # No #dashboard-menu container in the tree.
+                from textual.css.query import NoMatches
+                try:
+                    app.screen.query_one("#dashboard-menu")
+                    raise AssertionError(
+                        "duplicate nav: #dashboard-menu should not exist"
+                    )
+                except NoMatches:
+                    pass
+                # And none of the per-action buttons remain.
+                for btn_id in (
+                    "btn-new", "btn-resume", "btn-past",
+                    "btn-tools", "btn-config",
+                ):
+                    matches = [
+                        w for w in app.screen.query(Button)
+                        if w.id == btn_id
+                    ]
+                    assert not matches, (
+                        f"duplicate nav button {btn_id!r} still on dashboard"
+                    )
+                app.exit()
+                await pilot.pause(0.1)
+
+        asyncio.run(_drive())
+
     def test_sidebar_toggle_via_bracket_key(self):
         from nexusrecon.tui.app import NexusReconApp
         from nexusrecon.tui.widgets import Sidebar

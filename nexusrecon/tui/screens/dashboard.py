@@ -18,7 +18,6 @@ Spec ref: ``docs/TUI_DESIGN_SPEC.md§6.1``.
 """
 from __future__ import annotations
 
-import asyncio
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -26,7 +25,7 @@ from textual import work
 from textual.app import ComposeResult
 from textual.containers import Center, Container, Horizontal, Vertical
 from textual.screen import Screen
-from textual.widgets import Button, DataTable, Footer, Header, Static
+from textual.widgets import DataTable, Footer, Header, Static
 
 from nexusrecon.tui.banner import (
     render_attribution,
@@ -118,6 +117,68 @@ def _human_when(when: datetime) -> str:
         return when.strftime("%Y-%m-%d")
     except Exception:
         return "earlier"
+
+
+def _next_step_hint() -> str:
+    """Single context-aware "what should I do next?" hint.
+
+    Replaces the previous duplicate Actions button menu with a
+    single concrete next action, chosen from app state:
+
+      - No LLM key + no campaigns  → "Configure first" (c)
+      - No campaigns                → "Run your first campaign" (n)
+      - Campaigns + in-progress one → "Resume <id>"            (r)
+      - Otherwise                   → "Run another campaign"   (n)
+
+    The sidebar still carries the full navigation surface; this is
+    a personal-trainer-style "you, specifically, should press this
+    next" prompt.
+    """
+    try:
+        from pathlib import Path as _Path
+
+        from nexusrecon.core.config import get_config
+        cfg = get_config()
+        # Check for any configured LLM key first.
+        has_key = any(
+            cfg.get_secret(k)
+            for k in ("anthropic_api_key", "openai_api_key")
+        )
+        out_dir = _Path(cfg.output_dir)
+        campaigns = (
+            list(out_dir.rglob("state.json")) if out_dir.exists() else []
+        )
+        if not has_key and not campaigns:
+            return (
+                "👋  Press [bold]c[/bold] to configure your LLM "
+                "provider key — required before your first campaign."
+            )
+        if not campaigns:
+            return (
+                "🎯  Press [bold]n[/bold] to launch your first "
+                "campaign."
+            )
+        # Look for an unfinished campaign (one missing phase9 in
+        # completed_phases) and surface its resume shortcut.
+        try:
+            import json as _json
+            campaigns.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+            latest = campaigns[0]
+            data = _json.loads(latest.read_text(encoding="utf-8"))
+            completed = data.get("completed_phases") or []
+            if "phase9" not in completed:
+                return (
+                    "🔄  Last campaign is partial — press "
+                    "[bold]r[/bold] to resume."
+                )
+        except Exception:
+            pass
+        return (
+            "🎯  Press [bold]n[/bold] to start another campaign, "
+            "or [bold]p[/bold] to review past runs."
+        )
+    except Exception:
+        return ""
 
 
 def _tool_breakdown() -> str:
@@ -240,30 +301,39 @@ class DashboardScreen(Screen):
                         show_cursor=False,
                     )
                     # Quick stats panel.
+                    #
+                    # The Sidebar on the left already provides primary
+                    # navigation (Dashboard / New / Past / Tools /
+                    # Config / Help) with letter shortcuts. We DON'T
+                    # duplicate it here with a button menu — that was
+                    # the original layout and operators called it
+                    # out as redundant. Instead this bottom row
+                    # surfaces information you can't get from the
+                    # sidebar: tool health + a "next step" hint.
                     with Horizontal(id="dashboard-bottom"):
                         with Vertical(classes="dashboard-stat-card"):
                             yield Static(
-                                "[bold $primary]Quick stats[/bold $primary]",
+                                "[bold $primary]Tool health[/bold $primary]",
                                 classes="dashboard-card-title",
                             )
                             yield Static(
                                 _tool_breakdown(),
                                 id="dashboard-tools",
                             )
+                            yield Static(
+                                "[dim]Press [bold]t[/bold] to browse + "
+                                "configure tools.[/dim]",
+                                classes="dashboard-stat-hint",
+                            )
                         with Vertical(classes="dashboard-stat-card"):
                             yield Static(
-                                "[bold $primary]Actions[/bold $primary]",
+                                "[bold $primary]What's next[/bold $primary]",
                                 classes="dashboard-card-title",
                             )
-                            with Vertical(id="dashboard-menu"):
-                                yield Button("🎯  New campaign  (n)",
-                                              id="btn-new", classes="-primary")
-                                yield Button("🔄  Resume last  (r)",
-                                              id="btn-resume")
-                                yield Button("📁  Browse past  (p)",
-                                              id="btn-past")
-                                yield Button("🛠   Tools  (t)", id="btn-tools")
-                                yield Button("🔧  Config  (c)", id="btn-config")
+                            yield Static(
+                                _next_step_hint(),
+                                id="dashboard-next-step",
+                            )
                     if _should_show_onboarding():
                         with Center():
                             yield Static(
@@ -283,8 +353,12 @@ class DashboardScreen(Screen):
 
     def on_mount(self) -> None:
         self._populate_recents()
+        # The dashboard is keyboard-first. We don't focus the (now-
+        # removed) primary button; we focus the recent-campaigns
+        # table so arrow-key scroll lands somewhere useful. The
+        # letter shortcuts (n/r/p/c/t) work regardless of focus.
         try:
-            self.query_one("#btn-new", Button).focus()
+            self.query_one("#dashboard-recents", DataTable).focus()
         except Exception:
             pass
         self._warm_imports()
@@ -298,6 +372,12 @@ class DashboardScreen(Screen):
     def _refresh(self) -> None:
         try:
             self.query_one("#dashboard-tools", Static).update(_tool_breakdown())
+        except Exception:
+            pass
+        try:
+            self.query_one("#dashboard-next-step", Static).update(
+                _next_step_hint(),
+            )
         except Exception:
             pass
         self._populate_recents()
@@ -349,21 +429,6 @@ class DashboardScreen(Screen):
             pass
 
     # ── Button + key actions ────────────────────────────────────────
-
-    async def on_button_pressed(self, event: Button.Pressed) -> None:
-        mapping = {
-            "btn-new": self.action_menu_new,
-            "btn-resume": self.action_menu_resume,
-            "btn-past": self.action_menu_past,
-            "btn-config": self.action_menu_config,
-            "btn-tools": self.action_menu_tools,
-        }
-        handler = mapping.get(event.button.id or "")
-        if handler is None:
-            return
-        result = handler()
-        if asyncio.iscoroutine(result):
-            await result
 
     async def action_menu_new(self) -> None:
         from nexusrecon.tui.screens.wizard import WizardScreen
