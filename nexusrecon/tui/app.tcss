@@ -459,6 +459,77 @@ EditKeyModal {
     margin: 0 1;
 }
 
+/* Reports browser (TUI-5 — three-pane in-TUI Markdown preview) */
+
+#reports-panes {
+    width: 100%;
+    height: 1fr;
+    padding: 0 1;
+}
+
+#reports-list-pane {
+    width: 32;
+    border: round $secondary;
+    padding: 1;
+    margin: 1 1 1 0;
+}
+
+#reports-list-title {
+    color: $primary;
+    text-style: bold;
+    margin-bottom: 1;
+    height: auto;
+}
+
+#reports-list {
+    height: 1fr;
+}
+
+#reports-list > ListItem {
+    padding: 0 1;
+}
+
+#reports-list > ListItem.--highlight {
+    background: $primary 30%;
+}
+
+#reports-preview-pane {
+    width: 2fr;
+    border: round $primary;
+    padding: 0 1;
+    margin: 1 1 1 0;
+}
+
+#reports-preview-title {
+    color: $primary;
+    text-style: bold;
+    margin: 0 1 1 1;
+    height: auto;
+}
+
+#reports-preview {
+    height: 1fr;
+}
+
+#reports-actions-pane {
+    width: 32;
+    border: round $nx-border-muted;
+    padding: 1;
+    margin: 1 0 1 0;
+}
+
+#reports-actions-title {
+    color: $primary;
+    text-style: bold;
+    margin-bottom: 1;
+    height: auto;
+}
+
+#reports-actions-body {
+    color: $foreground;
+    height: auto;
+}
+
 /* Results screen */
 
 #results-summary {

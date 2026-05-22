@@ -39,6 +39,10 @@ class ResultsScreen(Screen):
     """Summary + report shortcuts after a campaign completes."""
 
     BINDINGS = [
+        # TUI-5: in-TUI markdown report browser. Press `b` for the
+        # rich three-pane preview; the per-letter shortcuts below
+        # remain for muscle memory + power users.
+        ("b", "browse_reports", "Browse"),
         ("m", "open_master", "Master Report"),
         ("t", "open_threads", "Top Threads"),
         ("e", "open_summary", "Exec Summary"),
@@ -154,6 +158,18 @@ class ResultsScreen(Screen):
     def action_open_dir(self) -> None:
         if self.reports_dir.exists():
             _open_path(str(self.reports_dir))
+
+    async def action_browse_reports(self) -> None:
+        """Open the TUI-5 in-TUI Markdown report browser."""
+        try:
+            from nexusrecon.tui.screens.reports_browser import (
+                ReportsBrowserScreen,
+            )
+            await self.app.push_screen(
+                ReportsBrowserScreen(str(self.campaign_dir)),
+            )
+        except Exception:
+            pass
 
     def action_back(self) -> None:
         self.app.pop_screen()
