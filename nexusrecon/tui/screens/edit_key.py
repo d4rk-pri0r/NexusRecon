@@ -201,12 +201,33 @@ class EditKeyModal(ModalScreen[str | None]):
 
     @staticmethod
     def _hot_reload_config() -> None:
-        """Invalidate the cached NexusConfig singleton so the next
-        get_config() call re-reads .env. Without this, the running TUI
-        process keeps the stale value until restart."""
+        """Invalidate the cached NexusConfig singleton AND rebind
+        every registered tool's ``self.config`` to the fresh
+        instance so ``tool.is_available()`` immediately reflects
+        the edit.
+
+        Tools cache their config reference at construction
+        (``self.config = get_config()``), so a bare
+        ``cache_clear()`` is invisible to existing tool instances
+        ── ``is_available()`` keeps reading the stale snapshot
+        until the process restarts. That made the dashboard's
+        Tool Health card and the Tools screen's status markers
+        lag the operator's edits. Walking the registry here is
+        cheap (~100 tool instances) and gives operators
+        immediate visual feedback that the key took effect.
+        """
         try:
             from nexusrecon.core.config import get_config
             get_config.cache_clear()
+            new_cfg = get_config()
+            from nexusrecon.tools.registry import get_registry
+            for tool in get_registry()._tools.values():
+                try:
+                    tool.config = new_cfg
+                except Exception:
+                    # Defensive: a single tool barfing must not
+                    # leave the others stranded with stale config.
+                    pass
         except Exception:
             pass
 

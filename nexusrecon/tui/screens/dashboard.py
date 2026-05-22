@@ -206,6 +206,71 @@ def _tool_breakdown() -> str:
         return ""
 
 
+def _top_key_gaps(limit: int = 3) -> list[tuple[str, int]]:
+    """Rank missing env vars by how many tools each would unlock.
+
+    For every tool that's failing ``is_available()`` because it
+    lacks a required key, accumulate that key's "impact" — the
+    number of tools that would flip to active if the key were
+    set. Return the top ``limit`` entries in descending order.
+
+    Ties broken alphabetically so the order is stable for tests
+    and for operators scanning the list. Binary requirements
+    (``binary_required``) are deliberately excluded: those are
+    installed via shell, not configurable from the TUI; surfacing
+    them here would be a dead end.
+
+    Returns:
+        list of ``(env_var_name_UPPER, tool_count)`` tuples.
+    """
+    try:
+        from nexusrecon.core.config import get_config
+        from nexusrecon.tools.registry import get_registry
+        registry = get_registry()
+        cfg = get_config()
+        # Count each missing key once per tool that needs it.
+        impact: dict[str, int] = {}
+        for tool in registry._tools.values():
+            if getattr(tool, "stubbed", False):
+                continue
+            if tool.is_available():
+                continue
+            # The tool isn't available — figure out which of its
+            # required keys are actually unset.
+            for key in (tool.requires_keys or []):
+                if not cfg.get_secret(key):
+                    impact[key.upper()] = impact.get(key.upper(), 0) + 1
+        # Sort by impact descending, then key ascending for
+        # stable tie-breaking.
+        ranked = sorted(
+            impact.items(),
+            key=lambda kv: (-kv[1], kv[0]),
+        )
+        return ranked[:max(0, limit)]
+    except Exception:
+        return []
+
+
+def _render_tool_gaps(limit: int = 3) -> str:
+    """Format the top key gaps for the dashboard's Tool health card.
+
+    Returns an empty string when there are no gaps (so the card
+    layout collapses cleanly). Each line names one env var + the
+    number of tools it would unlock so the operator can prioritise.
+    """
+    gaps = _top_key_gaps(limit=limit)
+    if not gaps:
+        return ""
+    lines: list[str] = ["[dim]Top gaps:[/dim]"]
+    for key, count in gaps:
+        suffix = "tool" if count == 1 else "tools"
+        lines.append(
+            f"  [bold $primary]{key}[/bold $primary] "
+            f"[dim]would unlock {count} {suffix}[/dim]"
+        )
+    return "\n".join(lines)
+
+
 def _should_show_onboarding() -> bool:
     """Same first-run check the previous welcome screen used."""
     try:
@@ -334,6 +399,15 @@ class DashboardScreen(Screen):
                                 _tool_breakdown(),
                                 id="dashboard-tools",
                             )
+                            # Top-impact missing keys — the
+                            # actionable half of "tool health". A
+                            # bare "15 skipped" leaves the operator
+                            # guessing; this names the env vars
+                            # ranked by how many tools each unlocks.
+                            yield Static(
+                                _render_tool_gaps(),
+                                id="dashboard-tool-gaps",
+                            )
                             yield Static(
                                 "[dim]Press [bold]t[/bold] to browse + "
                                 "configure tools.[/dim]",
@@ -386,6 +460,12 @@ class DashboardScreen(Screen):
     def _refresh(self) -> None:
         try:
             self.query_one("#dashboard-tools", Static).update(_tool_breakdown())
+        except Exception:
+            pass
+        try:
+            self.query_one("#dashboard-tool-gaps", Static).update(
+                _render_tool_gaps(),
+            )
         except Exception:
             pass
         try:

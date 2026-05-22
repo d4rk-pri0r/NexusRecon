@@ -321,6 +321,218 @@ class TestDashboardHelpers:
             assert _should_show_onboarding() is False
 
 
+class TestTopKeyGaps:
+    """Roadmap 0.6.0 beta blocker — surface *which* keys would
+    unlock the most tools so the operator's first-run path is
+    actionable, not just informational."""
+
+    def _fake_tool(self, *, name, requires, available, stubbed=False):
+        """Build a minimal mock that satisfies the helper's
+        attribute reads. ``requires`` is the lowercase env-var
+        list, matching real tools."""
+        m = MagicMock()
+        m.name = name
+        m.requires_keys = list(requires)
+        m.is_available.return_value = available
+        m.stubbed = stubbed
+        return m
+
+    def test_ranks_by_impact_descending(self):
+        from nexusrecon.core import config as cfg_mod
+        from nexusrecon.tools import registry as reg_mod
+        from nexusrecon.tui.screens.dashboard import _top_key_gaps
+        # 3 tools need GITHUB_TOKEN (high impact); 1 each needs
+        # SHODAN_API_KEY and CENSYS_API_ID. None of the keys are
+        # set. The ranking should put GITHUB_TOKEN first.
+        tools = {
+            "gh1": self._fake_tool(name="gh1", requires=["github_token"], available=False),
+            "gh2": self._fake_tool(name="gh2", requires=["github_token"], available=False),
+            "gh3": self._fake_tool(name="gh3", requires=["github_token"], available=False),
+            "sho": self._fake_tool(name="sho", requires=["shodan_api_key"], available=False),
+            "cen": self._fake_tool(name="cen", requires=["censys_api_id"], available=False),
+        }
+        fake_registry = MagicMock()
+        fake_registry._tools = tools
+        fake_cfg = MagicMock()
+        fake_cfg.get_secret.return_value = None  # nothing configured
+        with patch.object(reg_mod, "get_registry", return_value=fake_registry), \
+             patch.object(cfg_mod, "get_config", return_value=fake_cfg):
+            gaps = _top_key_gaps(limit=3)
+        assert gaps[0] == ("GITHUB_TOKEN", 3)
+        # CENSYS_API_ID comes before SHODAN_API_KEY because of
+        # alphabetical tie-break on equal counts.
+        assert gaps[1] == ("CENSYS_API_ID", 1)
+        assert gaps[2] == ("SHODAN_API_KEY", 1)
+
+    def test_skips_already_configured_keys(self):
+        """A tool can be unavailable for multiple keys; only the
+        unset ones count. Otherwise we'd nag operators about
+        keys they already configured."""
+        from nexusrecon.core import config as cfg_mod
+        from nexusrecon.tools import registry as reg_mod
+        from nexusrecon.tui.screens.dashboard import _top_key_gaps
+        tools = {
+            "two_key": self._fake_tool(
+                name="two_key",
+                requires=["already_set", "still_missing"],
+                available=False,
+            ),
+        }
+        fake_registry = MagicMock()
+        fake_registry._tools = tools
+        fake_cfg = MagicMock()
+        # Only "already_set" returns a value.
+        fake_cfg.get_secret.side_effect = lambda k: (
+            "value" if k == "already_set" else None
+        )
+        with patch.object(reg_mod, "get_registry", return_value=fake_registry), \
+             patch.object(cfg_mod, "get_config", return_value=fake_cfg):
+            gaps = _top_key_gaps(limit=5)
+        # Only STILL_MISSING shows up as a gap.
+        assert gaps == [("STILL_MISSING", 1)]
+
+    def test_skips_stubs_and_available_tools(self):
+        """Stubbed tools and tools that already pass is_available()
+        contribute zero to the gap count."""
+        from nexusrecon.core import config as cfg_mod
+        from nexusrecon.tools import registry as reg_mod
+        from nexusrecon.tui.screens.dashboard import _top_key_gaps
+        tools = {
+            "stub": self._fake_tool(
+                name="stub", requires=["foo_key"],
+                available=False, stubbed=True,
+            ),
+            "ready": self._fake_tool(
+                name="ready", requires=["bar_key"], available=True,
+            ),
+        }
+        fake_registry = MagicMock()
+        fake_registry._tools = tools
+        fake_cfg = MagicMock()
+        fake_cfg.get_secret.return_value = None
+        with patch.object(reg_mod, "get_registry", return_value=fake_registry), \
+             patch.object(cfg_mod, "get_config", return_value=fake_cfg):
+            assert _top_key_gaps() == []
+
+    def test_empty_when_no_missing_keys(self):
+        from nexusrecon.core import config as cfg_mod
+        from nexusrecon.tools import registry as reg_mod
+        from nexusrecon.tui.screens.dashboard import _top_key_gaps
+        fake_registry = MagicMock()
+        fake_registry._tools = {}
+        fake_cfg = MagicMock()
+        fake_cfg.get_secret.return_value = None
+        with patch.object(reg_mod, "get_registry", return_value=fake_registry), \
+             patch.object(cfg_mod, "get_config", return_value=fake_cfg):
+            assert _top_key_gaps() == []
+
+    def test_render_omits_section_when_no_gaps(self):
+        """The renderer returns the empty string when there are
+        no gaps so the dashboard layout collapses cleanly rather
+        than rendering an orphan 'Top gaps:' header."""
+        from nexusrecon.tui.screens.dashboard import _render_tool_gaps
+        with patch(
+            "nexusrecon.tui.screens.dashboard._top_key_gaps",
+            return_value=[],
+        ):
+            assert _render_tool_gaps() == ""
+
+    def test_render_includes_tool_count_grammar(self):
+        """Singular vs plural ── 'unlock 1 tool' vs 'unlock 3 tools'.
+        Small thing but pluralisation glitches scream LLM-output."""
+        from nexusrecon.tui.screens.dashboard import _render_tool_gaps
+        with patch(
+            "nexusrecon.tui.screens.dashboard._top_key_gaps",
+            return_value=[("GITHUB_TOKEN", 5), ("SHODAN_API_KEY", 1)],
+        ):
+            out = _render_tool_gaps()
+        assert "would unlock 5 tools" in out
+        assert "would unlock 1 tool[/dim]" in out  # singular
+        assert "GITHUB_TOKEN" in out
+        assert "SHODAN_API_KEY" in out
+
+
+class TestHotReloadRebindsToolConfigs:
+    """Edit modal's hot-reload must rebind every tool's
+    ``self.config`` to the freshly-cached singleton.
+
+    Without this, the dashboard's Tool Health card and the Tools
+    screen's per-tool status stay stale until process restart ──
+    you set GITHUB_TOKEN, return to the dashboard, and the
+    "GITHUB_TOKEN would unlock 5 tools" hint is STILL there
+    because the tool's cached config snapshot doesn't know."""
+
+    def test_hot_reload_rebinds_each_tool_config(self):
+        from nexusrecon.core import config as cfg_mod
+        from nexusrecon.tools import registry as reg_mod
+        from nexusrecon.tui.screens.edit_key import EditKeyModal
+
+        # Set up two fake tools pointing at a "stale" config
+        # object. After reload, both should point at the new
+        # config from the patched ``get_config``.
+        stale = MagicMock(name="stale_cfg")
+        fresh = MagicMock(name="fresh_cfg")
+        t1 = MagicMock()
+        t1.config = stale
+        t2 = MagicMock()
+        t2.config = stale
+        fake_registry = MagicMock()
+        fake_registry._tools = {"t1": t1, "t2": t2}
+
+        # ``get_config`` is an lru_cached function; we replace it
+        # in both the config module and the registry-imported
+        # version so the helper sees the fresh instance.
+        fake_get_config = MagicMock()
+        fake_get_config.cache_clear = MagicMock()
+        fake_get_config.return_value = fresh
+
+        with patch.object(cfg_mod, "get_config", fake_get_config), \
+             patch.object(reg_mod, "get_registry", return_value=fake_registry):
+            EditKeyModal._hot_reload_config()
+
+        # Both lru cache_clear and rebind happened.
+        fake_get_config.cache_clear.assert_called_once()
+        assert t1.config is fresh
+        assert t2.config is fresh
+
+    def test_hot_reload_tolerates_per_tool_rebind_failure(self):
+        """One tool that refuses assignment (e.g. a read-only
+        descriptor on a frozen dataclass) must not skip the
+        rebind for the rest. Defensive: catch and continue."""
+        from nexusrecon.core import config as cfg_mod
+        from nexusrecon.tools import registry as reg_mod
+        from nexusrecon.tui.screens.edit_key import EditKeyModal
+
+        fresh = MagicMock(name="fresh_cfg")
+
+        class _ReadOnly:
+            @property
+            def config(self):
+                return None
+
+            @config.setter
+            def config(self, v):
+                raise AttributeError("frozen")
+
+        ok_tool = MagicMock()
+        ok_tool.config = MagicMock()
+        bad_tool = _ReadOnly()
+        fake_registry = MagicMock()
+        fake_registry._tools = {"bad": bad_tool, "ok": ok_tool}
+
+        fake_get_config = MagicMock()
+        fake_get_config.cache_clear = MagicMock()
+        fake_get_config.return_value = fresh
+
+        with patch.object(cfg_mod, "get_config", fake_get_config), \
+             patch.object(reg_mod, "get_registry", return_value=fake_registry):
+            # Must not raise even though bad_tool rejects the
+            # assignment.
+            EditKeyModal._hot_reload_config()
+
+        assert ok_tool.config is fresh
+
+
 # ──────────────────────────────────────────────────────────────────────
 # WelcomeScreen back-compat shim
 # ──────────────────────────────────────────────────────────────────────
