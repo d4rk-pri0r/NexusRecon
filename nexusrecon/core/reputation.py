@@ -51,14 +51,13 @@ combined.
 """
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
-
+from typing import Any
 
 # Per-service threshold tables: (low, mid, high) → (boost, boost, boost)
 # Pick the highest threshold the reputation meets and use the
 # corresponding boost. Below ``low`` → 0.0 (no signal).
 
-_THRESHOLDS: Dict[str, Dict[str, tuple]] = {
+_THRESHOLDS: dict[str, dict[str, tuple]] = {
     "github": {
         "low":  (10, 0.10),
         "mid":  (100, 0.20),
@@ -94,7 +93,7 @@ _THRESHOLDS: Dict[str, Dict[str, tuple]] = {
 _BOOST_CAP = 0.30
 
 
-def reputation_boost(service: str, reputation_value: Optional[float]) -> float:
+def reputation_boost(service: str, reputation_value: float | None) -> float:
     """Return the reputation boost in ``[0.0, 0.3]`` for one account.
 
     Args:

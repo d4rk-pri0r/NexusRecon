@@ -22,9 +22,9 @@ from __future__ import annotations
 import hashlib
 import json
 import threading
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 import structlog
 
@@ -73,7 +73,7 @@ class AuditLog:
             "scope_hash": self.scope_hash,
         })
 
-    def _read_last_entry(self) -> Optional[Dict[str, Any]]:
+    def _read_last_entry(self) -> dict[str, Any] | None:
         """Read the last JSONL entry from the log."""
         try:
             with open(self.log_path, "rb") as f:
@@ -95,16 +95,16 @@ class AuditLog:
             log.warning("Could not read last audit log entry", error=str(e))
             return None
 
-    def _compute_entry_hash(self, prev_hash: str, data: Dict[str, Any], timestamp: str) -> str:
+    def _compute_entry_hash(self, prev_hash: str, data: dict[str, Any], timestamp: str) -> str:
         """Compute SHA-256 of (prev_hash | timestamp | sorted_json_data)."""
         canonical = f"{prev_hash}|{timestamp}|{json.dumps(data, sort_keys=True)}"
         return "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
-    def _append_raw(self, data: Dict[str, Any]) -> str:
+    def _append_raw(self, data: dict[str, Any]) -> str:
         """Append a single entry to the log. Returns the entry hash."""
         with self._lock:
             self._seq += 1
-            timestamp = datetime.now(timezone.utc).isoformat()
+            timestamp = datetime.now(UTC).isoformat()
             entry_hash = self._compute_entry_hash(self._prev_hash, data, timestamp)
 
             entry = {
@@ -129,7 +129,7 @@ class AuditLog:
         tier: str,
         target: str,
         query: str,
-        proxy_used: Optional[str] = None,
+        proxy_used: str | None = None,
     ) -> str:
         """Log the start of a tool invocation. Returns entry hash."""
         return self._append_raw({
@@ -221,7 +221,7 @@ class AuditLog:
             "source": source,
         })
 
-    def log_agent_action(self, agent: str, action: str, details: Optional[Dict[str, Any]] = None) -> str:
+    def log_agent_action(self, agent: str, action: str, details: dict[str, Any] | None = None) -> str:
         return self._append_raw({
             "event_type": "agent_action",
             "agent": agent,
@@ -229,7 +229,7 @@ class AuditLog:
             "details": details or {},
         })
 
-    def log_campaign_end(self, findings_total: int, report_paths: Dict[str, str]) -> str:
+    def log_campaign_end(self, findings_total: int, report_paths: dict[str, str]) -> str:
         return self._append_raw({
             "event_type": "campaign_end",
             "findings_total": findings_total,
@@ -245,7 +245,7 @@ class AuditLog:
         """
         prev_hash = GENESIS_HASH
         try:
-            with open(self.log_path, "r", encoding="utf-8") as f:
+            with open(self.log_path, encoding="utf-8") as f:
                 for line_num, line in enumerate(f, 1):
                     line = line.strip()
                     if not line:

@@ -8,11 +8,9 @@ Rotation strategy: random by default, round-robin optional.
 from __future__ import annotations
 
 import random
-from typing import List, Optional
-
 
 # fmt: off
-USER_AGENTS: List[str] = [
+USER_AGENTS: list[str] = [
     # ── Chrome on Windows ──────────────────────────────────────────
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
@@ -70,7 +68,7 @@ class UserAgentPool:
     Supports random selection, round-robin, and per-session stickiness.
     """
 
-    def __init__(self, agents: Optional[List[str]] = None, strategy: str = "random") -> None:
+    def __init__(self, agents: list[str] | None = None, strategy: str = "random") -> None:
         self._agents = agents or USER_AGENTS
         self._strategy = strategy
         self._rr_index = 0

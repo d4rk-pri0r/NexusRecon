@@ -9,36 +9,35 @@ This file defines the data model; enforcement logic lives in core/scope.py.
 from __future__ import annotations
 
 import hashlib
-from datetime import date
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import yaml
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class CloudTenants(BaseModel):
-    m365: List[str] = Field(default_factory=list)
-    aws_accounts: List[str] = Field(default_factory=list)
-    azure_subscriptions: List[str] = Field(default_factory=list)
-    gcp_projects: List[str] = Field(default_factory=list)
+    m365: list[str] = Field(default_factory=list)
+    aws_accounts: list[str] = Field(default_factory=list)
+    azure_subscriptions: list[str] = Field(default_factory=list)
+    gcp_projects: list[str] = Field(default_factory=list)
 
 
 class InScopeItems(BaseModel):
-    domains: List[str] = Field(default_factory=list)
-    ip_ranges: List[str] = Field(default_factory=list)
-    asns: List[str] = Field(default_factory=list)
+    domains: list[str] = Field(default_factory=list)
+    ip_ranges: list[str] = Field(default_factory=list)
+    asns: list[str] = Field(default_factory=list)
     cloud_tenants: CloudTenants = Field(default_factory=CloudTenants)
-    github_orgs: List[str] = Field(default_factory=list)
-    github_users: List[str] = Field(default_factory=list)
-    email_domains: List[str] = Field(default_factory=list)
+    github_orgs: list[str] = Field(default_factory=list)
+    github_users: list[str] = Field(default_factory=list)
+    email_domains: list[str] = Field(default_factory=list)
 
 
 class OutOfScopeItems(BaseModel):
-    domains: List[str] = Field(default_factory=list)
-    ip_ranges: List[str] = Field(default_factory=list)
-    third_parties: List[str] = Field(default_factory=list)
-    email_addresses: List[str] = Field(default_factory=list)
+    domains: list[str] = Field(default_factory=list)
+    ip_ranges: list[str] = Field(default_factory=list)
+    third_parties: list[str] = Field(default_factory=list)
+    email_addresses: list[str] = Field(default_factory=list)
 
 
 class ScopeItems(BaseModel):
@@ -54,8 +53,8 @@ class EngagementInfo(BaseModel):
     signed_sow_hash: str
     start_date: str
     end_date: str
-    rules_of_engagement_doc: Optional[str] = None
-    engagement_type: Optional[str] = "red_team"  # red_team, pentest, bug_bounty
+    rules_of_engagement_doc: str | None = None
+    engagement_type: str | None = "red_team"  # red_team, pentest, bug_bounty
 
     @field_validator("signed_sow_hash")
     @classmethod
@@ -74,10 +73,10 @@ class EngagementConstraints(BaseModel):
     allow_breach_db_lookup: bool = True
     allow_paid_apis: bool = True
     max_llm_cost_usd: float = 50.0
-    max_runtime_hours: Optional[float] = None
-    llm_provider: Optional[str] = None  # override env default
+    max_runtime_hours: float | None = None
+    llm_provider: str | None = None  # override env default
     require_proxy: bool = False
-    dns_resolvers: List[str] = Field(default_factory=list)
+    dns_resolvers: list[str] = Field(default_factory=list)
 
     @field_validator("max_tier")
     @classmethod
@@ -110,18 +109,18 @@ class ScopeModel(BaseModel):
     constraints: EngagementConstraints = Field(default_factory=EngagementConstraints)
 
     # Internal — set after loading from file
-    scope_hash: Optional[str] = None
-    scope_file_path: Optional[str] = None
+    scope_hash: str | None = None
+    scope_file_path: str | None = None
 
     @classmethod
-    def from_yaml(cls, path: str | Path) -> "ScopeModel":
+    def from_yaml(cls, path: str | Path) -> ScopeModel:
         """Load and validate a scope YAML file."""
         path = Path(path)
         if not path.exists():
             raise FileNotFoundError(f"Scope file not found: {path}")
 
         raw = path.read_text(encoding="utf-8")
-        data: Dict[str, Any] = yaml.safe_load(raw)
+        data: dict[str, Any] = yaml.safe_load(raw)
 
         obj = cls.model_validate(data)
         obj.scope_hash = "sha256:" + hashlib.sha256(raw.encode()).hexdigest()

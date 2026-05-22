@@ -1,7 +1,7 @@
 """ProjectDiscovery Chaos DB — aggregated passive subdomain data."""
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any
 
 import httpx
 
@@ -45,10 +45,10 @@ class ChaosTool(OSINTTool):
 
                 raw = resp.json()
                 # Chaos returns prefixes only — reconstruct FQDNs
-                prefixes: List[str] = raw.get("subdomains", [])
+                prefixes: list[str] = raw.get("subdomains", [])
                 fqdns = sorted({f"{p}.{target}" for p in prefixes if p})
 
-                data: Dict[str, Any] = {
+                data: dict[str, Any] = {
                     "domain": target,
                     "count": raw.get("count", len(fqdns)),
                     "subdomains": fqdns,

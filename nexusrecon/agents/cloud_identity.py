@@ -1,7 +1,7 @@
 """Cloud & Identity Specialist agent — AWS, Azure/Entra, GCP, M365 enumeration."""
 from __future__ import annotations
-from nexusrecon.agents.base import BaseNexusAgent
 
+from nexusrecon.agents.base import BaseNexusAgent
 
 CLOUD_ROLE = """
 Cloud and Identity Reconnaissance Specialist. You are an expert in AWS,

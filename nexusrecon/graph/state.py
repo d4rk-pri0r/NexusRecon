@@ -7,7 +7,8 @@ It accumulates intelligence, tracks phase progression, and enforces budgets.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 from typing_extensions import TypedDict
 
 
@@ -23,51 +24,62 @@ class CampaignGraphState(TypedDict, total=False):
     campaign_id: str
     engagement_id: str
     scope_hash: str
-    seeds: List[str]  # initial targets
+    seeds: list[str]  # initial targets
 
     # ── Phase tracking ────────────────────────────────────────────────
     current_phase: str
-    completed_phases: List[str]
-    phase_results: Dict[str, Any]  # {phase_name: {status, findings, ...}}
+    completed_phases: list[str]
+    phase_results: dict[str, Any]  # {phase_name: {status, findings, ...}}
 
     # ── Intelligence (accumulates across phases) ──────────────────────
     # Entity graph snapshot (serialized dict)
-    entity_graph: Dict[str, Any]
+    entity_graph: dict[str, Any]
     # All findings collected so far
-    findings: List[Dict[str, Any]]
+    findings: list[dict[str, Any]]
     # Domain intelligence
-    domain_intel: Dict[str, Any]
-    subdomain_intel: Dict[str, Any]
+    domain_intel: dict[str, Any]
+    subdomain_intel: dict[str, Any]
     # Identity intelligence
-    email_intel: Dict[str, Any]
-    identity_intel: Dict[str, Any]
+    email_intel: dict[str, Any]
+    identity_intel: dict[str, Any]
     # Cloud intelligence
-    cloud_intel: Dict[str, Any]
+    cloud_intel: dict[str, Any]
     # Code intelligence
-    code_intel: Dict[str, Any]
+    code_intel: dict[str, Any]
     # Infra intelligence
-    infra_intel: Dict[str, Any]
+    infra_intel: dict[str, Any]
     # Vuln intelligence
-    vuln_intel: Dict[str, Any]
+    vuln_intel: dict[str, Any]
     # Pretext intelligence
-    pretext_intel: Dict[str, Any]
+    pretext_intel: dict[str, Any]
+    # Relationship graph — human-to-human edges populated by Phase E
+    # (E1 added the slot; E2-E8 tools populate it via the
+    # ``RelationshipGraph.add_edge`` API; E11 commits it to state).
+    relationship_graph: dict[str, Any]
+    # Pretext scoring output — ranked PretextCandidate dicts produced
+    # by Phase 7.7 (E11) from the relationship graph + recent activity.
+    pretext_scores: list[dict[str, Any]]
+    # Per-target spear-phishing dossiers (E11 deliverable). Always
+    # written when Phase 7.7 runs; the per-target ``draft`` field is
+    # populated only when ``generate_phishing_drafts`` is True.
+    spear_phishing_intelligence: dict[str, Any]
     # Dark-web / paste / ransomwatch intel (Move 1)
-    dark_intel: Dict[str, Any]
+    dark_intel: dict[str, Any]
     # Breach/infostealer intel — populated by dynamic dispatch (breach category tools)
-    breach_intel: Dict[str, Any]
+    breach_intel: dict[str, Any]
     # Mobile app intel — populated by dynamic dispatch (mobile category tools)
-    mobile_intel: Dict[str, Any]
+    mobile_intel: dict[str, Any]
     # Social/SOCMINT intel — populated by dynamic dispatch (social category tools)
-    social_intel: Dict[str, Any]
+    social_intel: dict[str, Any]
     # Harvested credentials (Move 2)
-    harvested_credentials: List[Dict[str, Any]]
+    harvested_credentials: list[dict[str, Any]]
     # Dynamic dispatch log (Move 4)
-    dynamic_dispatch_log: List[Dict[str, Any]]
+    dynamic_dispatch_log: list[dict[str, Any]]
 
     # ── Correlation ───────────────────────────────────────────────────
-    hypotheses: List[str]
-    confirmed_leads: List[str]
-    open_questions: List[str]
+    hypotheses: list[str]
+    confirmed_leads: list[str]
+    open_questions: list[str]
 
     # ── Budget ────────────────────────────────────────────────────────
     llm_cost_usd: float
@@ -75,13 +87,17 @@ class CampaignGraphState(TypedDict, total=False):
     step_count: int
 
     # ── Errors / notes ────────────────────────────────────────────────
-    errors: List[str]
-    agent_messages: List[Dict[str, Any]]
+    errors: list[str]
+    agent_messages: list[dict[str, Any]]
 
     # ── Feature flags ─────────────────────────────────────────────────
     validate_credentials: bool
     generate_phishing_drafts: bool
     dispatch_mode: str  # "lite" | "full" | "off"
+    # Optional narrowing of which identities Phase 7.7 scores pretexts
+    # for. None / absent = all identities (default). Comma-separated
+    # via the --pretext-targets CLI flag, parsed into a list.
+    pretext_targets: list[str]
 
     # ── Report paths (set at end) ────────────────────────────────────
-    report_paths: Dict[str, str]
+    report_paths: dict[str, str]

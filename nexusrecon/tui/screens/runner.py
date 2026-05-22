@@ -38,16 +38,17 @@ import time
 from collections import deque
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Deque, Dict, Optional
+from typing import Any
 
 from rich.markup import escape as _rich_escape
 from textual import work
 from textual.app import ComposeResult
-from textual.containers import Container, Vertical, VerticalScroll
+from textual.containers import Container, VerticalScroll
 from textual.reactive import reactive
 from textual.screen import Screen
 from textual.widgets import Footer, Header, Static
 
+from nexusrecon.tui.widgets import StatusBar
 
 _TOTAL_PHASES = 10  # phase1..phase8 + phase7_5 + phase9
 
@@ -117,7 +118,7 @@ class _LogTailer:
     log since the last call. Returns an empty list if the file doesn't
     exist yet (e.g. log path is None or file hasn't been created)."""
 
-    def __init__(self, path: Optional[Path]) -> None:
+    def __init__(self, path: Path | None) -> None:
         self.path = path
         self._pos = 0
 
@@ -125,7 +126,7 @@ class _LogTailer:
         if not self.path:
             return []
         try:
-            with open(self.path, "r", encoding="utf-8", errors="replace") as f:
+            with open(self.path, encoding="utf-8", errors="replace") as f:
                 f.seek(self._pos)
                 data = f.read()
                 self._pos = f.tell()
@@ -186,14 +187,14 @@ class RunnerScreen(Screen):
         self.generate_phishing = generate_phishing
         self.campaign_id: str = ""
         self.campaign_dir: str = ""
-        self._activity: Deque[str] = deque(maxlen=200)
-        self._detail_lines: Deque[str] = deque(maxlen=500)
+        self._activity: deque[str] = deque(maxlen=200)
+        self._detail_lines: deque[str] = deque(maxlen=500)
         self._phase_done = 0
-        self._state: Dict[str, Any] = {}
+        self._state: dict[str, Any] = {}
         self._complete = False
         self._aborted = False
         self._started_at: float = time.monotonic()
-        self._log_tailer: Optional[_LogTailer] = None
+        self._log_tailer: _LogTailer | None = None
         self._detail_visible: bool = True
         # Reference to the running campaign worker so ``action_abort``
         # can actually cancel the in-flight asyncio task. Populated in
@@ -209,6 +210,8 @@ class RunnerScreen(Screen):
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=False)
+        # TUI-3: persistent status bar shown on every screen.
+        yield StatusBar()
 
         # 1) Top header panel — campaign id in the border title, big phase
         #    indicator + full-width chunky progress bar in the body.
@@ -348,11 +351,11 @@ class RunnerScreen(Screen):
         # totally cold path (no welcome screen visit, e.g. tests) they
         # still work — they just take 30+s.
         from nexusrecon.core.campaign import CampaignManager
-        from nexusrecon.core.scope import ScopeModel, ScopeGuard
         from nexusrecon.core.campaign_runner import run_campaign
-        from nexusrecon.tools.registry import get_registry
-        from nexusrecon.reports.engine import ReportEngine
+        from nexusrecon.core.scope import ScopeGuard, ScopeModel
         from nexusrecon.models.campaign import CampaignMode
+        from nexusrecon.reports.engine import ReportEngine
+        from nexusrecon.tools.registry import get_registry
 
         scope_model = ScopeModel.from_yaml(self.scope_path)
         campaign = CampaignManager(
@@ -389,7 +392,7 @@ class RunnerScreen(Screen):
         except Exception:
             pass
 
-        state: Dict[str, Any] = {
+        state: dict[str, Any] = {
             "campaign_id": campaign.campaign_id,
             "engagement_id": scope_model.engagement.engagement_id,
             "scope_hash": scope_model.scope_hash or "",
@@ -421,7 +424,7 @@ class RunnerScreen(Screen):
         }
         self._state = state
 
-        def on_event(evt: Dict[str, Any]) -> None:
+        def on_event(evt: dict[str, Any]) -> None:
             self._handle_event(evt)
 
         state = await run_campaign(state, campaign, scope_model, on_event=on_event)
@@ -463,7 +466,7 @@ class RunnerScreen(Screen):
 
     # ── Event → UI ─────────────────────────────────────────────────────────
 
-    def _handle_event(self, evt: Dict[str, Any]) -> None:
+    def _handle_event(self, evt: dict[str, Any]) -> None:
         etype = evt.get("type", "")
         ts = evt.get("timestamp", "")[11:19] if evt.get("timestamp") else \
             datetime.utcnow().strftime("%H:%M:%S")

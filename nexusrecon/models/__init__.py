@@ -1,47 +1,47 @@
 """NexusRecon data models."""
 
+from .campaign import (
+    CampaignMode,
+    CampaignPlan,
+    CampaignState,
+    PhaseResult,
+    PhaseStatus,
+)
 from .entities import (
-    EntityType,
-    RelationshipType,
-    BaseEntity,
-    DomainEntity,
-    SubdomainEntity,
-    IPAddressEntity,
     ASNEntity,
+    BaseEntity,
     CertificateEntity,
-    EmailEntity,
-    PersonEntity,
-    OrganizationEntity,
     CloudAssetEntity,
+    CVEEntity,
+    DomainEntity,
+    EmailEntity,
+    EntityRelationship,
+    EntityType,
+    FileArtifactEntity,
+    IPAddressEntity,
+    OrganizationEntity,
+    PersonEntity,
+    RelationshipType,
     RepositoryEntity,
     SecretEntity,
-    TechnologyEntity,
-    CVEEntity,
     SocialAccountEntity,
-    UsernameEntity,
+    SubdomainEntity,
+    TechnologyEntity,
     URLEntity,
-    FileArtifactEntity,
-    EntityRelationship,
+    UsernameEntity,
 )
 from .findings import (
     ConfidenceLevel,
-    FindingSeverity,
     Finding,
+    FindingSeverity,
 )
 from .scope import (
-    ScopeModel,
+    EngagementConstraints,
     EngagementInfo,
     InScopeItems,
     OutOfScopeItems,
     ScopeItems,
-    EngagementConstraints,
-)
-from .campaign import (
-    CampaignMode,
-    PhaseStatus,
-    PhaseResult,
-    CampaignPlan,
-    CampaignState,
+    ScopeModel,
 )
 
 __all__ = [

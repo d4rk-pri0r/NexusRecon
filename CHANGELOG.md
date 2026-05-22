@@ -9,6 +9,71 @@ minor bumps (0.x → 0.x+1) may break APIs.
 
 ### Added
 
+- **Phase E: Relationship graph + pretext scoring** — full
+  identity-attribution expansion from human-to-human edges to
+  spear-phish intelligence. Six PRs:
+  - **E1** `nexusrecon/core/relationship_graph.py`:
+    `RelationshipGraph` with dual storage (per-identity
+    `related_to` mirror + top-level `by_source`/`by_target`
+    indexes), exponential recency decay (180-day default
+    half-life, configurable), cross-source corroboration via
+    `1 − ∏(1 − sᵢ)`. Pure Python, no network. 76 unit tests.
+  - **E2-E5** Social-graph crawlers — `github_social`,
+    `mastodon_social`, `bluesky_social`, `linkedin_social`. Each
+    inherits from `BaseHTTPTool`, ships with empty
+    `dynamic_trigger_hints` (no auto-fire from the LLM
+    dispatcher), and exposes an `extract_edges_from_*` adapter
+    that turns raw API data into `RelationshipEdge` tuples.
+    LinkedIn isolated per the locked-in posture decision; uses
+    `linkedin-api` (pinned `>=2.3,<3`) with cookie auth
+    preferred. 145 new unit tests across the four tools.
+  - **E6** `nexusrecon/tools/intel/business_partner_tool.py`:
+    org-to-org aggregator combining Crunchbase (via the existing
+    `crunchbase` tool through the registry), BuiltWith API
+    (fail-fast on `BUILTWITH_API_KEY` when enabled), DNS TXT
+    vendor inference (SPF + MX), and best-effort press-page
+    scraping. 21 unit tests.
+  - **E7** `nexusrecon/tools/pretext/conference_speaker_tool.py`:
+    hardcoded default conference list (DEFCON, BSides, RSA,
+    KubeCon, FOSDEM, BlackHat, Strange Loop, USENIX) with a
+    per-site parser interface. FOSDEM has a working parser;
+    others ship as stubs ready to wire. Co-speaker edges (weight
+    0.95). 29 unit tests.
+  - **E8** `nexusrecon/tools/pretext/news_tool.py` extended
+    in-place with `time_window_days` kwarg +
+    `recent_activity_records` field (additive — existing shape
+    preserved). New shared dataclass
+    `nexusrecon/core/recent_activity.py::RecentActivity` with
+    timeline helpers consumed by E9. 18 new unit tests + 27 for
+    the core module; existing news_tool integration tests
+    untouched.
+  - **E9** `nexusrecon/core/pretext_scoring.py`:
+    `PretextCandidate` + `score_pretext_candidates`. Three-axis
+    score (sender × topic × timing) combined as the geometric
+    mean — any zero axis zeroes the result, modelling
+    "no recent activity = no anchor." Every candidate carries a
+    `sources: list[str]` audit trail. Pure Python, deterministic
+    with `now=` override. 34 unit tests.
+  - **E10** Enhanced `nexusrecon/agents/phishing_drafter.py`:
+    expanded backstory + JSON output schema. Documents
+    do-not-fabricate rule, DMARC-driven sender-domain decision
+    (reject → lookalike; none/absent → real corp address),
+    no-draft fallback for low-signal targets. Still gated on
+    `--generate-phishing`.
+  - **E11** Phase 7.7 (`phase7_7_pretext_intelligence`) wires the
+    above into the workflow between Phase 7.5 and Phase 8. New
+    state slots `pretext_scores`, `spear_phishing_intelligence`,
+    `pretext_targets`. New deliverables
+    `spear_phishing_intelligence.md` (per-target dossier with
+    top 3 senders + top 3 pretexts + recent-activity timeline +
+    recommended draft framing) + `pretext_candidates.json`. New
+    CLI flag `--pretext-targets` narrows scoring scope. 16 unit
+    tests cover phase ordering, state shape, the
+    `generate_phishing_drafts` gate, and report builder output.
+  - **Live-test safety:** every Phase E tool registers with empty
+    `dynamic_trigger_hints`. The LLM dispatcher cannot fire them
+    mid-campaign; they only execute when Phase 7.7 explicitly
+    invokes them through the registry.
 - Apache 2.0 LICENSE + NOTICE (replaces the earlier proprietary
   declaration in `pyproject.toml`).
 - `CONTRIBUTING.md`, `SECURITY.md`, `CHANGELOG.md`, `ROADMAP.md`.

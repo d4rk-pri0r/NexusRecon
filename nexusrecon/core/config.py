@@ -7,10 +7,9 @@ optional per-client config overlays.  API keys are never logged.
 
 from __future__ import annotations
 
-import os
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 import yaml
 from pydantic import Field, SecretStr
@@ -37,46 +36,48 @@ class NexusConfig(BaseSettings):
     llm_provider: str = Field(default="anthropic", alias="NEXUS_LLM_PROVIDER")
     llm_model: str = Field(default="claude-opus-4-5", alias="NEXUS_LLM_MODEL")
     llm_temperature: float = Field(default=0.1, alias="NEXUS_LLM_TEMPERATURE")
-    anthropic_api_key: Optional[SecretStr] = Field(default=None, alias="ANTHROPIC_API_KEY")
-    openai_api_key: Optional[SecretStr] = Field(default=None, alias="OPENAI_API_KEY")
+    anthropic_api_key: SecretStr | None = Field(default=None, alias="ANTHROPIC_API_KEY")
+    openai_api_key: SecretStr | None = Field(default=None, alias="OPENAI_API_KEY")
     ollama_base_url: str = Field(default="http://localhost:11434", alias="OLLAMA_BASE_URL")
     ollama_model: str = Field(default="llama3.1:8b", alias="OLLAMA_MODEL")
 
     # ── API Keys — Infrastructure ───────────────────────────────
-    shodan_api_key: Optional[SecretStr] = Field(default=None, alias="SHODAN_API_KEY")
-    censys_api_id: Optional[SecretStr] = Field(default=None, alias="CENSYS_API_ID")
-    censys_api_secret: Optional[SecretStr] = Field(default=None, alias="CENSYS_API_SECRET")
-    virustotal_api_key: Optional[SecretStr] = Field(default=None, alias="VIRUSTOTAL_API_KEY")
-    greynoise_api_key: Optional[SecretStr] = Field(default=None, alias="GREYNOISE_API_KEY")
-    binaryedge_api_key: Optional[SecretStr] = Field(default=None, alias="BINARYEDGE_API_KEY")
-    fullhunt_api_key: Optional[SecretStr] = Field(default=None, alias="FULLHUNT_API_KEY")
-    abuseipdb_api_key: Optional[SecretStr] = Field(default=None, alias="ABUSEIPDB_API_KEY")
-    urlscan_api_key: Optional[SecretStr] = Field(default=None, alias="URLSCAN_API_KEY")
-    securitytrails_api_key: Optional[SecretStr] = Field(default=None, alias="SECURITYTRAILS_API_KEY")
+    shodan_api_key: SecretStr | None = Field(default=None, alias="SHODAN_API_KEY")
+    censys_api_id: SecretStr | None = Field(default=None, alias="CENSYS_API_ID")
+    censys_api_secret: SecretStr | None = Field(default=None, alias="CENSYS_API_SECRET")
+    virustotal_api_key: SecretStr | None = Field(default=None, alias="VIRUSTOTAL_API_KEY")
+    greynoise_api_key: SecretStr | None = Field(default=None, alias="GREYNOISE_API_KEY")
+    binaryedge_api_key: SecretStr | None = Field(default=None, alias="BINARYEDGE_API_KEY")
+    fullhunt_api_key: SecretStr | None = Field(default=None, alias="FULLHUNT_API_KEY")
+    abuseipdb_api_key: SecretStr | None = Field(default=None, alias="ABUSEIPDB_API_KEY")
+    urlscan_api_key: SecretStr | None = Field(default=None, alias="URLSCAN_API_KEY")
+    securitytrails_api_key: SecretStr | None = Field(default=None, alias="SECURITYTRAILS_API_KEY")
 
     # ── API Keys — Identity ─────────────────────────────────────
-    hunter_api_key: Optional[SecretStr] = Field(default=None, alias="HUNTER_API_KEY")
-    haveibeenpwned_api_key: Optional[SecretStr] = Field(default=None, alias="HAVEIBEENPWNED_API_KEY")
-    dehashed_username: Optional[str] = Field(default=None, alias="DEHASHED_USERNAME")
-    dehashed_api_key: Optional[SecretStr] = Field(default=None, alias="DEHASHED_API_KEY")
-    intelx_api_key: Optional[SecretStr] = Field(default=None, alias="INTELX_API_KEY")
-    emailrep_api_key: Optional[SecretStr] = Field(default=None, alias="EMAILREP_API_KEY")
-    newsapi_api_key: Optional[SecretStr] = Field(default=None, alias="NEWSAPI_API_KEY")
-    adzuna_app_id: Optional[str] = Field(default=None, alias="ADZUNA_APP_ID")
-    adzuna_api_key: Optional[SecretStr] = Field(default=None, alias="ADZUNA_API_KEY")
+    hunter_api_key: SecretStr | None = Field(default=None, alias="HUNTER_API_KEY")
+    haveibeenpwned_api_key: SecretStr | None = Field(default=None, alias="HAVEIBEENPWNED_API_KEY")
+    dehashed_username: str | None = Field(default=None, alias="DEHASHED_USERNAME")
+    dehashed_api_key: SecretStr | None = Field(default=None, alias="DEHASHED_API_KEY")
+    # HudsonRock Cavalier — optional; unlocks full credential detail (D6)
+    hudsonrock_api_key: SecretStr | None = Field(default=None, alias="HUDSONROCK_API_KEY")
+    intelx_api_key: SecretStr | None = Field(default=None, alias="INTELX_API_KEY")
+    emailrep_api_key: SecretStr | None = Field(default=None, alias="EMAILREP_API_KEY")
+    newsapi_api_key: SecretStr | None = Field(default=None, alias="NEWSAPI_API_KEY")
+    adzuna_app_id: str | None = Field(default=None, alias="ADZUNA_APP_ID")
+    adzuna_api_key: SecretStr | None = Field(default=None, alias="ADZUNA_API_KEY")
 
     # ── API Keys — Code ─────────────────────────────────────────
-    github_token: Optional[SecretStr] = Field(default=None, alias="GITHUB_TOKEN")
-    gitlab_token: Optional[SecretStr] = Field(default=None, alias="GITLAB_TOKEN")
+    github_token: SecretStr | None = Field(default=None, alias="GITHUB_TOKEN")
+    gitlab_token: SecretStr | None = Field(default=None, alias="GITLAB_TOKEN")
 
     # ── Cloud ───────────────────────────────────────────────────
-    aws_access_key_id: Optional[SecretStr] = Field(default=None, alias="AWS_ACCESS_KEY_ID")
-    aws_secret_access_key: Optional[SecretStr] = Field(default=None, alias="AWS_SECRET_ACCESS_KEY")
+    aws_access_key_id: SecretStr | None = Field(default=None, alias="AWS_ACCESS_KEY_ID")
+    aws_secret_access_key: SecretStr | None = Field(default=None, alias="AWS_SECRET_ACCESS_KEY")
     aws_default_region: str = Field(default="us-east-1", alias="AWS_DEFAULT_REGION")
 
     # ── OPSEC ───────────────────────────────────────────────────
-    proxy_url: Optional[str] = Field(default=None, alias="NEXUS_PROXY_URL")
-    tor_proxy: Optional[str] = Field(default=None, alias="NEXUS_TOR_PROXY")
+    proxy_url: str | None = Field(default=None, alias="NEXUS_PROXY_URL")
+    tor_proxy: str | None = Field(default=None, alias="NEXUS_TOR_PROXY")
     dns_resolvers: str = Field(default="1.1.1.1,8.8.8.8", alias="NEXUS_DNS_RESOLVERS")
 
     # ── Storage ─────────────────────────────────────────────────
@@ -88,7 +89,7 @@ class NexusConfig(BaseSettings):
     log_format: str = Field(default="json", alias="NEXUS_LOG_FORMAT")
     dry_run: bool = Field(default=False, alias="NEXUS_DRY_RUN")
 
-    def get_secret(self, field_name: str) -> Optional[str]:
+    def get_secret(self, field_name: str) -> str | None:
         """Safely retrieve a secret value by field name.
 
         Returns ``None`` rather than an empty string when the value resolves to
@@ -110,7 +111,7 @@ class NexusConfig(BaseSettings):
     def dns_resolver_list(self) -> list[str]:
         return [r.strip() for r in self.dns_resolvers.split(",") if r.strip()]
 
-    def available_keys(self) -> Dict[str, bool]:
+    def available_keys(self) -> dict[str, bool]:
         """Return dict of key availability (without exposing values)."""
         key_fields = [
             "shodan_api_key", "censys_api_id", "virustotal_api_key",
@@ -122,7 +123,7 @@ class NexusConfig(BaseSettings):
         ]
         return {f: getattr(self, f) is not None for f in key_fields}
 
-    def apply_client_overlay(self, overlay_path: str | Path) -> "NexusConfig":
+    def apply_client_overlay(self, overlay_path: str | Path) -> NexusConfig:
         """Return a new NexusConfig with per-client YAML values merged on top.
 
         Does NOT mutate self — the lru_cached singleton must stay pristine so
@@ -131,7 +132,7 @@ class NexusConfig(BaseSettings):
         overlay_path = Path(overlay_path)
         if not overlay_path.exists():
             return self
-        data: Dict[str, Any] = yaml.safe_load(overlay_path.read_text()) or {}
+        data: dict[str, Any] = yaml.safe_load(overlay_path.read_text()) or {}
         # Build a fresh instance from current values, then apply overlay
         base_values = self.model_dump()
         base_values.update({k: v for k, v in data.items() if k in base_values})

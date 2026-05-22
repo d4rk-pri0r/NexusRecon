@@ -11,15 +11,14 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from enum import Enum
-from typing import Any, Dict, List, Optional
+from enum import StrEnum
+from typing import Any
 
 from pydantic import BaseModel, Field
 
-
 # ── Entity and Relationship Enumerations ─────────────────────────────────────
 
-class EntityType(str, Enum):
+class EntityType(StrEnum):
     DOMAIN = "domain"
     SUBDOMAIN = "subdomain"
     IP_ADDRESS = "ip_address"
@@ -39,7 +38,7 @@ class EntityType(str, Enum):
     FILE_ARTIFACT = "file_artifact"
 
 
-class RelationshipType(str, Enum):
+class RelationshipType(StrEnum):
     RESOLVES_TO = "resolves_to"
     HAS_SUBDOMAIN = "has_subdomain"
     BELONGS_TO = "belongs_to"
@@ -68,13 +67,13 @@ class BaseEntity(BaseModel):
     entity_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     entity_type: EntityType
     value: str  # primary identifier (domain name, IP, email, etc.)
-    tags: List[str] = Field(default_factory=list)
-    metadata: Dict[str, Any] = Field(default_factory=dict)
+    tags: list[str] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
     first_seen: datetime = Field(default_factory=datetime.utcnow)
     last_seen: datetime = Field(default_factory=datetime.utcnow)
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
-    sources: List[str] = Field(default_factory=list)
-    engagement_id: Optional[str] = None
+    sources: list[str] = Field(default_factory=list)
+    engagement_id: str | None = None
 
     def touch(self) -> None:
         """Update last_seen timestamp."""
@@ -90,126 +89,126 @@ class BaseEntity(BaseModel):
 
 class DomainEntity(BaseEntity):
     entity_type: EntityType = EntityType.DOMAIN
-    registrar: Optional[str] = None
-    registration_date: Optional[datetime] = None
-    expiration_date: Optional[datetime] = None
-    registrant: Optional[str] = None
-    registrant_email: Optional[str] = None
-    registrant_org: Optional[str] = None
-    nameservers: List[str] = Field(default_factory=list)
-    status: List[str] = Field(default_factory=list)
+    registrar: str | None = None
+    registration_date: datetime | None = None
+    expiration_date: datetime | None = None
+    registrant: str | None = None
+    registrant_email: str | None = None
+    registrant_org: str | None = None
+    nameservers: list[str] = Field(default_factory=list)
+    status: list[str] = Field(default_factory=list)
     dnssec: bool = False
-    spf_record: Optional[str] = None
-    dmarc_policy: Optional[str] = None
-    mx_records: List[str] = Field(default_factory=list)
-    a_records: List[str] = Field(default_factory=list)
-    txt_records: List[str] = Field(default_factory=list)
+    spf_record: str | None = None
+    dmarc_policy: str | None = None
+    mx_records: list[str] = Field(default_factory=list)
+    a_records: list[str] = Field(default_factory=list)
+    txt_records: list[str] = Field(default_factory=list)
 
 
 class SubdomainEntity(BaseEntity):
     entity_type: EntityType = EntityType.SUBDOMAIN
     parent_domain: str = ""
-    cnames: List[str] = Field(default_factory=list)
-    a_records: List[str] = Field(default_factory=list)
-    is_alive: Optional[bool] = None
-    http_status: Optional[int] = None
-    technologies: List[str] = Field(default_factory=list)
+    cnames: list[str] = Field(default_factory=list)
+    a_records: list[str] = Field(default_factory=list)
+    is_alive: bool | None = None
+    http_status: int | None = None
+    technologies: list[str] = Field(default_factory=list)
 
 
 class IPAddressEntity(BaseEntity):
     entity_type: EntityType = EntityType.IP_ADDRESS
     version: int = 4
-    asn: Optional[str] = None
-    asn_name: Optional[str] = None
-    country: Optional[str] = None
-    city: Optional[str] = None
-    isp: Optional[str] = None
-    open_ports: List[int] = Field(default_factory=list)
-    services: Dict[str, str] = Field(default_factory=dict)  # port -> banner
+    asn: str | None = None
+    asn_name: str | None = None
+    country: str | None = None
+    city: str | None = None
+    isp: str | None = None
+    open_ports: list[int] = Field(default_factory=list)
+    services: dict[str, str] = Field(default_factory=dict)  # port -> banner
     is_cloud: bool = False
-    cloud_provider: Optional[str] = None
+    cloud_provider: str | None = None
     is_cdn: bool = False
-    cdn_name: Optional[str] = None
-    abuse_score: Optional[int] = None
+    cdn_name: str | None = None
+    abuse_score: int | None = None
     is_tor_exit: bool = False
     is_vpn: bool = False
-    greynoise_classification: Optional[str] = None
+    greynoise_classification: str | None = None
 
 
 class ASNEntity(BaseEntity):
     entity_type: EntityType = EntityType.ASN
     asn_number: str = ""
-    name: Optional[str] = None
-    country: Optional[str] = None
-    prefixes_v4: List[str] = Field(default_factory=list)
-    prefixes_v6: List[str] = Field(default_factory=list)
-    rir: Optional[str] = None  # ARIN, RIPE, APNIC, etc.
+    name: str | None = None
+    country: str | None = None
+    prefixes_v4: list[str] = Field(default_factory=list)
+    prefixes_v6: list[str] = Field(default_factory=list)
+    rir: str | None = None  # ARIN, RIPE, APNIC, etc.
 
 
 class CertificateEntity(BaseEntity):
     entity_type: EntityType = EntityType.CERTIFICATE
     subject_cn: str = ""
-    subject_org: Optional[str] = None
-    issuer: Optional[str] = None
-    not_before: Optional[datetime] = None
-    not_after: Optional[datetime] = None
-    san_domains: List[str] = Field(default_factory=list)
-    serial_number: Optional[str] = None
-    fingerprint_sha256: Optional[str] = None
+    subject_org: str | None = None
+    issuer: str | None = None
+    not_before: datetime | None = None
+    not_after: datetime | None = None
+    san_domains: list[str] = Field(default_factory=list)
+    serial_number: str | None = None
+    fingerprint_sha256: str | None = None
     is_wildcard: bool = False
     is_expired: bool = False
-    ct_log_url: Optional[str] = None
+    ct_log_url: str | None = None
 
 
 class EmailEntity(BaseEntity):
     entity_type: EntityType = EntityType.EMAIL
     local_part: str = ""
     domain: str = ""
-    person_name: Optional[str] = None
-    role: Optional[str] = None
-    department: Optional[str] = None
-    is_valid: Optional[bool] = None
-    is_deliverable: Optional[bool] = None
+    person_name: str | None = None
+    role: str | None = None
+    department: str | None = None
+    is_valid: bool | None = None
+    is_deliverable: bool | None = None
     is_breached: bool = False
     breach_count: int = 0
-    breach_names: List[str] = Field(default_factory=list)
-    format_pattern: Optional[str] = None  # e.g. "firstname.lastname"
+    breach_names: list[str] = Field(default_factory=list)
+    format_pattern: str | None = None  # e.g. "firstname.lastname"
     is_executive: bool = False
 
 
 class PersonEntity(BaseEntity):
     entity_type: EntityType = EntityType.PERSON
     full_name: str = ""
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
-    title: Optional[str] = None
-    department: Optional[str] = None
-    company: Optional[str] = None
-    email_addresses: List[str] = Field(default_factory=list)
-    phone_numbers: List[str] = Field(default_factory=list)
-    social_profiles: Dict[str, str] = Field(default_factory=dict)
+    first_name: str | None = None
+    last_name: str | None = None
+    title: str | None = None
+    department: str | None = None
+    company: str | None = None
+    email_addresses: list[str] = Field(default_factory=list)
+    phone_numbers: list[str] = Field(default_factory=list)
+    social_profiles: dict[str, str] = Field(default_factory=dict)
     is_executive: bool = False
     is_technical: bool = False
-    recent_activity: List[str] = Field(default_factory=list)
-    profile_image_url: Optional[str] = None
-    location: Optional[str] = None
+    recent_activity: list[str] = Field(default_factory=list)
+    profile_image_url: str | None = None
+    location: str | None = None
 
 
 class OrganizationEntity(BaseEntity):
     entity_type: EntityType = EntityType.ORGANIZATION
     legal_name: str = ""
-    trade_name: Optional[str] = None
-    ticker: Optional[str] = None
-    exchange: Optional[str] = None
-    industry: Optional[str] = None
-    employee_count: Optional[int] = None
-    revenue: Optional[str] = None
-    founded: Optional[int] = None
-    headquarters: Optional[str] = None
-    description: Optional[str] = None
-    linkedin_url: Optional[str] = None
-    website: Optional[str] = None
-    crunchbase_url: Optional[str] = None
+    trade_name: str | None = None
+    ticker: str | None = None
+    exchange: str | None = None
+    industry: str | None = None
+    employee_count: int | None = None
+    revenue: str | None = None
+    founded: int | None = None
+    headquarters: str | None = None
+    description: str | None = None
+    linkedin_url: str | None = None
+    website: str | None = None
+    crunchbase_url: str | None = None
 
 
 class CloudAssetEntity(BaseEntity):
@@ -217,118 +216,118 @@ class CloudAssetEntity(BaseEntity):
     provider: str = ""          # aws, azure, gcp
     service_type: str = ""      # s3, blob, lambda, function, etc.
     resource_name: str = ""
-    region: Optional[str] = None
+    region: str | None = None
     is_public: bool = False
     is_authenticated: bool = True
-    permissions: Optional[str] = None  # read, write, list, etc.
-    url: Optional[str] = None
-    account_id: Optional[str] = None
-    tenant_id: Optional[str] = None
+    permissions: str | None = None  # read, write, list, etc.
+    url: str | None = None
+    account_id: str | None = None
+    tenant_id: str | None = None
 
 
 class RepositoryEntity(BaseEntity):
     entity_type: EntityType = EntityType.REPOSITORY
     platform: str = ""          # github, gitlab, bitbucket, etc.
-    org: Optional[str] = None
+    org: str | None = None
     repo_name: str = ""
     full_name: str = ""         # org/repo_name
     url: str = ""
     is_public: bool = True
     has_secrets: bool = False
     secret_count: int = 0
-    languages: List[str] = Field(default_factory=list)
-    stars: Optional[int] = None
-    last_commit: Optional[datetime] = None
-    description: Optional[str] = None
+    languages: list[str] = Field(default_factory=list)
+    stars: int | None = None
+    last_commit: datetime | None = None
+    description: str | None = None
 
 
 class SecretEntity(BaseEntity):
     entity_type: EntityType = EntityType.SECRET
     secret_type: str = ""       # api_key, password, private_key, token, etc.
-    service: Optional[str] = None  # AWS, GitHub, Slack, Stripe, etc.
-    source_file: Optional[str] = None
-    source_url: Optional[str] = None
-    raw_value: Optional[str] = None  # store only partial/masked for safety
-    is_active: Optional[bool] = None
-    commit_hash: Optional[str] = None
-    line_number: Optional[int] = None
-    detector: Optional[str] = None  # gitleaks, trufflehog, etc.
+    service: str | None = None  # AWS, GitHub, Slack, Stripe, etc.
+    source_file: str | None = None
+    source_url: str | None = None
+    raw_value: str | None = None  # store only partial/masked for safety
+    is_active: bool | None = None
+    commit_hash: str | None = None
+    line_number: int | None = None
+    detector: str | None = None  # gitleaks, trufflehog, etc.
 
 
 class TechnologyEntity(BaseEntity):
     entity_type: EntityType = EntityType.TECHNOLOGY
     product: str = ""
-    vendor: Optional[str] = None
-    version: Optional[str] = None
-    cpe: Optional[str] = None
-    category: Optional[str] = None  # cms, framework, server, etc.
+    vendor: str | None = None
+    version: str | None = None
+    cpe: str | None = None
+    category: str | None = None  # cms, framework, server, etc.
     is_eol: bool = False
-    eol_date: Optional[datetime] = None
+    eol_date: datetime | None = None
     cve_count: int = 0
 
 
 class CVEEntity(BaseEntity):
     entity_type: EntityType = EntityType.CVE
     cve_id: str = ""
-    cvss_score: Optional[float] = None
-    cvss_vector: Optional[str] = None
-    cvss_version: Optional[str] = None
-    epss_score: Optional[float] = None
-    epss_percentile: Optional[float] = None
+    cvss_score: float | None = None
+    cvss_vector: str | None = None
+    cvss_version: str | None = None
+    epss_score: float | None = None
+    epss_percentile: float | None = None
     is_kev: bool = False            # CISA Known Exploited Vulnerabilities
     has_public_exploit: bool = False
-    exploit_urls: List[str] = Field(default_factory=list)
-    description: Optional[str] = None
-    affected_products: List[str] = Field(default_factory=list)
-    published_date: Optional[datetime] = None
+    exploit_urls: list[str] = Field(default_factory=list)
+    description: str | None = None
+    affected_products: list[str] = Field(default_factory=list)
+    published_date: datetime | None = None
 
 
 class SocialAccountEntity(BaseEntity):
     entity_type: EntityType = EntityType.SOCIAL_ACCOUNT
     platform: str = ""
     username: str = ""
-    display_name: Optional[str] = None
-    url: Optional[str] = None
-    bio: Optional[str] = None
-    follower_count: Optional[int] = None
-    following_count: Optional[int] = None
-    post_count: Optional[int] = None
+    display_name: str | None = None
+    url: str | None = None
+    bio: str | None = None
+    follower_count: int | None = None
+    following_count: int | None = None
+    post_count: int | None = None
     is_verified: bool = False
-    profile_image_url: Optional[str] = None
+    profile_image_url: str | None = None
 
 
 class UsernameEntity(BaseEntity):
     entity_type: EntityType = EntityType.USERNAME
     username: str = ""
-    platforms_found: List[str] = Field(default_factory=list)
-    platform_urls: Dict[str, str] = Field(default_factory=dict)
+    platforms_found: list[str] = Field(default_factory=list)
+    platform_urls: dict[str, str] = Field(default_factory=dict)
 
 
 class URLEntity(BaseEntity):
     entity_type: EntityType = EntityType.URL
     url: str = ""
-    domain: Optional[str] = None
-    path: Optional[str] = None
-    status_code: Optional[int] = None
-    content_type: Optional[str] = None
-    title: Optional[str] = None
-    technologies: List[str] = Field(default_factory=list)
+    domain: str | None = None
+    path: str | None = None
+    status_code: int | None = None
+    content_type: str | None = None
+    title: str | None = None
+    technologies: list[str] = Field(default_factory=list)
     interesting: bool = False
-    interesting_reason: Optional[str] = None
+    interesting_reason: str | None = None
 
 
 class FileArtifactEntity(BaseEntity):
     entity_type: EntityType = EntityType.FILE_ARTIFACT
     filename: str = ""
-    url: Optional[str] = None
-    file_type: Optional[str] = None
-    file_hash: Optional[str] = None
-    creator: Optional[str] = None
-    created_date: Optional[datetime] = None
-    modified_date: Optional[datetime] = None
-    internal_paths: List[str] = Field(default_factory=list)
-    software_info: List[str] = Field(default_factory=list)
-    username_leaks: List[str] = Field(default_factory=list)
+    url: str | None = None
+    file_type: str | None = None
+    file_hash: str | None = None
+    creator: str | None = None
+    created_date: datetime | None = None
+    modified_date: datetime | None = None
+    internal_paths: list[str] = Field(default_factory=list)
+    software_info: list[str] = Field(default_factory=list)
+    username_leaks: list[str] = Field(default_factory=list)
 
 
 # ── Relationship Model ────────────────────────────────────────────────────────
@@ -341,7 +340,7 @@ class EntityRelationship(BaseModel):
     target_id: str
     rel_type: RelationshipType
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
-    evidence: Optional[str] = None
-    source_tool: Optional[str] = None
+    evidence: str | None = None
+    source_tool: str | None = None
     timestamp: datetime = Field(default_factory=datetime.utcnow)
-    metadata: Dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)

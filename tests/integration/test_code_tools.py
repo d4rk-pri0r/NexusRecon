@@ -49,18 +49,15 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, patch
 
 import httpx
-import pytest
 import respx
 from httpx import Response
 
-from tests.fixtures import load_fixture, load_text_fixture
-
-from nexusrecon.tools.code.dockerhub_tool import DockerHubTool
-from nexusrecon.tools.code.github_tool import GitHubTool
-from nexusrecon.tools.code.gitdorker_tool import GitDorkerTool
-from nexusrecon.tools.code.postman_tool import PostmanTool
 from nexusrecon.tools.cloud.github_actions_tool import GitHubActionsTool
-
+from nexusrecon.tools.code.dockerhub_tool import DockerHubTool
+from nexusrecon.tools.code.gitdorker_tool import GitDorkerTool
+from nexusrecon.tools.code.github_tool import GitHubTool
+from nexusrecon.tools.code.postman_tool import PostmanTool
+from tests.fixtures import load_fixture, load_text_fixture
 
 # ────────────────────────────────────────────────────────────────────────
 # github_recon — api.github.com (orgs, repos, /search/code)

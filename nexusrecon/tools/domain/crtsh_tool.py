@@ -1,8 +1,10 @@
 """Certificate Transparency parsing via crt.sh."""
 from __future__ import annotations
-import hashlib
-from typing import Any, Dict, List, Optional
+
+from typing import Any
+
 import httpx
+
 from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
 

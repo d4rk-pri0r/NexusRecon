@@ -1,7 +1,7 @@
 """FullHunt, attack surface enumeration."""
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any
 
 import httpx
 
@@ -42,10 +42,10 @@ class FullHuntTool(BaseHTTPTool):
                     return fail
 
                 raw = resp.json()
-                hosts: List[str] = raw.get("hosts", [])
-                metadata: Dict[str, Any] = raw.get("metadata", {})
+                hosts: list[str] = raw.get("hosts", [])
+                metadata: dict[str, Any] = raw.get("metadata", {})
 
-                data: Dict[str, Any] = {
+                data: dict[str, Any] = {
                     "domain": target,
                     # Real FullHunt response (per docs.fullhunt.io/docs/api/domain-apis)
                     # has ``metadata.all_results_count``; an earlier

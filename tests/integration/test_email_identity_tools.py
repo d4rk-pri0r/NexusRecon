@@ -20,22 +20,18 @@ Tools covered: ``hunter``, ``email_format``, ``email_sec``,
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import dns.resolver
-import pytest
 import respx
 from httpx import Response
-
-from tests.fixtures import load_fixture
 
 from nexusrecon.tools.domain.email_sec_tool import EmailSecTool
 from nexusrecon.tools.identity.email_format_tool import EmailFormatTool
 from nexusrecon.tools.identity.holehe_tool import HoloTool
 from nexusrecon.tools.identity.hunter_tool import HunterTool
 from nexusrecon.tools.identity.phonebook_tool import PhonebookTool
-
+from tests.fixtures import load_fixture
 
 # ────────────────────────────────────────────────────────────────────────
 # Hunter — hunter.io/api-documentation/v2 (domain-search endpoint)

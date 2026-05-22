@@ -1,8 +1,8 @@
 """CertStream — recent crt.sh certificates (last 7 days) with phishing-infra detection."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import httpx
 from dateutil import parser as dateutil_parser
@@ -46,9 +46,9 @@ class CertStreamTool(OSINTTool):
     dynamic_trigger_hints = ["certificate issued for new domain", "typosquat domain detected"]
 
     async def run(self, target: str, **kwargs: Any) -> ToolResult:
-        cutoff = datetime.now(timezone.utc) - timedelta(days=7)
-        recent: List[Dict[str, Any]] = []
-        potential_phishing: List[Dict[str, Any]] = []
+        cutoff = datetime.now(UTC) - timedelta(days=7)
+        recent: list[dict[str, Any]] = []
+        potential_phishing: list[dict[str, Any]] = []
 
         try:
             async with httpx.AsyncClient(headers=_HEADERS, timeout=30.0, follow_redirects=True) as client:
@@ -71,7 +71,7 @@ class CertStreamTool(OSINTTool):
             try:
                 ts = dateutil_parser.parse(ts_str)
                 if ts.tzinfo is None:
-                    ts = ts.replace(tzinfo=timezone.utc)
+                    ts = ts.replace(tzinfo=UTC)
                 if ts < cutoff:
                     continue
             except Exception:

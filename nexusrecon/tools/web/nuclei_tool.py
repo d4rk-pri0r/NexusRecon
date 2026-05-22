@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
@@ -24,7 +24,7 @@ class NucleiTool(OSINTTool):
     target_types = ["domain", "ip"]
 
     async def run(self, target: str, **kwargs: Any) -> ToolResult:
-        target_type = kwargs.get("target_type", "domain")
+        kwargs.get("target_type", "domain")
         url = target if target.startswith("http") else f"https://{target}"
 
         with tempfile.NamedTemporaryFile(
@@ -33,7 +33,7 @@ class NucleiTool(OSINTTool):
             output_path = out_f.name
 
         try:
-            proc = self.run_subprocess(
+            self.run_subprocess(
                 [
                     "nuclei",
                     "-u", url,
@@ -50,7 +50,7 @@ class NucleiTool(OSINTTool):
                 timeout_sec=300,
             )
 
-            findings: List[Dict[str, Any]] = []
+            findings: list[dict[str, Any]] = []
             out_file = Path(output_path)
             if out_file.exists():
                 for line in out_file.read_text(encoding="utf-8").splitlines():
@@ -87,7 +87,7 @@ class NucleiTool(OSINTTool):
         critical = [f for f in findings if f["severity"] == "critical"]
         high = [f for f in findings if f["severity"] == "high"]
 
-        data: Dict[str, Any] = {
+        data: dict[str, Any] = {
             "target": url,
             "total_findings": len(findings),
             "critical": len(critical),

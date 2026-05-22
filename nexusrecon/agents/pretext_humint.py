@@ -1,7 +1,7 @@
 """Pretext & Human Intelligence agent — exec profiling, news, job posting mining."""
 from __future__ import annotations
-from nexusrecon.agents.base import BaseNexusAgent
 
+from nexusrecon.agents.base import BaseNexusAgent
 
 PRETEXT_ROLE = """
 Pretexting Research and Human Intelligence Specialist. You mine public

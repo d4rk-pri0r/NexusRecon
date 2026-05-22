@@ -1,6 +1,7 @@
 """Unit tests for AgentExecutor and MockLLM."""
-import pytest
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from nexusrecon.graph.agent_executor import (
     AgentExecutor,
@@ -8,7 +9,6 @@ from nexusrecon.graph.agent_executor import (
     MockLLMResponse,
     get_llm_from_config,
 )
-
 
 # ── MockLLM Tests ────────────────────────────────────────────────────────────
 
@@ -205,7 +205,7 @@ class TestAgentExecutor:
         assert "completed_phases" not in context
 
     def test_audit_findings(self):
-        config = MagicMock()
+        MagicMock()
         valid_findings = [
             {"finding_id": "f-1", "title": "Test", "source": "crtsh",
              "description": "desc", "severity": "high", "confidence": 0.9,
@@ -215,7 +215,6 @@ class TestAgentExecutor:
         ]
         # EvidenceAuditorAgent instantiation fails due to BaseNexusAgent dataclass.
         # Verify the static method pattern works when audit_findings is callable.
-        import types
         mock_fn = MagicMock(return_value=(valid_findings, []))
         with patch("nexusrecon.graph.agent_executor.EvidenceAuditorAgent") as mock_cls:
             mock_cls.return_value.audit_findings = mock_fn

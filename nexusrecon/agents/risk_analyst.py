@@ -1,7 +1,7 @@
 """Risk & Attack Surface Analyst agent — likelihood × impact scoring."""
 from __future__ import annotations
-from nexusrecon.agents.base import BaseNexusAgent
 
+from nexusrecon.agents.base import BaseNexusAgent
 
 RISK_ROLE = """
 Risk and Attack Surface Analyst. You prioritize findings for red team

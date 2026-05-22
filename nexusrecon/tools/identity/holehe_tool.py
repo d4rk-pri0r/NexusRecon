@@ -20,7 +20,7 @@ Two design points that changed during Day 6 OPSEC hardening:
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Dict, List
+from typing import Any
 
 import httpx
 
@@ -64,7 +64,7 @@ class HoloTool(OSINTTool):
             "Accept": "application/json",
         }
 
-        out: List[Dict[str, Any]] = []
+        out: list[dict[str, Any]] = []
         async with httpx.AsyncClient(
             headers=headers,
             timeout=10.0,

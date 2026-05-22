@@ -17,8 +17,8 @@ from __future__ import annotations
 import asyncio
 import json
 import re
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import UTC, datetime
+from typing import Any
 
 import structlog
 
@@ -36,7 +36,7 @@ LITE_DISPATCH_PHASES: frozenset[str] = frozenset({"phase1", "phase4", "phase7"})
 
 # Map tool category value → state key for result merging.
 # Rule: each Category enum value maps to the state key that best represents its findings.
-CATEGORY_TO_STATE_KEY: Dict[str, str] = {
+CATEGORY_TO_STATE_KEY: dict[str, str] = {
     "domain": "domain_intel",
     "subdomain": "subdomain_intel",
     "dns": "domain_intel",
@@ -83,9 +83,9 @@ def _build_dispatch_prompt(state: CampaignGraphState) -> str:
     ]
 
     # Only list tools that have trigger hints
-    tool_summaries: List[str] = []
+    tool_summaries: list[str] = []
     for tool in registry.available_tools():
-        hints: List[str] = getattr(tool, "dynamic_trigger_hints", [])
+        hints: list[str] = getattr(tool, "dynamic_trigger_hints", [])
         if hints:
             tool_summaries.append(
                 f"  - {tool.name} [{tool.category.value}]"
@@ -93,8 +93,8 @@ def _build_dispatch_prompt(state: CampaignGraphState) -> str:
                 f" hints={hints}"
             )
 
-    already_run_lines: List[str] = [f"  - {x}" for x in already_run] if already_run else ["  (none)"]
-    tool_lines: List[str] = tool_summaries if tool_summaries else ["  (none with hints)"]
+    already_run_lines: list[str] = [f"  - {x}" for x in already_run] if already_run else ["  (none)"]
+    tool_lines: list[str] = tool_summaries if tool_summaries else ["  (none with hints)"]
 
     lines = [
         "## Current Intelligence State",
@@ -116,7 +116,7 @@ def _build_dispatch_prompt(state: CampaignGraphState) -> str:
 
 # ── JSON parse ────────────────────────────────────────────────────────────────
 
-def _parse_dispatch_plan(raw: str) -> List[Dict[str, Any]]:
+def _parse_dispatch_plan(raw: str) -> list[dict[str, Any]]:
     """
     Fail-safe: extract and parse a JSON array from LLM output.
     Returns [] on any failure — never raises.
@@ -136,9 +136,9 @@ def _parse_dispatch_plan(raw: str) -> List[Dict[str, Any]]:
 # ── Plan validation ───────────────────────────────────────────────────────────
 
 def _validate_plan(
-    plan: List[Dict[str, Any]],
+    plan: list[dict[str, Any]],
     state: CampaignGraphState,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """
     Validate each dispatch item:
     - required fields present
@@ -150,9 +150,9 @@ def _validate_plan(
     """
     registry = get_registry()
     dispatch_log = state.get("dynamic_dispatch_log", [])
-    already_run: set[Tuple[str, str]] = {(d["tool"], d["target"]) for d in dispatch_log}
+    already_run: set[tuple[str, str]] = {(d["tool"], d["target"]) for d in dispatch_log}
 
-    valid: List[Dict[str, Any]] = []
+    valid: list[dict[str, Any]] = []
     for item in plan:
         tool_name = str(item.get("tool", "")).strip()
         target = str(item.get("target", "")).strip()
@@ -168,7 +168,7 @@ def _validate_plan(
             log.info("Dynamic dispatch skipped: tool not in registry", tool=tool_name)
             continue
 
-        accepted_types: List[str] = getattr(tool_obj, "target_types", [])
+        accepted_types: list[str] = getattr(tool_obj, "target_types", [])
         if target_type not in accepted_types:
             log.info(
                 "Dynamic dispatch skipped: target_type mismatch",
@@ -198,7 +198,7 @@ def _validate_plan(
 # ── Execution ─────────────────────────────────────────────────────────────────
 
 async def _execute_plan(
-    plan: List[Dict[str, Any]],
+    plan: list[dict[str, Any]],
     state: CampaignGraphState,
 ) -> CampaignGraphState:
     """
@@ -209,8 +209,8 @@ async def _execute_plan(
     dispatch_log = list(state.get("dynamic_dispatch_log", []))
 
     async def _run_one(
-        item: Dict[str, Any],
-    ) -> Tuple[Dict[str, Any], Optional[Any]]:
+        item: dict[str, Any],
+    ) -> tuple[dict[str, Any], Any | None]:
         try:
             result = await registry.execute(
                 item["tool"], item["target"], item["target_type"]
@@ -233,13 +233,13 @@ async def _execute_plan(
             continue
         item, result = entry
 
-        log_entry: Dict[str, Any] = {
+        log_entry: dict[str, Any] = {
             "tool": item["tool"],
             "target": item["target"],
             "target_type": item["target_type"],
             "reason": item["reason"],
             "phase": current_phase,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "success": result is not None and getattr(result, "success", False),
         }
         dispatch_log.append(log_entry)

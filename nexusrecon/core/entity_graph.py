@@ -13,17 +13,15 @@ a single node with combined sources and metadata.
 from __future__ import annotations
 
 import json
-import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple, Type, TypeVar
+from typing import Any, TypeVar
 
 import networkx as nx
 import structlog
 
 from nexusrecon.models.entities import (
     BaseEntity,
-    CertificateEntity,
     CloudAssetEntity,
     CVEEntity,
     DomainEntity,
@@ -31,16 +29,12 @@ from nexusrecon.models.entities import (
     EntityRelationship,
     EntityType,
     IPAddressEntity,
-    OrganizationEntity,
     PersonEntity,
     RelationshipType,
     RepositoryEntity,
     SecretEntity,
-    SocialAccountEntity,
     SubdomainEntity,
     TechnologyEntity,
-    URLEntity,
-    UsernameEntity,
 )
 
 log = structlog.get_logger(__name__)
@@ -59,7 +53,7 @@ class EntityGraph:
         self.campaign_id = campaign_id
         self.engagement_id = engagement_id
         self.graph = nx.DiGraph()
-        self._value_index: Dict[Tuple[str, str], str] = {}  # (type, value) -> entity_id
+        self._value_index: dict[tuple[str, str], str] = {}  # (type, value) -> entity_id
 
     # ── Entity management ─────────────────────────────────────────────────────
 
@@ -111,17 +105,17 @@ class EntityGraph:
         log.debug("Added entity", entity_type=entity.entity_type.value, value=entity.value)
         return entity_id
 
-    def get_entity_id(self, entity_type: EntityType, value: str) -> Optional[str]:
+    def get_entity_id(self, entity_type: EntityType, value: str) -> str | None:
         """Return entity_id for a known (type, value) pair, or None."""
         return self._value_index.get((entity_type.value, value.lower()))
 
-    def get_entity(self, entity_id: str) -> Optional[Dict[str, Any]]:
+    def get_entity(self, entity_id: str) -> dict[str, Any] | None:
         """Return entity node data dict, or None."""
         if entity_id in self.graph:
             return dict(self.graph.nodes[entity_id])
         return None
 
-    def get_entities_by_type(self, entity_type: EntityType) -> List[Dict[str, Any]]:
+    def get_entities_by_type(self, entity_type: EntityType) -> list[dict[str, Any]]:
         """Return all entities of a given type."""
         return [
             dict(data)
@@ -167,8 +161,8 @@ class EntityGraph:
         rel_type: RelationshipType,
         *,
         confidence: float = 1.0,
-        evidence: Optional[str] = None,
-        source_tool: Optional[str] = None,
+        evidence: str | None = None,
+        source_tool: str | None = None,
     ) -> None:
         """Convenience method to add a relationship."""
         rel = EntityRelationship(
@@ -237,9 +231,9 @@ class EntityGraph:
 
     # ── Statistics ────────────────────────────────────────────────────────────
 
-    def stats(self) -> Dict[str, Any]:
+    def stats(self) -> dict[str, Any]:
         """Return graph statistics."""
-        type_counts: Dict[str, int] = {}
+        type_counts: dict[str, int] = {}
         for _, data in self.graph.nodes(data=True):
             t = data.get("entity_type", "unknown")
             type_counts[t] = type_counts.get(t, 0) + 1
@@ -251,7 +245,7 @@ class EntityGraph:
             "campaign_id": self.campaign_id,
         }
 
-    def get_neighbors(self, entity_id: str) -> List[Dict[str, Any]]:
+    def get_neighbors(self, entity_id: str) -> list[dict[str, Any]]:
         """Return all entities directly connected to entity_id."""
         result = []
         for neighbor_id in nx.all_neighbors(self.graph, entity_id):
@@ -261,7 +255,7 @@ class EntityGraph:
         return result
 
     def find_path(self, source_value: str, target_value: str,
-                  source_type: EntityType, target_type: EntityType) -> Optional[List[str]]:
+                  source_type: EntityType, target_type: EntityType) -> list[str] | None:
         """Find shortest path between two entities by value."""
         sid = self.get_entity_id(source_type, source_value)
         tid = self.get_entity_id(target_type, target_value)
@@ -274,7 +268,7 @@ class EntityGraph:
 
     # ── Serialization ─────────────────────────────────────────────────────────
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize graph to a dict suitable for JSON storage."""
         return {
             "campaign_id": self.campaign_id,
@@ -290,7 +284,7 @@ class EntityGraph:
             "stats": self.stats(),
         }
 
-    def to_json(self, path: Optional[str | Path] = None) -> str:
+    def to_json(self, path: str | Path | None = None) -> str:
         """Serialize to JSON string (and optionally write to file)."""
         data = json.dumps(self.to_dict(), default=str, indent=2)
         if path:
@@ -298,7 +292,7 @@ class EntityGraph:
         return data
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "EntityGraph":
+    def from_dict(cls, data: dict[str, Any]) -> EntityGraph:
         """Restore from serialized dict."""
         g = cls(data.get("campaign_id", ""), data.get("engagement_id", ""))
         for node in data.get("nodes", []):

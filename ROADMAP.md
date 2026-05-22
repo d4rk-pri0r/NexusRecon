@@ -63,19 +63,30 @@ each is independently testable.
       - Findings deduplicated across overlapping tools.
       - Every CVE citation resolves to a real CVE record.
       - Scope hash + tool versions in every report footer.
-- [ ] **`BaseHTTPTool` helper.** Extract the
+- [x] **`BaseHTTPTool` helper.** Extract the
       "401/403 = auth fail, 429 = rate limit, other non-200 = error"
       pattern from the 9 individual fix commits into a single base
       class so future tools inherit the right behaviour by default.
-      Eliminates the silent-swallow bug class structurally.
+      Eliminates the silent-swallow bug class structurally. Shipped
+      as `nexusrecon/tools/base.py::BaseHTTPTool`; every Phase D + E
+      HTTP tool subclasses it.
 - [ ] **Live-drift CI schedule.** Run `tests/live/` weekly via
       GitHub Actions (scheduled workflow) with whatever API secrets
       are available, surfacing schema drift on the providers we can
       authenticate against. This is the tripwire for wayback /
       fullhunt class bugs.
-- [ ] **Stubbed-tool policy.** Either implement, refuse to register,
-      or rename the description to be explicit. Operators shouldn't
-      discover a tool is a stub by reading the source mid-campaign.
+- [x] **Stubbed-tool policy.** `OSINTTool.stubbed: bool` class
+      attribute (default False). When True, `is_available()` returns
+      False so the registry keeps the tool out of
+      `available_tools()` and the LLM dispatcher cannot select it;
+      `list_tools()` prepends `[STUB] ` to the description so the
+      catalog surfaces the status. `tests/unit/test_stubbed_tools.py`
+      pins the inventory ── adding or removing a stub becomes a
+      conscious decision. Current inventory: `gowitness` (sole
+      remaining stub, awaiting real subprocess wrapper). `gau` was
+      mislabelled (real subprocess implementation existed) — fixed.
+      `gcp_recon` partial stubs (Firebase / Cloud Run) are flagged
+      inline in the per-feature output.
 - [ ] **Fresh-VM install verification.** Test `./install.sh` on
       M-series macOS, Linux x86_64, Linux arm64. Document any
       platform-specific failures. Confirm `pipx install nexusrecon`
@@ -182,42 +193,48 @@ Pivot from corporate identity (`jane.doe@gitlab.com`, VP Engineering,
 GitLab) to personal identity (`jane.doe.82@gmail.com`, lives in SF,
 runs marathons), and surface credential-exposure paths via breach data.
 
-- [ ] **D1** `nexusrecon/core/identity_graph.py` — first-class
+- [x] **D1** `nexusrecon/core/identity_graph.py` — first-class
       ``Identity`` model with ``corp_identifiers``,
       ``personal_identifiers``, ``linked_accounts``,
       ``credential_exposures``, ``confidence_per_link`` sub-fields.
       Replaces the current dict-of-dicts ``email_intel.emails[em]``
       pattern.
-- [ ] **D2** `nexusrecon/core/personal_handle_derivation.py` —
+- [x] **D2** `nexusrecon/core/personal_handle_derivation.py` —
       generates personal handle candidates from
       ``(name, optional_age_range, optional_location,
         optional_interests)``. Patterns include name + year, name +
       hobby, nickname variants, common personal-email forms
       (``first.last@gmail``, ``firstinitial.last+year@gmail``, etc.).
       LLM-assisted hobby/interest expansion via the dispatcher.
-- [ ] **D3** `nexusrecon/tools/identity/personal_pivot_tool.py` —
+- [x] **D3** `nexusrecon/tools/identity/personal_pivot_tool.py` —
       orchestrator. Takes a confirmed corp identity, runs personal
       handle derivation, fires maigret against personal-service tiers
       (Reddit, Discord, gaming, dating, hobby forums), runs HIBP /
       IntelX / DeHashed against personal email candidates, extends
       the identity graph.
-- [ ] **D4** `nexusrecon/core/credential_correlation.py` — takes the
+- [x] **D4** `nexusrecon/core/credential_correlation.py` — takes the
       identity graph + breach hits and produces ranked credential-
       spray candidates. Output is the "hail mary punch list" with
       explicit risk warnings (account lockout risk, IDS noise,
-      engagement-scope flags).
-- [ ] **D5** `nexusrecon/tools/intel/dehashed_tool.py` — real
+      engagement-scope flags). 46 unit tests. MITRE T1110.003/T1110.002/
+      T1550.002/T1078/T1589.002 mapping. Never auto-executes.
+- [x] **D5** `nexusrecon/tools/intel/dehashed_tool.py` — real
       DeHashed integration (paid API key). Returns password-bearing
-      breach hits with cleartext/hashed credentials.
-- [ ] **D6** Enhanced `nexusrecon/tools/identity/hudsonrock_tool.py`
+      breach hits with cleartext/hashed credentials. HTTP Basic Auth
+      with DEHASHED_USERNAME:DEHASHED_API_KEY. 10 integration tests.
+- [x] **D6** Enhanced `nexusrecon/tools/identity/hudsonrock_tool.py`
       — today reports only "compromised yes/no". Surface real
       Cavalier data: captured URLs (which services the infostealer
       logged into), passwords, cookies, system fingerprint.
-- [ ] **D7** New Phase 2.5 wiring in `nexusrecon/graph/nodes.py` +
+      Optional HUDSONROCK_API_KEY unlocks full credential detail.
+      Backward-compatible (community tier unchanged). 9 integration tests.
+- [x] **D7** New Phase 2.5 wiring in `nexusrecon/graph/nodes.py` +
       new deliverable `credential_exposure_paths.md`. Phase 2.5 runs
       AFTER corp identity confirmed (Phase 2), BEFORE code-leakage /
       vuln correlation (Phase 3+) so the credential exposure paths
-      are available to the risk_analyst in Phase 8.
+      are available to the risk_analyst in Phase 8. Generates both
+      `credential_exposure_paths.md` (operator punch list) and
+      `credential_punch_list.json` (machine-readable).
 
 ### Phase E — Relationship graph + pretext scoring
 
@@ -225,52 +242,62 @@ Mine the public relationship graph that makes spear phishing actually
 work: WHO each target receives email from, WHAT topics are plausible
 given their public activity, WHEN pretexts are time-sensitive.
 
-- [ ] **E1** `nexusrecon/core/relationship_graph.py` — human-to-human
+- [x] **E1** `nexusrecon/core/relationship_graph.py` — human-to-human
       edges as first-class data. Edge fields: ``(source_identity,
       target_identity, interaction_type, strength, last_observed,
       sources)``. Weighted by interaction depth (co-author > follower)
-      and recency-decayed.
-- [ ] **E2** `nexusrecon/tools/identity/github_social_tool.py` —
+      and recency-decayed. 76 unit tests. Pure Python.
+- [x] **E2** `nexusrecon/tools/identity/github_social_tool.py` —
       commit co-authors, repo collaborators, issue/PR discussion
-      participants, follow graph. Free via GitHub API.
-- [ ] **E3** `nexusrecon/tools/identity/mastodon_social_tool.py` —
-      follows / boosts / mentions / replies. Federated ActivityPub
-      crawling across the major instances. Free.
-- [ ] **E4** `nexusrecon/tools/identity/bluesky_social_tool.py` —
-      follow + interaction graph via AT Protocol. Free.
-- [ ] **E5** `nexusrecon/tools/identity/linkedin_social_tool.py` —
-      aggressive scraper / API wrapper. Per the locked-in decision
-      above. Returns: title history, current title, connections (or
-      a sample), recent activity, mentioned colleagues, endorsements.
-      Isolated in this single module so it's swappable if posture
-      changes.
-- [ ] **E6** `nexusrecon/tools/intel/business_partner_tool.py` —
-      partner / customer / vendor relationships from
-      Crunchbase (paid API), BuiltWith (tech stack vendors),
-      press releases, DNS TXT vendor inference, customer-logos /
-      case-study scraping.
-- [ ] **E7** `nexusrecon/tools/pretext/conference_speaker_tool.py` —
-      scrape conference sites for talks + co-speakers + topic tags.
-      DEFCON / BSides / RSA / KubeCon / FOSDEM / company-specific
-      events. Co-speaker relationships are a strong pretext signal.
-- [ ] **E8** `nexusrecon/tools/pretext/recent_activity_tool.py` —
-      time-windowed recent posts, news mentions, announcements,
-      changelog / blog updates per target. Powers "what's plausibly
-      topical right now."
-- [ ] **E9** `nexusrecon/core/pretext_scoring.py` — score
-      ``(sender × topic × timing)`` tuples for spear-phishing
-      plausibility. Multi-signal weighted with recency decay; never
-      claims privacy-invading relationships absent public evidence.
-- [ ] **E10** Enhanced `nexusrecon/agents/phishing_drafter.py` —
-      accepts the full pretext intelligence: target identity +
-      relationship graph + topical interests + recent activity.
-      Produces drafts that actually reference real interactions
-      rather than generic boilerplate. Still gated on
-      ``--generate-phishing``.
-- [ ] **E11** Phase wiring + new deliverable
-      `spear_phishing_intelligence.md`. Per-target dossier: top 3
-      plausible senders, top 3 plausible pretexts, recent activity
-      timeline, recommended draft framing.
+      participants, follow graph. Free via GitHub API. 33 unit tests.
+- [x] **E3** `nexusrecon/tools/identity/mastodon_social_tool.py` —
+      follows / boosts / mentions / replies. Anonymous reads against a
+      hardcoded default-instance list (mastodon.social, hachyderm.io,
+      infosec.exchange, fosstodon.org, mas.to, tech.lgbt). 35 unit tests.
+- [x] **E4** `nexusrecon/tools/identity/bluesky_social_tool.py` —
+      follow + interaction graph via the AT Protocol xrpc API. Raw
+      HTTP (no SDK dep). 32 unit tests.
+- [x] **E5** `nexusrecon/tools/identity/linkedin_social_tool.py` —
+      isolated `linkedin-api` wrapper. Cookie auth (LINKEDIN_LI_AT +
+      LINKEDIN_JSESSIONID) preferred, user/pass fallback. Returns
+      title history, current title, recent posts, post reactors /
+      commenters, skill endorsements, mentioned colleagues. 45 unit
+      tests.
+- [x] **E6** `nexusrecon/tools/intel/business_partner_tool.py` —
+      aggregator that calls the existing `crunchbase` tool via the
+      registry + BuiltWith API + DNS TXT vendor inference (SPF + MX)
+      + press-page scraping. Emits org-to-org edges. 21 unit tests.
+- [x] **E7** `nexusrecon/tools/pretext/conference_speaker_tool.py` —
+      hardcoded site list (DEFCON, BSides, RSA, KubeCon, FOSDEM,
+      BlackHat, Strange Loop, USENIX). Per-site parser interface
+      (FOSDEM has a working parser; others ship as stubs). Co-speaker
+      edges feed the relationship graph. 29 unit tests.
+- [x] **E8** `nexusrecon/tools/pretext/news_tool.py` (extended
+      in-place) — time-windowed `RecentActivity` records alongside
+      the existing `articles` list. 90-day default half-life,
+      configurable via `time_window_days` kwarg. `RecentActivity`
+      dataclass lives in `nexusrecon/core/recent_activity.py`. 18
+      unit tests + 27 for the core module.
+- [x] **E9** `nexusrecon/core/pretext_scoring.py` — score
+      ``(sender × topic × timing)`` tuples via geometric mean of three
+      recency-decayed axes. Every candidate carries a `sources` audit
+      trail. `target_ids: list[str] | None = None` parameter narrows
+      scope (defaults to all identities). 34 unit tests. Pure Python.
+- [x] **E10** Enhanced `nexusrecon/agents/phishing_drafter.py` —
+      expanded backstory + JSON schema (subject /
+      sender_display_name / sender_address / body_markdown /
+      rationale / sources). Documents the do-not-fabricate rule,
+      DMARC-driven sender-domain decision, no-draft fallback for
+      low-signal targets. Still gated on ``--generate-phishing``.
+- [x] **E11** Phase 7.7 (`phase7_7_pretext_intelligence`) wires the
+      E2-E9 modules into the workflow between Phase 7.5 and Phase 8.
+      Emits `spear_phishing_intelligence.md` (per-target dossier)
+      + `pretext_candidates.json` (machine-readable). New CLI flag
+      `--pretext-targets` narrows scoring. State slots:
+      `relationship_graph`, `pretext_scores`,
+      `spear_phishing_intelligence`. 16 unit tests pin the phase
+      ordering, state shape, narrowing, drafter gating, and report
+      output.
 
 ### Phase D + E publishing posture
 

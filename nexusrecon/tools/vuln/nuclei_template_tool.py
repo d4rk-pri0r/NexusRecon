@@ -1,7 +1,7 @@
 """Nuclei template existence check — is there a ready-to-run template for this CVE?"""
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any
 
 import httpx
 
@@ -27,7 +27,7 @@ class NucleiTemplateTool(OSINTTool):
         cve_id = target.upper()
         token = self.config.get_secret("github_token")
 
-        headers: Dict[str, str] = {
+        headers: dict[str, str] = {
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
             "User-Agent": random_ua(),
@@ -60,8 +60,8 @@ class NucleiTemplateTool(OSINTTool):
                         error=f"GitHub returned {resp.status_code}",
                     )
 
-                items: List[Dict[str, Any]] = resp.json().get("items", [])
-                templates: List[Dict[str, Any]] = [
+                items: list[dict[str, Any]] = resp.json().get("items", [])
+                templates: list[dict[str, Any]] = [
                     {
                         "name": item.get("name"),
                         "path": item.get("path"),
@@ -76,7 +76,7 @@ class NucleiTemplateTool(OSINTTool):
                     first_path = templates[0]["path"]
                     run_hint = f"nuclei -u <target> -t {first_path}"
 
-                data: Dict[str, Any] = {
+                data: dict[str, Any] = {
                     "cve": cve_id,
                     "has_template": len(templates) > 0,
                     "template_count": len(templates),

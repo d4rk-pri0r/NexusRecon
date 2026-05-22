@@ -1,7 +1,7 @@
 """IntelX Phonebook — email and subdomain discovery for a domain."""
 from __future__ import annotations
 
-from typing import Any, Dict, List, Set
+from typing import Any
 
 import httpx
 
@@ -47,10 +47,10 @@ class PhonebookTool(OSINTTool):
                     return ToolResult(success=False, source=self.name, error=f"IntelX returned {resp.status_code}")
 
                 raw = resp.json()
-                selectors: List[Dict[str, Any]] = raw.get("selectors", [])
+                selectors: list[dict[str, Any]] = raw.get("selectors", [])
 
-                emails: Set[str] = set()
-                subdomains: Set[str] = set()
+                emails: set[str] = set()
+                subdomains: set[str] = set()
                 for s in selectors:
                     val = s.get("selectorvalue", "")
                     if "@" in val:
@@ -58,7 +58,7 @@ class PhonebookTool(OSINTTool):
                     elif "." in val:
                         subdomains.add(val)
 
-                data: Dict[str, Any] = {
+                data: dict[str, Any] = {
                     "target": target,
                     "total_selectors": len(selectors),
                     "email_count": len(emails),

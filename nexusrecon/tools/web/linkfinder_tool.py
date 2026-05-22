@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Set
+from typing import Any
 from urllib.parse import urljoin, urlparse
 
 import httpx
@@ -35,8 +35,8 @@ class LinkFinderTool(OSINTTool):
         base_url = target if target.startswith("http") else f"https://{target}"
         parsed_base = urlparse(base_url)
 
-        endpoints: Set[str] = set()
-        js_files_scanned: List[str] = []
+        endpoints: set[str] = set()
+        js_files_scanned: list[str] = []
 
         headers = {
             "User-Agent": random_ua(),
@@ -55,7 +55,7 @@ class LinkFinderTool(OSINTTool):
                     return ToolResult(success=False, source=self.name, error=f"Target returned {page_resp.status_code}")
 
                 html = page_resp.text
-                script_srcs: List[str] = []
+                script_srcs: list[str] = []
                 for src in _SCRIPT_SRC.findall(html):
                     full_url = urljoin(base_url, src) if not src.startswith("http") else src
                     if any(full_url.endswith(ext) for ext in _INTERESTING_EXTENSIONS) or ".js" in full_url.split("?")[0]:
@@ -85,7 +85,7 @@ class LinkFinderTool(OSINTTool):
             if len(e) > 3 and not e.endswith((".png", ".jpg", ".gif", ".css", ".ico", ".woff", ".woff2"))
         })
 
-        data: Dict[str, Any] = {
+        data: dict[str, Any] = {
             "target": base_url,
             "js_files_scanned": len(js_files_scanned),
             "endpoint_count": len(clean_endpoints),
@@ -95,7 +95,7 @@ class LinkFinderTool(OSINTTool):
         return ToolResult(success=True, source=self.name, data=data, result_count=len(clean_endpoints))
 
 
-def _extract_endpoints(source: str, base_url: str, base_host: str, out: Set[str]) -> None:
+def _extract_endpoints(source: str, base_url: str, base_host: str, out: set[str]) -> None:
     for pattern in _ENDPOINT_PATTERNS:
         for match in pattern.findall(source):
             endpoint = match.strip()

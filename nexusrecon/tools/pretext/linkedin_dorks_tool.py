@@ -1,7 +1,7 @@
 """LinkedIn employee discovery via search engine dorks."""
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any
 
 import httpx
 
@@ -35,7 +35,7 @@ class LinkedInDorksTool(OSINTTool):
         company = target.split(".")[0].replace("-", " ").title()
         dorks = [t.replace("{company}", company) for t in _DORK_TEMPLATES]
 
-        profiles: List[Dict[str, Any]] = []
+        profiles: list[dict[str, Any]] = []
         bing_key = self.config.get_secret("bing_search_api_key")
 
         if bing_key:
@@ -63,15 +63,15 @@ class LinkedInDorksTool(OSINTTool):
             except Exception:
                 pass
 
-        data: Dict[str, Any] = {
+        data: dict[str, Any] = {
             "target": target,
             "company": company,
             "dorks": dorks,
             "profiles_found": len(profiles),
             "profiles": profiles,
             "manual_search_hint": (
-                f"Paste any dork above into Google/Bing to enumerate employees. "
-                f"Set BING_SEARCH_API_KEY in .env for automated execution."
+                "Paste any dork above into Google/Bing to enumerate employees. "
+                "Set BING_SEARCH_API_KEY in .env for automated execution."
             ) if not bing_key else None,
         }
         return ToolResult(success=True, source=self.name, data=data, result_count=len(profiles))

@@ -21,24 +21,25 @@ wire level.
 """
 from __future__ import annotations
 
+from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import Any, Dict, Iterator, Optional
+from typing import Any
 
 # ContextVar of Optional[str] for the active outbound proxy URL.
 # ``None`` means no proxy (direct connection); a string is an
 # httpx-compatible proxy URL (``http://...``, ``socks5://...``, etc.).
-_current_proxy_url: ContextVar[Optional[str]] = ContextVar(
+_current_proxy_url: ContextVar[str | None] = ContextVar(
     "nexus_opsec_proxy_url", default=None
 )
 
 
-def get_current_proxy_url() -> Optional[str]:
+def get_current_proxy_url() -> str | None:
     """Return the proxy URL set by the enclosing ``proxy_context``, or None."""
     return _current_proxy_url.get()
 
 
-def proxy_kwargs() -> Dict[str, Any]:
+def proxy_kwargs() -> dict[str, Any]:
     """Return httpx-compatible proxy kwargs for the active campaign.
 
     Returns ``{}`` when no proxy is active, or ``{"proxy": url}`` when
@@ -69,7 +70,7 @@ def proxy_kwargs() -> Dict[str, Any]:
 
 
 @contextmanager
-def proxy_context(url: Optional[str]) -> Iterator[None]:
+def proxy_context(url: str | None) -> Iterator[None]:
     """Set the proxy URL for the duration of the ``with`` block.
 
     Usage from inside the registry::

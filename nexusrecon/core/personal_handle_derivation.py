@@ -83,9 +83,8 @@ confidence-once-probed signal.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
-from typing import Iterable, List, Optional, Sequence
-
 
 # Common free / consumer email providers. The derivation produces
 # ``firstname.lastname@<provider>`` style candidates for each.
@@ -173,11 +172,11 @@ class EmailCandidate:
 class NameTokens:
     first: str
     last: str
-    middle: Optional[str] = None
-    nickname_variants: List[str] = field(default_factory=list)
+    middle: str | None = None
+    nickname_variants: list[str] = field(default_factory=list)
 
 
-def _parse_name(name: str) -> Optional[NameTokens]:
+def _parse_name(name: str) -> NameTokens | None:
     """Split a human name into first / last / optional middle.
 
     Handles common forms: ``"Jane Doe"``, ``"Jane M. Doe"``,
@@ -214,9 +213,9 @@ def _parse_name(name: str) -> Optional[NameTokens]:
 
 
 def _candidate_birth_years(
-    age_range: Optional[Sequence[int]] = None,
-    career_years: Optional[int] = None,
-) -> List[int]:
+    age_range: Sequence[int] | None = None,
+    career_years: int | None = None,
+) -> list[int]:
     """Generate a small set of plausible birth-year suffix candidates.
 
     Real personal handles often carry the user's birth year (or
@@ -228,7 +227,7 @@ def _candidate_birth_years(
     Returns 2-digit AND 4-digit forms (``85`` and ``1985``) since
     both appear in the wild.
     """
-    years: List[int] = []
+    years: list[int] = []
     current_year = 2026  # framework's reference epoch
 
     if age_range and len(age_range) == 2:
@@ -249,7 +248,7 @@ def _candidate_birth_years(
 
     # Deduplicate while preserving order.
     seen = set()
-    out: List[int] = []
+    out: list[int] = []
     for y in years:
         if 1955 <= y <= current_year - 10 and y not in seen:
             seen.add(y)
@@ -262,7 +261,7 @@ def _candidate_birth_years(
 # ──────────────────────────────────────────────────────────────────────
 
 
-def _hobby_tokens(interests: Optional[Iterable[str]]) -> List[str]:
+def _hobby_tokens(interests: Iterable[str] | None) -> list[str]:
     """Normalise hobby / interest strings into single-token suffixes
     suitable for handle construction.
 
@@ -288,7 +287,7 @@ def _hobby_tokens(interests: Optional[Iterable[str]]) -> List[str]:
         "startups", "product", "design", "ux", "growth",
         "marketing", "sales", "operations",
     ))
-    out: List[str] = []
+    out: list[str] = []
     seen = set()
     for interest in interests:
         if not interest:
@@ -334,7 +333,7 @@ _CITY_SHORTS = {
 }
 
 
-def _location_tokens(location: Optional[str]) -> List[str]:
+def _location_tokens(location: str | None) -> list[str]:
     """Normalise a city/region string into handle-suffix candidates.
 
     ``"San Francisco, CA"`` → ``["sf", "sanfrancisco"]``.
@@ -358,12 +357,12 @@ def _location_tokens(location: Optional[str]) -> List[str]:
 
 def derive_personal_handles(
     name: str,
-    age_range: Optional[Sequence[int]] = None,
-    career_years: Optional[int] = None,
-    interests: Optional[Iterable[str]] = None,
-    location: Optional[str] = None,
+    age_range: Sequence[int] | None = None,
+    career_years: int | None = None,
+    interests: Iterable[str] | None = None,
+    location: str | None = None,
     max_candidates: int = 40,
-) -> List[HandleCandidate]:
+) -> list[HandleCandidate]:
     """Generate ranked personal-handle candidates.
 
     Args:
@@ -388,7 +387,7 @@ def derive_personal_handles(
     if tokens is None:
         return []
 
-    candidates: List[HandleCandidate] = []
+    candidates: list[HandleCandidate] = []
     seen: set = set()
 
     def _add(value: str, pattern: str, quality: float, notes: str = "") -> None:
@@ -505,7 +504,7 @@ def derive_personal_handles(
         _add(f"{nickname}{last}", "nickname.concat", 0.40,
              f"NicknameLast: {nickname}{last}")
         _add(f"{nickname}_{last}", "nickname.underscore", 0.35,
-             f"Nickname_Last")
+             "Nickname_Last")
 
     # 6. Sort by quality descending and cap.
     candidates.sort(key=lambda c: -c.quality)
@@ -514,12 +513,12 @@ def derive_personal_handles(
 
 def derive_personal_emails(
     name: str,
-    age_range: Optional[Sequence[int]] = None,
-    career_years: Optional[int] = None,
-    location: Optional[str] = None,
-    personal_domain: Optional[str] = None,
+    age_range: Sequence[int] | None = None,
+    career_years: int | None = None,
+    location: str | None = None,
+    personal_domain: str | None = None,
     max_candidates: int = 30,
-) -> List[EmailCandidate]:
+) -> list[EmailCandidate]:
     """Generate ranked personal-email candidates.
 
     Emails are constructed by combining derived local-part patterns
@@ -542,7 +541,7 @@ def derive_personal_emails(
     if tokens is None:
         return []
 
-    candidates: List[EmailCandidate] = []
+    candidates: list[EmailCandidate] = []
     seen: set = set()
 
     def _add(local: str, domain: str, pattern: str,

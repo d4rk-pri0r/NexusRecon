@@ -3,12 +3,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from textual.app import ComposeResult
-from textual.containers import VerticalScroll
 from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header, Static
+
+from nexusrecon.tui.widgets import StatusBar
 
 
 class CampaignsScreen(Screen):
@@ -22,10 +23,11 @@ class CampaignsScreen(Screen):
     def __init__(self, resume_mode: bool = False) -> None:
         super().__init__()
         self.resume_mode = resume_mode
-        self._campaigns: List[Dict[str, Any]] = []
+        self._campaigns: list[dict[str, Any]] = []
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=False)
+        yield StatusBar()
         title = "Resume Campaign" if self.resume_mode else "Past Campaigns"
         yield Static(f"[bold #00ff9c]{title}[/bold #00ff9c]", classes="wizard-label")
         yield Static(id="campaigns-status")

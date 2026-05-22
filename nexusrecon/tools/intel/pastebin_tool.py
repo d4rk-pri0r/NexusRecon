@@ -4,7 +4,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import re
-from typing import Any, Dict, List
+from typing import Any
 
 import httpx
 
@@ -19,7 +19,7 @@ _HEADERS = {
 }
 
 
-def _scan_secrets(text: str) -> List[Dict[str, str]]:
+def _scan_secrets(text: str) -> list[dict[str, str]]:
     found = []
     for cred_type, pattern in CRED_PATTERNS:
         if re.search(pattern, text):
@@ -38,7 +38,7 @@ class PastebinTool(OSINTTool):
     dynamic_trigger_hints = ["paste leak found", "credentials in paste"]
 
     async def run(self, target: str, **kwargs: Any) -> ToolResult:
-        pastes: List[Dict[str, Any]] = []
+        pastes: list[dict[str, Any]] = []
 
         async with httpx.AsyncClient(headers=_HEADERS, timeout=15.0, follow_redirects=True) as client:
             psbdmp_pastes = await self._search_psbdmp(client, target)
@@ -53,7 +53,7 @@ class PastebinTool(OSINTTool):
             result_count=len(pastes),
         )
 
-    async def _search_psbdmp(self, client: httpx.AsyncClient, query: str) -> List[Dict[str, Any]]:
+    async def _search_psbdmp(self, client: httpx.AsyncClient, query: str) -> list[dict[str, Any]]:
         pastes = []
         try:
             resp = await client.get(f"https://psbdmp.ws/api/search/{query}")
@@ -64,7 +64,7 @@ class PastebinTool(OSINTTool):
 
             sem = asyncio.Semaphore(5)
 
-            async def _fetch_body(paste_id: str) -> Dict[str, Any] | None:
+            async def _fetch_body(paste_id: str) -> dict[str, Any] | None:
                 async with sem:
                     try:
                         r = await client.get(f"https://psbdmp.ws/api/dump/get/{paste_id}", timeout=10.0)
@@ -89,7 +89,7 @@ class PastebinTool(OSINTTool):
             pass
         return pastes
 
-    async def _search_github_gists(self, client: httpx.AsyncClient, query: str) -> List[Dict[str, Any]]:
+    async def _search_github_gists(self, client: httpx.AsyncClient, query: str) -> list[dict[str, Any]]:
         pastes = []
         github_token = self.config.get_secret("github_token")
         headers = dict(_HEADERS)

@@ -1,3 +1,18 @@
 """Identity and email harvesting tools."""
-from . import theharvester_tool, hunter_tool, email_format_tool, maigret_tool, breach_tool
-from . import hudsonrock_tool, emailrep_tool, leakcheck_tool, phonebook_tool, holehe_tool
+from . import (
+    bluesky_social_tool,
+    breach_tool,
+    email_format_tool,
+    emailrep_tool,
+    github_social_tool,
+    holehe_tool,
+    hudsonrock_tool,
+    hunter_tool,
+    leakcheck_tool,
+    linkedin_social_tool,
+    maigret_tool,
+    mastodon_social_tool,
+    personal_pivot_tool,
+    phonebook_tool,
+    theharvester_tool,
+)

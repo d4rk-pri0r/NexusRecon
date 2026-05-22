@@ -1,8 +1,9 @@
 """theHarvester wrapper tool."""
 from __future__ import annotations
+
 import shutil
-import subprocess
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
 
@@ -40,7 +41,7 @@ class TheHarvesterTool(OSINTTool):
             result = self.run_subprocess(cmd, timeout_sec=300)
 
             # Parse output
-            data: Dict[str, Any] = {}
+            data: dict[str, Any] = {}
             if result.stdout.strip():
                 try:
                     import json

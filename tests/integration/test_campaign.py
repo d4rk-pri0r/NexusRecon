@@ -11,17 +11,62 @@ Tests the full pipeline:
 import json
 import tempfile
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-import yaml
 
-from nexusrecon.core.scope import ScopeModel, preflight_check, ScopeGuard
-from nexusrecon.core.entity_graph import EntityGraph
 from nexusrecon.core.audit import AuditLog
-from nexusrecon.reports.engine import ReportEngine
-from nexusrecon.graph.workflow import run_workflow, PHASE_ORDER
-from nexusrecon.models.campaign import CampaignMode
+from nexusrecon.core.entity_graph import EntityGraph
+from nexusrecon.core.scope import ScopeGuard, ScopeModel, preflight_check
+from nexusrecon.graph.workflow import run_workflow
 from nexusrecon.models.entities import EntityType, RelationshipType
+from nexusrecon.reports.engine import ReportEngine
+from nexusrecon.tools.base import ToolResult
 
+
+@pytest.fixture
+def mock_workflow_deps():
+    """Stub registry + agent executor for hermetic E2E workflow runs.
+
+    The E2E workflow tests below previously hit the real tool registry
+    and the real :class:`AgentExecutor`.  In CI (no API keys, no
+    subfinder/amass/gitleaks/trufflehog binaries) that produced two
+    failure modes:
+
+      1. Real subprocess invocations hanging until pytest-timeout
+         killed the test (locally; binaries present, no network).
+      2. ImportError / config errors at the LLM client level when no
+         ANTHROPIC_API_KEY is set.
+
+    This fixture replaces ``get_registry`` and ``_get_executor`` with
+    stubs that return ``success=False`` / canned agent output for every
+    call.  The workflow still exercises its plumbing — state passing,
+    phase transitions, completion tracking, report generation — but
+    every external dependency is mocked.
+    """
+    mock_registry = MagicMock()
+
+    async def _all_fail(tool_name, target, target_type="domain", **kwargs):
+        return ToolResult(
+            success=False, source=tool_name,
+            error="mocked: tool not available in E2E test",
+        )
+
+    mock_registry.execute = AsyncMock(side_effect=_all_fail)
+    mock_registry.available_tools = MagicMock(return_value=[])
+    mock_registry.get = MagicMock(return_value=None)
+
+    mock_executor = MagicMock()
+    mock_executor.run_agent = AsyncMock(return_value={
+        "output": "no findings (mocked)",
+        "agent": "mocked",
+        "step_count": 0,
+    })
+    mock_executor.audit_findings = MagicMock(return_value=([], []))
+
+    with patch("nexusrecon.graph.nodes.get_registry", return_value=mock_registry), \
+         patch("nexusrecon.graph.nodes._get_executor", return_value=mock_executor):
+        yield {"registry": mock_registry, "executor": mock_executor}
 
 SCOPE_YAML = """engagement:
   client: E2ETestClient
@@ -451,7 +496,7 @@ class TestE2EEntityGraph:
     def test_entity_graph_build_and_query(self):
         g = EntityGraph("test", "E2E-2026-001")
         domain_id = g.add_domain("e2e-testcorp.com", source="whois")
-        sub_id = g.add_subdomain("api.e2e-testcorp.com", parent="e2e-testcorp.com", source="crtsh")
+        g.add_subdomain("api.e2e-testcorp.com", parent="e2e-testcorp.com", source="crtsh")
         ip_id = g.add_ip("10.0.0.1", source="dns")
         g.relate(domain_id, ip_id, RelationshipType.RESOLVES_TO)
         assert g.graph.number_of_nodes() == 3
@@ -492,7 +537,7 @@ class TestE2EEntityGraph:
 
 class TestE2EWorkflow:
     @pytest.mark.asyncio
-    async def test_workflow_execution_with_state(self):
+    async def test_workflow_execution_with_state(self, mock_workflow_deps):
         state = {
             "campaign_id": "NEXUS-E2E-WF-001",
             "engagement_id": "E2E-2026-001",
@@ -526,7 +571,7 @@ class TestE2EWorkflow:
         assert len(result["completed_phases"]) > 0
 
     @pytest.mark.asyncio
-    async def test_workflow_preserves_campaign_id(self):
+    async def test_workflow_preserves_campaign_id(self, mock_workflow_deps):
         state = {
             "campaign_id": "NEXUS-E2E-WF-002",
             "engagement_id": "E2E-2026-001",
@@ -558,7 +603,7 @@ class TestE2EWorkflow:
         assert result["campaign_id"] == "NEXUS-E2E-WF-002"
 
     @pytest.mark.asyncio
-    async def test_workflow_resume_skip_completed(self):
+    async def test_workflow_resume_skip_completed(self, mock_workflow_deps):
         state = {
             "campaign_id": "NEXUS-E2E-WF-003",
             "engagement_id": "E2E-2026-001",

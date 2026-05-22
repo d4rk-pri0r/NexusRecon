@@ -1,8 +1,11 @@
 """Job posting tech stack mining tool."""
 from __future__ import annotations
+
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 import httpx
+
 from nexusrecon.opsec.useragent import random_ua
 from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
@@ -28,8 +31,8 @@ class JobsTool(OSINTTool):
     target_types = ["domain"]
 
     async def run(self, target: str, **kwargs: Any) -> ToolResult:
-        results: List[Dict[str, Any]] = []
-        sources_used: List[str] = []
+        results: list[dict[str, Any]] = []
+        sources_used: list[str] = []
 
         # Adzuna API (requires API key)
         adzuna_key = self.config.get_secret("adzuna_api_key")
@@ -46,7 +49,7 @@ class JobsTool(OSINTTool):
             sources_used.append("google_jobs")
 
         # Extract tech stack across all job postings
-        tech_stack: Dict[str, int] = {}
+        tech_stack: dict[str, int] = {}
         for job in results:
             text = f"{job.get('title', '')} {job.get('description', '')}".lower()
             for kw in TECH_KEYWORDS:
@@ -66,7 +69,7 @@ class JobsTool(OSINTTool):
             result_count=len(results),
         )
 
-    async def _fetch_adzuna(self, target: str, app_id: str, api_key: str) -> List[Dict[str, Any]]:
+    async def _fetch_adzuna(self, target: str, app_id: str, api_key: str) -> list[dict[str, Any]]:
         """Query Adzuna API for job postings related to the target."""
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
@@ -100,9 +103,9 @@ class JobsTool(OSINTTool):
             pass
         return []
 
-    async def _scrape_google_jobs(self, target: str) -> List[Dict[str, Any]]:
+    async def _scrape_google_jobs(self, target: str) -> list[dict[str, Any]]:
         """Scrape Google Jobs for postings mentioning the target company/domain."""
-        jobs: List[Dict[str, Any]] = []
+        jobs: list[dict[str, Any]] = []
         try:
             async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as client:
                 resp = await client.get(

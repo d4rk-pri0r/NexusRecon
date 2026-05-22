@@ -5,15 +5,17 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 from textual.app import ComposeResult
-from textual.containers import Vertical, VerticalScroll
+from textual.containers import VerticalScroll
 from textual.screen import Screen
 from textual.widgets import Footer, Header, Static
 
+from nexusrecon.tui.widgets import StatusBar
 
-def _open_path(path: str) -> Optional[Exception]:
+
+def _open_path(path: str) -> Exception | None:
     """Open `path` with the user's editor / system handler. Returns the exception on failure."""
     try:
         if sys.platform == "darwin":
@@ -37,6 +39,10 @@ class ResultsScreen(Screen):
     """Summary + report shortcuts after a campaign completes."""
 
     BINDINGS = [
+        # TUI-5: in-TUI markdown report browser. Press `b` for the
+        # rich three-pane preview; the per-letter shortcuts below
+        # remain for muscle memory + power users.
+        ("b", "browse_reports", "Browse"),
         ("m", "open_master", "Master Report"),
         ("t", "open_threads", "Top Threads"),
         ("e", "open_summary", "Exec Summary"),
@@ -47,7 +53,7 @@ class ResultsScreen(Screen):
         ("ctrl+q", "quit_app", "Quit"),
     ]
 
-    def __init__(self, campaign_dir: str, state: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, campaign_dir: str, state: dict[str, Any] | None = None) -> None:
         super().__init__()
         self.campaign_dir = Path(campaign_dir)
         self.reports_dir = self.campaign_dir / "reports"
@@ -55,6 +61,7 @@ class ResultsScreen(Screen):
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=False)
+        yield StatusBar()
         yield Static(id="results-summary")
         yield Static("[bold]Top 3 threats[/bold]", classes="wizard-label")
         yield VerticalScroll(Static(id="results-threads"), id="results-threads-wrap")
@@ -118,7 +125,7 @@ class ResultsScreen(Screen):
             p = rd / fname
             status = "" if p.exists() else "  [dim](not generated)[/dim]"
             lines.append(f"  [bold]{key}[/bold]  {label}{status}")
-        lines.append(f"  [bold]a[/bold]  📁  All Reports (open directory)")
+        lines.append("  [bold]a[/bold]  📁  All Reports (open directory)")
         try:
             self.query_one("#results-reports", Static).update("\n".join(lines))
         except Exception:
@@ -151,6 +158,18 @@ class ResultsScreen(Screen):
     def action_open_dir(self) -> None:
         if self.reports_dir.exists():
             _open_path(str(self.reports_dir))
+
+    async def action_browse_reports(self) -> None:
+        """Open the TUI-5 in-TUI Markdown report browser."""
+        try:
+            from nexusrecon.tui.screens.reports_browser import (
+                ReportsBrowserScreen,
+            )
+            await self.app.push_screen(
+                ReportsBrowserScreen(str(self.campaign_dir)),
+            )
+        except Exception:
+            pass
 
     def action_back(self) -> None:
         self.app.pop_screen()

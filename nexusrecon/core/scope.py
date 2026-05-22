@@ -10,10 +10,8 @@ Also enforces tier limits.  A T2 tool cannot run if max_tier is T1.
 
 from __future__ import annotations
 
-import fnmatch
 import re
 from ipaddress import AddressValueError, IPv4Address, IPv4Network, IPv6Address, IPv6Network
-from typing import List, Optional, Tuple
 
 import structlog
 
@@ -64,11 +62,11 @@ class ScopeGuard:
         ins = s.in_scope
         outs = s.out_of_scope
 
-        self._allowed_domains: List[str] = [d.lower() for d in (ins.domains or [])]
-        self._blocked_domains: List[str] = [d.lower() for d in (outs.domains or [])]
-        self._allowed_emails: List[str] = [e.lower() for e in (ins.email_domains or [])]
+        self._allowed_domains: list[str] = [d.lower() for d in (ins.domains or [])]
+        self._blocked_domains: list[str] = [d.lower() for d in (outs.domains or [])]
+        self._allowed_emails: list[str] = [e.lower() for e in (ins.email_domains or [])]
 
-        self._allowed_networks: List[IPv4Network | IPv6Network] = []
+        self._allowed_networks: list[IPv4Network | IPv6Network] = []
         for cidr in (ins.ip_ranges or []):
             try:
                 self._allowed_networks.append(IPv4Network(cidr, strict=False))
@@ -78,7 +76,7 @@ class ScopeGuard:
                 except ValueError:
                     log.warning("Invalid IP range in scope", cidr=cidr)
 
-        self._blocked_networks: List[IPv4Network | IPv6Network] = []
+        self._blocked_networks: list[IPv4Network | IPv6Network] = []
         for cidr in (outs.ip_ranges or []):
             try:
                 self._blocked_networks.append(IPv4Network(cidr, strict=False))
@@ -88,7 +86,7 @@ class ScopeGuard:
                 except ValueError:
                     pass
 
-        self._allowed_asns: List[str] = [a.upper() for a in (ins.asns or [])]
+        self._allowed_asns: list[str] = [a.upper() for a in (ins.asns or [])]
 
     # ── Domain checks ─────────────────────────────────────────────────────────
 
@@ -294,7 +292,7 @@ SHARED_INFRASTRUCTURE_PATTERNS = [
 ]
 
 
-def check_shared_infrastructure(domain: str) -> Optional[str]:
+def check_shared_infrastructure(domain: str) -> str | None:
     """
     Return a warning message if domain appears to be shared infrastructure
     that is not client-owned.  Operator must explicitly acknowledge before
@@ -310,7 +308,7 @@ def check_shared_infrastructure(domain: str) -> Optional[str]:
     return None
 
 
-def preflight_check(scope: ScopeModel) -> List[Tuple[str, str]]:
+def preflight_check(scope: ScopeModel) -> list[tuple[str, str]]:
     """
     Run pre-flight validation on the entire scope.
 
@@ -320,7 +318,6 @@ def preflight_check(scope: ScopeModel) -> List[Tuple[str, str]]:
     warnings = []
 
     ins = scope.scope.in_scope
-    outs = scope.scope.out_of_scope
 
     # Check for potential shared infra in in-scope domains
     for domain in (ins.domains or []):

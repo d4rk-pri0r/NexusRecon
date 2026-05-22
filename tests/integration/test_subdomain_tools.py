@@ -22,22 +22,19 @@ covered in ``test_tools_http.py::TestCRTShTool``; ``subfinder`` and
 """
 from __future__ import annotations
 
-import os
+from datetime import UTC
 from unittest.mock import patch
 
-import httpx
 import pytest
 import respx
 from httpx import Response
-
-from tests.fixtures import load_fixture
 
 from nexusrecon.tools.domain.certspotter_tool import CertSpotterTool
 from nexusrecon.tools.domain.chaos_tool import ChaosTool
 from nexusrecon.tools.domain.github_subdomains_tool import GitHubSubdomainsTool
 from nexusrecon.tools.domain.otx_tool import OTXTool
 from nexusrecon.tools.intel.certstream_tool import CertStreamTool
-
+from tests.fixtures import load_fixture
 
 # ────────────────────────────────────────────────────────────────────────
 # CertSpotter — sslmate.com/help/reference/api/certificate_search
@@ -300,12 +297,12 @@ class TestCertStreamTool:
         """Tool filters certs to those issued in the last 7 days. Our
         fixture has 3 recent + 1 old entry; the old one must be dropped."""
         # Freeze "now" so the fixture's hardcoded timestamps stay "recent".
-        from datetime import datetime, timezone, timedelta
+        from datetime import datetime
 
         class _FrozenDateTime:
             @classmethod
             def now(cls, tz=None):
-                return datetime(2026, 5, 15, 0, 0, 0, tzinfo=tz or timezone.utc)
+                return datetime(2026, 5, 15, 0, 0, 0, tzinfo=tz or UTC)
 
         monkeypatch.setattr(
             "nexusrecon.tools.intel.certstream_tool.datetime", _FrozenDateTime

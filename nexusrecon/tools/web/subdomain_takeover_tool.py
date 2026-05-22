@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import dns.asyncresolver
 import httpx
@@ -33,7 +33,7 @@ TAKEOVER_FINGERPRINTS = [
 ]
 
 
-async def _resolve_cname(subdomain: str) -> Optional[str]:
+async def _resolve_cname(subdomain: str) -> str | None:
     try:
         resolver = dns.asyncresolver.Resolver()
         answer = await resolver.resolve(subdomain, "CNAME")
@@ -46,7 +46,7 @@ async def _check_takeover(
     subdomain: str,
     client: httpx.AsyncClient,
     sem: asyncio.Semaphore,
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     async with sem:
         cname = await _resolve_cname(subdomain)
         if not cname:
@@ -83,12 +83,12 @@ class SubdomainTakeoverTool(OSINTTool):
     dynamic_trigger_hints = ["CNAME points to S3/Heroku/GitHub Pages", "404 with cloud provider header"]
 
     async def run(self, target: str, **kwargs: Any) -> ToolResult:
-        subdomains: List[str] = kwargs.get("subdomains", [target])
+        subdomains: list[str] = kwargs.get("subdomains", [target])
         if not subdomains:
             subdomains = [target]
 
         sem = asyncio.Semaphore(20)
-        vulnerable: List[Dict[str, Any]] = []
+        vulnerable: list[dict[str, Any]] = []
 
         async with httpx.AsyncClient(headers=_HEADERS, timeout=10.0, follow_redirects=True) as client:
             results = await asyncio.gather(

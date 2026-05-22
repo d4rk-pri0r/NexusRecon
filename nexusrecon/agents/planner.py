@@ -1,8 +1,7 @@
 """Campaign Planner agent — strategic phase planning with success/kill criteria."""
 from __future__ import annotations
-from typing import Any, Dict, List, Optional
-from nexusrecon.agents.base import BaseNexusAgent
 
+from nexusrecon.agents.base import BaseNexusAgent
 
 PLANNER_ROLE = """
 Senior Red Team Campaign Planner with 15+ years of OSINT experience.

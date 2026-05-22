@@ -1,11 +1,13 @@
 """Unit tests for LangGraph phase nodes with mocked dependencies."""
 import asyncio
-
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from nexusrecon.graph.nodes import (
+    _reset_executor,
     phase1_passive_footprinting,
+    phase2_5_personal_identity_pivot,
     phase2_identity_cloud,
     phase3_code_leakage,
     phase4_correlation,
@@ -15,11 +17,9 @@ from nexusrecon.graph.nodes import (
     phase8_attack_surface,
     phase9_reporting,
     route_to_next_phase,
-    _reset_executor,
 )
 from nexusrecon.graph.state import CampaignGraphState
 from nexusrecon.tools.base import ToolResult
-
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -118,15 +118,17 @@ class TestRouteToNextPhase:
 
     def test_routes_to_end_when_all_complete(self):
         state = _make_state({
-            "completed_phases": ["phase1", "phase2", "phase3", "phase4",
+            # All phases including phase2_5 (D7)
+            "completed_phases": ["phase1", "phase2", "phase2_5", "phase3", "phase4",
                                 "phase5", "phase6", "phase7", "phase7_5", "phase8", "phase9"],
             "current_phase": "phase9",
         })
         assert route_to_next_phase(state) == "__end__"
 
     def test_skips_completed_phases(self):
+        # phase2_5 is between phase2 and phase3 now
         state = _make_state({
-            "completed_phases": ["phase1", "phase2", "phase3"],
+            "completed_phases": ["phase1", "phase2", "phase2_5", "phase3"],
             "current_phase": "phase3",
         })
         assert route_to_next_phase(state) == "phase4"
@@ -332,6 +334,172 @@ class TestPhase2:
         state = _make_state()
         result = await phase2_identity_cloud(state)
         assert "phase2" in result.get("completed_phases", [])
+
+
+# ── Phase 2.5: Personal Identity Pivot (D7) ──────────────────────────────────
+
+class TestPhase2_5:
+    """End-to-end wiring tests for the D7 phase node."""
+
+    @pytest.mark.asyncio
+    @patch("nexusrecon.graph.nodes.get_registry")
+    async def test_empty_email_intel_skips_pivot(self, mock_get_registry):
+        """No identities → graph is empty, punch_list is [], phase completes."""
+        mock_registry = MagicMock()
+        mock_registry.execute = AsyncMock()
+        mock_get_registry.return_value = mock_registry
+
+        state = _make_state({"email_intel": {"emails": {}}})
+        result = await phase2_5_personal_identity_pivot(state)
+
+        assert "phase2_5" in result.get("completed_phases", [])
+        assert result.get("credential_punch_list") == []
+        # Registry should NOT have been called for personal_pivot
+        called_tools = [c[0][0] for c in mock_registry.execute.call_args_list]
+        assert "personal_pivot" not in called_tools
+
+    @pytest.mark.asyncio
+    @patch("nexusrecon.graph.nodes.get_registry")
+    async def test_identity_without_name_skipped(self, mock_get_registry):
+        """Identities lacking a real-name identifier shouldn't trigger pivot."""
+        mock_registry = MagicMock()
+        mock_registry.execute = AsyncMock(return_value=ToolResult(
+            success=False, source="personal_pivot", error="should not be called",
+        ))
+        mock_get_registry.return_value = mock_registry
+
+        state = _make_state({
+            "email_intel": {
+                "emails": {
+                    "anon@corp.com": {"source": "harvester"},  # no name
+                },
+            },
+        })
+        result = await phase2_5_personal_identity_pivot(state)
+        assert "phase2_5" in result.get("completed_phases", [])
+        # personal_pivot should not have been invoked
+        called_tools = [c[0][0] for c in mock_registry.execute.call_args_list]
+        assert "personal_pivot" not in called_tools
+
+    @pytest.mark.asyncio
+    @patch("nexusrecon.graph.nodes.get_registry")
+    async def test_identity_with_name_triggers_pivot(self, mock_get_registry):
+        """An identity with a name causes registry.execute('personal_pivot', ...)."""
+        mock_registry = MagicMock()
+        mock_registry.execute = AsyncMock(return_value=ToolResult(
+            success=True,
+            source="personal_pivot",
+            data={
+                "corp_identifier": "jane.doe@corp.com",
+                "handle_candidates": [],
+                "email_candidates": [],
+                "handle_hits": [],
+                "email_hits": [],
+                "credential_exposures": [],
+                "cross_domain_score": 0.0,
+                "identity_extensions": [],
+            },
+        ))
+        mock_get_registry.return_value = mock_registry
+
+        state = _make_state({
+            "email_intel": {
+                "emails": {
+                    "jane.doe@corp.com": {
+                        "source": "hunter",
+                        "first_name": "Jane",
+                        "last_name": "Doe",
+                    },
+                },
+            },
+        })
+        result = await phase2_5_personal_identity_pivot(state)
+        assert "phase2_5" in result.get("completed_phases", [])
+        # personal_pivot SHOULD have been invoked
+        called_tools = [c[0][0] for c in mock_registry.execute.call_args_list]
+        assert "personal_pivot" in called_tools
+
+    @pytest.mark.asyncio
+    @patch("nexusrecon.graph.nodes.get_registry")
+    async def test_punch_list_produced_from_exposure(self, mock_get_registry):
+        """When pivot returns a credential exposure, D4 must turn it into a punch
+        list entry that ends up in state."""
+        mock_registry = MagicMock()
+
+        async def _execute(tool_name, target, target_type, **kwargs):
+            if tool_name == "personal_pivot":
+                return ToolResult(
+                    success=True,
+                    source="personal_pivot",
+                    data={
+                        "corp_identifier": target,
+                        "handle_candidates": [],
+                        "email_candidates": [],
+                        "handle_hits": [],
+                        "email_hits": [],
+                        "credential_exposures": [
+                            {
+                                "breach_source": "DeHashed:LinkedIn-2012",
+                                "breach_date": "2012-06-05",
+                                "observed_at_identifier": "jane.doe.82@gmail.com",
+                                "credential_kind": "password",
+                                "credential_value": "[REDACTED]",  # serialised form
+                                "confidence": "verified",
+                                "provenance": {},
+                            },
+                        ],
+                        "cross_domain_score": 0.85,
+                        "identity_extensions": [
+                            {
+                                "value": "jane.doe.82@gmail.com",
+                                "identifier_type": "personal_email",
+                                "source": "personal_pivot",
+                                "confidence": 0.85,
+                                "metadata": {},
+                            },
+                        ],
+                    },
+                )
+            return ToolResult(success=False, source=tool_name, error="not used")
+
+        mock_registry.execute = AsyncMock(side_effect=_execute)
+        mock_get_registry.return_value = mock_registry
+
+        state = _make_state({
+            "email_intel": {
+                "emails": {
+                    "jane.doe@corp.com": {
+                        "source": "hunter",
+                        "first_name": "Jane",
+                        "last_name": "Doe",
+                    },
+                },
+            },
+            # Provide a federated cloud_intel so endpoints exist for correlation
+            "cloud_intel": {
+                "azure/corp.com": {
+                    "user_realm": {
+                        "found": True,
+                        "is_federated": True,
+                        "federation_protocol": "WSTrust",
+                    },
+                },
+            },
+        })
+        result = await phase2_5_personal_identity_pivot(state)
+        assert "phase2_5" in result.get("completed_phases", [])
+
+        punch_list = result.get("credential_punch_list", [])
+        assert punch_list  # should produce at least one candidate
+        first = punch_list[0]
+        assert first["credential_kind"] == "password"
+        assert first["corp_email"] == "jane.doe@corp.com"
+        # ADFS endpoint should have been synthesised
+        assert first["endpoint_type"] == "adfs"
+        # Credentials must be redacted in the serialised output
+        assert first["credential_value"] == "[REDACTED]"
+        # do_not_execute is invariant
+        assert first["do_not_execute"] is True
 
 
 # ── Phase 3: Code Leakage ────────────────────────────────────────────────────

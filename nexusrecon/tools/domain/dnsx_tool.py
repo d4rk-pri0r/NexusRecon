@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
@@ -40,8 +40,8 @@ class DNSXTool(OSINTTool):
     target_types = ["domain"]
 
     async def run(self, target: str, **kwargs: Any) -> ToolResult:
-        resolved: List[Dict[str, Any]] = []
-        subdomains: List[str] = []
+        resolved: list[dict[str, Any]] = []
+        subdomains: list[str] = []
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as wf:
             wf.write("\n".join(_WORDLIST))
@@ -86,7 +86,7 @@ class DNSXTool(OSINTTool):
             Path(wordlist_path).unlink(missing_ok=True)
             return ToolResult(success=False, source=self.name, error=str(exc))
 
-        data: Dict[str, Any] = {
+        data: dict[str, Any] = {
             "domain": target,
             "resolved_count": len(resolved),
             "subdomains": sorted(subdomains),

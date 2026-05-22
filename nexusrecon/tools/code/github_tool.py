@@ -11,10 +11,12 @@ Tier: T0 (GitHub API only, passive)
 """
 
 from __future__ import annotations
+
 import asyncio
-import re
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 import httpx
+
 from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
 
@@ -75,7 +77,7 @@ class GitHubTool(OSINTTool):
 
     def __init__(self) -> None:
         super().__init__()
-        self._http: Optional[httpx.AsyncClient] = None
+        self._http: httpx.AsyncClient | None = None
 
     async def _get_client(self, token: str) -> httpx.AsyncClient:
         if self._http is None:
@@ -113,7 +115,7 @@ class GitHubTool(OSINTTool):
                 error="GITHUB_TOKEN not set",
             )
 
-        results: Dict[str, Any] = {}
+        results: dict[str, Any] = {}
         try:
             client = await self._get_client(token)
 
@@ -144,7 +146,7 @@ class GitHubTool(OSINTTool):
         except Exception as e:
             return ToolResult(success=False, source=self.name, error=str(e))
 
-    async def _get_org(self, client: httpx.AsyncClient, org: str) -> Dict[str, Any]:
+    async def _get_org(self, client: httpx.AsyncClient, org: str) -> dict[str, Any]:
         resp = await client.get(f"/orgs/{org}")
         if resp.status_code == 200:
             data = resp.json()
@@ -159,7 +161,7 @@ class GitHubTool(OSINTTool):
             }
         return {"found": False}
 
-    async def _get_org_repos(self, client: httpx.AsyncClient, org: str) -> Dict[str, Any]:
+    async def _get_org_repos(self, client: httpx.AsyncClient, org: str) -> dict[str, Any]:
         repos = []
         page = 1
         while True:
@@ -191,7 +193,7 @@ class GitHubTool(OSINTTool):
 
         return {"total": len(repos), "repos": repos}
 
-    async def _search_code(self, client: httpx.AsyncClient, domain: str) -> Dict[str, Any]:
+    async def _search_code(self, client: httpx.AsyncClient, domain: str) -> dict[str, Any]:
         resp = await client.get("/search/code", params={
             "q": f'"{domain}"', "per_page": 10, "sort": "indexed", "order": "desc",
         })
@@ -211,7 +213,7 @@ class GitHubTool(OSINTTool):
             }
         return {"total": 0, "items": []}
 
-    async def _search_secrets(self, client: httpx.AsyncClient, target: str) -> Dict[str, Any]:
+    async def _search_secrets(self, client: httpx.AsyncClient, target: str) -> dict[str, Any]:
         findings = []
         for dork in GITHUB_CODE_DORKS[:20]:  # top 20 most relevant
             q = f'"{dork}" org:{target}' if not target.startswith(("http", "www")) else f'"{dork}" "{target}"'
@@ -232,7 +234,7 @@ class GitHubTool(OSINTTool):
 
         return {"findings": findings}
 
-    async def _get_user(self, client: httpx.AsyncClient, username: str) -> Dict[str, Any]:
+    async def _get_user(self, client: httpx.AsyncClient, username: str) -> dict[str, Any]:
         resp = await client.get(f"/users/{username}")
         if resp.status_code == 200:
             data = resp.json()
@@ -246,7 +248,7 @@ class GitHubTool(OSINTTool):
             }
         return {"found": False}
 
-    async def _get_user_repos(self, client: httpx.AsyncClient, username: str) -> Dict[str, Any]:
+    async def _get_user_repos(self, client: httpx.AsyncClient, username: str) -> dict[str, Any]:
         resp = await client.get(f"/users/{username}/repos", params={"per_page": 100})
         if resp.status_code == 200:
             return {

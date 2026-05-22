@@ -1,7 +1,7 @@
 """Vulners — aggregated exploit and vulnerability intelligence."""
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any
 
 import httpx
 
@@ -61,16 +61,16 @@ class VulnersTool(OSINTTool):
                     err = raw.get("data", {}).get("error", "Unknown Vulners error")
                     return ToolResult(success=False, source=self.name, error=err)
 
-                docs: List[Dict[str, Any]] = raw.get("data", {}).get("search", [])
-                exploits: List[Dict[str, Any]] = []
-                patches: List[Dict[str, Any]] = []
-                references: List[Dict[str, Any]] = []
+                docs: list[dict[str, Any]] = raw.get("data", {}).get("search", [])
+                exploits: list[dict[str, Any]] = []
+                patches: list[dict[str, Any]] = []
+                references: list[dict[str, Any]] = []
 
                 for doc in docs:
                     src = doc.get("_source", {})
                     doc_type = src.get("type", "")
                     cvss_raw = src.get("cvss")
-                    entry: Dict[str, Any] = {
+                    entry: dict[str, Any] = {
                         "id": src.get("id"),
                         "title": src.get("title"),
                         "type": doc_type,
@@ -85,7 +85,7 @@ class VulnersTool(OSINTTool):
                     else:
                         references.append(entry)
 
-                data: Dict[str, Any] = {
+                data: dict[str, Any] = {
                     "cve": cve_id,
                     "exploit_count": len(exploits),
                     "has_public_exploit": len(exploits) > 0,

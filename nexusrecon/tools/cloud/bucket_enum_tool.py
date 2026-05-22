@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import httpx
 
@@ -21,11 +21,11 @@ _SUFFIXES = [
 ]
 
 
-def _bucket_names(domain: str) -> List[str]:
+def _bucket_names(domain: str) -> list[str]:
     stem = domain.split(".")[0].lower()
     company = domain.rsplit(".", 1)[0].lower().replace(".", "-")
     bases = {stem, company}
-    names: List[str] = []
+    names: list[str] = []
     for base in bases:
         for suffix in _SUFFIXES:
             names.append(f"{base}{suffix}")
@@ -46,12 +46,12 @@ class BucketEnumTool(OSINTTool):
 
     async def run(self, target: str, **kwargs: Any) -> ToolResult:
         names = _bucket_names(target)
-        open_buckets: List[Dict[str, Any]] = []
+        open_buckets: list[dict[str, Any]] = []
         checked = 0
 
         sem = asyncio.Semaphore(20)
 
-        async def _probe(client: httpx.AsyncClient, url: str, bucket: str, provider: str) -> Optional[Dict[str, Any]]:
+        async def _probe(client: httpx.AsyncClient, url: str, bucket: str, provider: str) -> dict[str, Any] | None:
             try:
                 async with sem:
                     r = await client.head(url, follow_redirects=True)
@@ -89,7 +89,7 @@ class BucketEnumTool(OSINTTool):
         except Exception as exc:
             return ToolResult(success=False, source=self.name, error=str(exc))
 
-        data: Dict[str, Any] = {
+        data: dict[str, Any] = {
             "domain": target,
             "names_tested": len(names[:60]),
             "endpoints_probed": checked,

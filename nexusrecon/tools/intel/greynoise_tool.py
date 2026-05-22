@@ -1,7 +1,10 @@
 """GreyNoise API tool, IP noise context."""
 from __future__ import annotations
-from typing import Any, Dict
+
+from typing import Any
+
 import httpx
+
 from nexusrecon.tools.base import BaseHTTPTool, Category, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
 

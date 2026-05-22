@@ -1,9 +1,12 @@
 """Tests for models/campaign.py — CampaignState, CampaignMode, PhaseStatus."""
-import pytest
-from datetime import datetime
 from nexusrecon.models.campaign import (
-    CampaignState, CampaignMode, PhaseStatus, PhaseResult, CampaignPlan,
-    SuccessCriteria, PhasePlan,
+    CampaignMode,
+    CampaignPlan,
+    CampaignState,
+    PhasePlan,
+    PhaseResult,
+    PhaseStatus,
+    SuccessCriteria,
 )
 
 

@@ -1,13 +1,10 @@
 """Tests for nexusrecon.core.reputation: per-service reputation boosts."""
 from __future__ import annotations
 
-import pytest
-
 from nexusrecon.core.reputation import (
     boost_for_profile,
     reputation_boost,
 )
-
 
 # ──────────────────────────────────────────────────────────────────────
 # Per-service threshold tables

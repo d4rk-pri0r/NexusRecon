@@ -40,8 +40,6 @@ import httpx
 import respx
 from httpx import Response
 
-from tests.fixtures import load_fixture
-
 from nexusrecon.tools.intel.binaryedge_tool import BinaryEdgeTool
 from nexusrecon.tools.intel.censys_tool import CensysTool
 from nexusrecon.tools.intel.fullhunt_tool import FullHuntTool
@@ -50,7 +48,7 @@ from nexusrecon.tools.intel.netlas_tool import NetlasTool
 from nexusrecon.tools.intel.shodan_tool import ShodanTool
 from nexusrecon.tools.intel.virustotal_tool import VirusTotalTool
 from nexusrecon.tools.intel.zoomeye_tool import ZoomEyeTool
-
+from tests.fixtures import load_fixture
 
 # ────────────────────────────────────────────────────────────────────────
 # Shodan — developer.shodan.io

@@ -1,5 +1,6 @@
 """Tests for core/entity_graph.py."""
 import pytest
+
 from nexusrecon.core.entity_graph import EntityGraph
 from nexusrecon.models.entities import EntityType, RelationshipType
 

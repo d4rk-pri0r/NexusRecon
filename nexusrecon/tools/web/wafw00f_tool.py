@@ -1,7 +1,7 @@
 """WAF detection via response signature matching."""
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any
 
 import httpx
 
@@ -78,7 +78,7 @@ WAF_SIGNATURES = [
 ]
 
 
-def _score_waf(waf: Dict[str, Any], headers: Dict[str, str], body: str, status: int) -> float:
+def _score_waf(waf: dict[str, Any], headers: dict[str, str], body: str, status: int) -> float:
     score = 0.0
     body_lower = body.lower()[:5000]
 
@@ -108,7 +108,7 @@ class WafW00fTool(OSINTTool):
     target_types = ["domain"]
 
     async def run(self, target: str, **kwargs: Any) -> ToolResult:
-        wafs_detected: List[Dict[str, Any]] = []
+        wafs_detected: list[dict[str, Any]] = []
 
         try:
             async with httpx.AsyncClient(headers=dict(_HEADERS_BENIGN), timeout=15.0, follow_redirects=True) as client:

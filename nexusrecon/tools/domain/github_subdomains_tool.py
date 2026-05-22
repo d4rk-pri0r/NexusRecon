@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Set
+from typing import Any
 
 import httpx
 
@@ -38,8 +38,8 @@ class GitHubSubdomainsTool(OSINTTool):
             "User-Agent": random_ua(),
         }
 
-        subdomains: Set[str] = set()
-        sources: List[Dict[str, str]] = []
+        subdomains: set[str] = set()
+        sources: list[dict[str, str]] = []
 
         try:
             async with httpx.AsyncClient(
@@ -78,7 +78,7 @@ class GitHubSubdomainsTool(OSINTTool):
         except Exception as exc:
             return ToolResult(success=False, source=self.name, error=str(exc))
 
-        data: Dict[str, Any] = {
+        data: dict[str, Any] = {
             "domain": target,
             "subdomain_count": len(subdomains),
             "subdomains": sorted(subdomains),

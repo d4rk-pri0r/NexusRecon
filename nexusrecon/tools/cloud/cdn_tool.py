@@ -1,13 +1,15 @@
 """CDN detection via HTTP response headers, DNS CNAME analysis, and IP range checks."""
 from __future__ import annotations
-from typing import Any, Dict, List, Optional
+
+from typing import Any
+
 import httpx
+
 from nexusrecon.opsec.useragent import random_ua
 from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
 
-
-CDN_SIGNATURES: Dict[str, Dict[str, Any]] = {
+CDN_SIGNATURES: dict[str, dict[str, Any]] = {
     "cloudflare": {
         "headers": {"cf-ray": None, "cf-cache-status": None, "cloudflare": None},
         "cnames": [r'\.cloudflare\.com$'],
@@ -85,15 +87,15 @@ class CDNTool(OSINTTool):
 
     async def run(self, target: str, **kwargs: Any) -> ToolResult:
         url = f"https://{target}" if not target.startswith("http") else target
-        detected: Dict[str, Any] = {}
-        headers_raw: Dict[str, str] = {}
-        resolved_ips: List[str] = []
+        detected: dict[str, Any] = {}
+        headers_raw: dict[str, str] = {}
+        resolved_ips: list[str] = []
         # Track *why* each signal source failed so the operator can tell
         # "this domain doesn't use a CDN" from "we couldn't probe at all".
         # Previous revision swallowed both kinds of failure with bare
         # ``except Exception: pass`` and returned ``success=True`` with
         # an empty payload regardless.
-        probe_errors: Dict[str, str] = {}
+        probe_errors: dict[str, str] = {}
 
         async with httpx.AsyncClient(timeout=10.0, follow_redirects=True, verify=False) as client:
             try:
@@ -104,8 +106,8 @@ class CDNTool(OSINTTool):
 
         # DNS resolution
         try:
-            from socket import getaddrinfo, AF_INET, AF_INET6
-            dns_per_family_errors: List[str] = []
+            from socket import AF_INET, AF_INET6, getaddrinfo
+            dns_per_family_errors: list[str] = []
             for family in (AF_INET, AF_INET6):
                 try:
                     addrs = getaddrinfo(target, 80, family=family)
@@ -174,7 +176,7 @@ class CDNTool(OSINTTool):
                 data={"target": target, "probe_errors": probe_errors},
             )
 
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "target": target,
             "resolved_ips": resolved_ips,
             "response_headers": dict(list(headers_raw.items())[:20]),

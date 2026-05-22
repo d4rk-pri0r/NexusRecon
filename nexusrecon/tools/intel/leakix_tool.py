@@ -1,7 +1,7 @@
 """LeakIX — exposed services with attached vulnerability context."""
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any
 
 import httpx
 
@@ -25,7 +25,7 @@ class LeakIXTool(OSINTTool):
 
     async def run(self, target: str, **kwargs: Any) -> ToolResult:
         key = self.config.get_secret("leakix_api_key")
-        headers: Dict[str, str] = {
+        headers: dict[str, str] = {
             "Accept": "application/json",
             "User-Agent": random_ua(),
         }
@@ -55,7 +55,7 @@ class LeakIXTool(OSINTTool):
                 if resp.status_code != 200:
                     return ToolResult(success=False, source=self.name, error=f"LeakIX returned {resp.status_code}")
 
-                items: List[Dict[str, Any]] = resp.json() or []
+                items: list[dict[str, Any]] = resp.json() or []
                 results = []
                 for item in items[:50]:
                     cves = [
@@ -78,7 +78,7 @@ class LeakIXTool(OSINTTool):
                         "timestamp": item.get("time"),
                     })
 
-                data: Dict[str, Any] = {
+                data: dict[str, Any] = {
                     "query": query,
                     "result_count": len(results),
                     "results": results,

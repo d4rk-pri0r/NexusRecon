@@ -50,16 +50,15 @@ from __future__ import annotations
 import hashlib
 import time
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
-
+from enum import StrEnum
+from typing import Any
 
 # ──────────────────────────────────────────────────────────────────────
 # Enums
 # ──────────────────────────────────────────────────────────────────────
 
 
-class IdentifierType(str, Enum):
+class IdentifierType(StrEnum):
     """What kind of thing this identifier is.
 
     Used by the personal pivot (D3) and credential correlation (D4)
@@ -77,7 +76,7 @@ class IdentifierType(str, Enum):
     OTHER = "other"
 
 
-class LinkageStrength(str, Enum):
+class LinkageStrength(StrEnum):
     """How strongly an identifier is linked to an identity.
 
     Maps onto the same confidence bands the Phase A scorer uses for
@@ -91,7 +90,7 @@ class LinkageStrength(str, Enum):
     NOISE = "noise"
 
     @classmethod
-    def from_score(cls, score: float) -> "LinkageStrength":
+    def from_score(cls, score: float) -> LinkageStrength:
         if score >= 0.7:
             return cls.HIGH
         if score >= 0.4:
@@ -99,7 +98,7 @@ class LinkageStrength(str, Enum):
         return cls.NOISE
 
 
-class BreachConfidence(str, Enum):
+class BreachConfidence(StrEnum):
     """How confident we are that a credential record is real + still
     relevant. Affects punch-list ranking."""
 
@@ -145,17 +144,17 @@ class Identifier:
 
     value: str
     identifier_type: IdentifierType
-    service: Optional[str] = None
+    service: str | None = None
     source: str = ""
     confidence: float = 1.0
     first_observed: float = field(default_factory=time.time)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
     def linkage_strength(self) -> LinkageStrength:
         return LinkageStrength.from_score(self.confidence)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "value": self.value,
             "identifier_type": self.identifier_type.value,
@@ -196,14 +195,14 @@ class CredentialExposure:
     """
 
     breach_source: str
-    breach_date: Optional[str]
+    breach_date: str | None
     observed_at_identifier: str
     credential_kind: str
     credential_value: str
     confidence: BreachConfidence
-    provenance: Dict[str, Any] = field(default_factory=dict)
+    provenance: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self, redact_value: bool = True) -> Dict[str, Any]:
+    def to_dict(self, redact_value: bool = True) -> dict[str, Any]:
         """Serialise the exposure. ``redact_value=True`` (the default)
         replaces the credential string with ``"[REDACTED]"`` ── used
         anywhere the output might be persisted to disk or printed.
@@ -235,10 +234,10 @@ class RelationshipEdge:
     target_identity_id: str
     interaction_type: str  # "co-author", "follower", "co-speaker", etc.
     strength: float  # [0, 1], recency-decayed at scoring time
-    last_observed: Optional[str] = None  # ISO-8601 of most recent obs
-    sources: List[str] = field(default_factory=list)  # ["github", "twitter"]
+    last_observed: str | None = None  # ISO-8601 of most recent obs
+    sources: list[str] = field(default_factory=list)  # ["github", "twitter"]
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "target_identity_id": self.target_identity_id,
             "interaction_type": self.interaction_type,
@@ -277,10 +276,10 @@ class Identity:
 
     identity_id: str
     primary_label: str = ""
-    identifiers: List[Identifier] = field(default_factory=list)
-    credential_exposures: List[CredentialExposure] = field(default_factory=list)
-    related_to: List[RelationshipEdge] = field(default_factory=list)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    identifiers: list[Identifier] = field(default_factory=list)
+    credential_exposures: list[CredentialExposure] = field(default_factory=list)
+    related_to: list[RelationshipEdge] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     # ── Identifier helpers ────────────────────────────────────────
 
@@ -326,24 +325,24 @@ class Identity:
         self.credential_exposures.append(exposure)
 
     @staticmethod
-    def _identifier_key(i: Identifier) -> Tuple[str, str, Optional[str]]:
+    def _identifier_key(i: Identifier) -> tuple[str, str, str | None]:
         return (i.value.lower(), i.identifier_type.value, i.service)
 
     # ── Query helpers ─────────────────────────────────────────────
 
-    def corp_emails(self) -> List[Identifier]:
+    def corp_emails(self) -> list[Identifier]:
         return [i for i in self.identifiers if i.identifier_type == IdentifierType.CORP_EMAIL]
 
-    def personal_emails(self) -> List[Identifier]:
+    def personal_emails(self) -> list[Identifier]:
         return [i for i in self.identifiers if i.identifier_type == IdentifierType.PERSONAL_EMAIL]
 
-    def handles(self, service: Optional[str] = None) -> List[Identifier]:
+    def handles(self, service: str | None = None) -> list[Identifier]:
         out = [i for i in self.identifiers if i.identifier_type == IdentifierType.HANDLE]
         if service:
             out = [i for i in out if (i.service or "").lower() == service.lower()]
         return out
 
-    def best_identifier_for(self, kind: IdentifierType) -> Optional[Identifier]:
+    def best_identifier_for(self, kind: IdentifierType) -> Identifier | None:
         """Return the highest-confidence identifier of the given kind,
         or None if there are none."""
         candidates = [i for i in self.identifiers if i.identifier_type == kind]
@@ -364,7 +363,7 @@ class Identity:
 
     # ── Serialisation ─────────────────────────────────────────────
 
-    def to_dict(self, redact_credentials: bool = True) -> Dict[str, Any]:
+    def to_dict(self, redact_credentials: bool = True) -> dict[str, Any]:
         return {
             "identity_id": self.identity_id,
             "primary_label": self.primary_label,
@@ -383,7 +382,7 @@ class Identity:
 # ──────────────────────────────────────────────────────────────────────
 
 
-def derive_identity_id(identifiers: List[Identifier]) -> str:
+def derive_identity_id(identifiers: list[Identifier]) -> str:
     """Compute a stable ID for an identity from its known identifiers.
 
     Priority order for the seed:
@@ -412,7 +411,7 @@ def derive_identity_id(identifiers: List[Identifier]) -> str:
     return digest[:16]
 
 
-def _pick_seed_identifier(identifiers: List[Identifier]) -> str:
+def _pick_seed_identifier(identifiers: list[Identifier]) -> str:
     """Choose the seed identifier per the documented priority order."""
     priority = [
         IdentifierType.CORP_EMAIL,
@@ -454,12 +453,12 @@ class IdentityGraph:
     """
 
     def __init__(self) -> None:
-        self._identities: Dict[str, Identity] = {}
+        self._identities: dict[str, Identity] = {}
         # Reverse index: identifier value (lowercased) → identity_id.
         # Same identifier across multiple identities is allowed but
         # signals an attribution conflict the operator should
         # investigate ── we keep the most recent.
-        self._by_identifier_value: Dict[str, str] = {}
+        self._by_identifier_value: dict[str, str] = {}
 
     # ── Construction ──────────────────────────────────────────────
 
@@ -503,10 +502,10 @@ class IdentityGraph:
 
     # ── Lookup ────────────────────────────────────────────────────
 
-    def get(self, identity_id: str) -> Optional[Identity]:
+    def get(self, identity_id: str) -> Identity | None:
         return self._identities.get(identity_id)
 
-    def by_identifier(self, value: str) -> Optional[Identity]:
+    def by_identifier(self, value: str) -> Identity | None:
         """Find the identity that owns a given identifier value
         (case-insensitive)."""
         if not value:
@@ -516,7 +515,7 @@ class IdentityGraph:
             return None
         return self._identities.get(ident_id)
 
-    def all(self) -> List[Identity]:
+    def all(self) -> list[Identity]:
         return list(self._identities.values())
 
     def __len__(self) -> int:
@@ -527,11 +526,11 @@ class IdentityGraph:
 
     # ── Filters / aggregates ──────────────────────────────────────
 
-    def identities_with_credentials(self) -> List[Identity]:
+    def identities_with_credentials(self) -> list[Identity]:
         """All identities with at least one usable credential exposure."""
         return [i for i in self._identities.values() if i.has_actionable_credential()]
 
-    def identities_with_personal_email(self) -> List[Identity]:
+    def identities_with_personal_email(self) -> list[Identity]:
         """All identities for which the personal pivot found a
         confident personal email. Useful for the credential-correlation
         target set."""
@@ -544,7 +543,7 @@ class IdentityGraph:
 
     # ── Serialisation ─────────────────────────────────────────────
 
-    def to_dict(self, redact_credentials: bool = True) -> Dict[str, Any]:
+    def to_dict(self, redact_credentials: bool = True) -> dict[str, Any]:
         return {
             "identity_count": len(self._identities),
             "identities": [
@@ -554,7 +553,7 @@ class IdentityGraph:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "IdentityGraph":
+    def from_dict(cls, data: dict[str, Any]) -> IdentityGraph:
         """Rebuild an IdentityGraph from a ``to_dict()`` payload. Used
         by the campaign-resume path so a paused campaign can restore
         the identity graph from its checkpoint without re-running
@@ -612,7 +611,7 @@ class IdentityGraph:
 # ──────────────────────────────────────────────────────────────────────
 
 
-def build_from_email_intel(email_intel: Dict[str, Any]) -> IdentityGraph:
+def build_from_email_intel(email_intel: dict[str, Any]) -> IdentityGraph:
     """Convert the legacy ``email_intel.emails`` dict-of-dicts into a
     proper IdentityGraph. Used by Phase 2's wiring during the
     transition: Phase 2's existing code populates ``email_intel``,
@@ -629,7 +628,7 @@ def build_from_email_intel(email_intel: Dict[str, Any]) -> IdentityGraph:
         if not isinstance(record, dict):
             continue
 
-        identifiers: List[Identifier] = [
+        identifiers: list[Identifier] = [
             Identifier(
                 value=email,
                 identifier_type=IdentifierType.CORP_EMAIL,

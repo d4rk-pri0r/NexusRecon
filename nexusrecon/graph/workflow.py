@@ -7,19 +7,21 @@ and SQLite checkpointing for resume capability.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any
 
 from langgraph.graph import END, StateGraph
 
 from nexusrecon.graph.nodes import (
     phase1_passive_footprinting,
+    phase2_5_personal_identity_pivot,
     phase2_identity_cloud,
     phase3_code_leakage,
     phase4_correlation,
     phase5_light_active,
     phase6_active,
-    phase7_vuln_pretext,
     phase7_5_harvest,
+    phase7_7_pretext_intelligence,
+    phase7_vuln_pretext,
     phase8_attack_surface,
     phase9_reporting,
     reflection_node,
@@ -27,19 +29,21 @@ from nexusrecon.graph.nodes import (
 from nexusrecon.graph.state import CampaignGraphState
 from nexusrecon.models.campaign import CampaignMode
 
-PHASE_ORDER: List[str] = [
-    "phase1", "phase2", "phase3", "phase4",
-    "phase5", "phase6", "phase7", "phase7_5", "phase8", "phase9",
+PHASE_ORDER: list[str] = [
+    "phase1", "phase2", "phase2_5", "phase3", "phase4",
+    "phase5", "phase6", "phase7", "phase7_5", "phase7_7",
+    "phase8", "phase9",
 ]
 
 # Minimum tier required to run each phase (F-009)
-PHASE_TIERS: Dict[str, int] = {
-    "phase1": 0, "phase2": 0, "phase3": 0, "phase4": 0,
-    "phase5": 2, "phase6": 3, "phase7": 0, "phase7_5": 0, "phase8": 0, "phase9": 0,
+PHASE_TIERS: dict[str, int] = {
+    "phase1": 0, "phase2": 0, "phase2_5": 0, "phase3": 0, "phase4": 0,
+    "phase5": 2, "phase6": 3, "phase7": 0, "phase7_5": 0, "phase7_7": 0,
+    "phase8": 0, "phase9": 0,
 }
 
 # Maximum tier allowed per campaign mode (F-009)
-MODE_TIER_LIMITS: Dict[CampaignMode, int] = {
+MODE_TIER_LIMITS: dict[CampaignMode, int] = {
     CampaignMode.LIGHT: 0,
     CampaignMode.MEDIUM: 2,
     CampaignMode.DEEP: 3,
@@ -49,12 +53,14 @@ MODE_TIER_LIMITS: Dict[CampaignMode, int] = {
 PHASE_NODES = {
     "phase1": phase1_passive_footprinting,
     "phase2": phase2_identity_cloud,
+    "phase2_5": phase2_5_personal_identity_pivot,
     "phase3": phase3_code_leakage,
     "phase4": phase4_correlation,
     "phase5": phase5_light_active,
     "phase6": phase6_active,
     "phase7": phase7_vuln_pretext,
     "phase7_5": phase7_5_harvest,
+    "phase7_7": phase7_7_pretext_intelligence,
     "phase8": phase8_attack_surface,
     "phase9": phase9_reporting,
 }
@@ -106,10 +112,10 @@ def build_campaign_workflow(
 
 
 async def run_workflow(
-    state: Dict[str, Any],
+    state: dict[str, Any],
     db_path: str = ":memory:",
     mode: CampaignMode = CampaignMode.MEDIUM,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Convenience: compile and run the campaign workflow with the given initial state.
     Returns the final state after all phases complete (or error).

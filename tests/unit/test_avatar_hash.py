@@ -23,7 +23,6 @@ from nexusrecon.core.avatar_hash import (
     is_identicon_url,
 )
 
-
 # Skip the hash-computation tests when deps aren't available; the
 # pure-function tests (URL classification, distance, clustering)
 # still run.

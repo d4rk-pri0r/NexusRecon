@@ -1,8 +1,6 @@
 """Tests for nexusrecon.core.username_derivation."""
 from __future__ import annotations
 
-import pytest
-
 from nexusrecon.core.username_derivation import derive_usernames
 
 

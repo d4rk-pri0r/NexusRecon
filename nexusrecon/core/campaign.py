@@ -11,7 +11,7 @@ import json
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import structlog
 from rich.console import Console
@@ -53,8 +53,8 @@ class CampaignManager:
         self,
         scope: ScopeModel,
         mode: CampaignMode = CampaignMode.MEDIUM,
-        config: Optional[NexusConfig] = None,
-        campaign_id: Optional[str] = None,
+        config: NexusConfig | None = None,
+        campaign_id: str | None = None,
     ) -> None:
         self.scope = scope
         self.mode = mode
@@ -77,14 +77,14 @@ class CampaignManager:
         self.logs_dir = self.campaign_dir / "logs"
 
         # Core components (initialized in setup())
-        self.audit_log: Optional[AuditLog] = None
-        self.cache: Optional[Cache] = None
-        self.entity_graph: Optional[EntityGraph] = None
-        self.cost_tracker: Optional[CostTracker] = None
-        self.state: Optional[CampaignState] = None
+        self.audit_log: AuditLog | None = None
+        self.cache: Cache | None = None
+        self.entity_graph: EntityGraph | None = None
+        self.cost_tracker: CostTracker | None = None
+        self.state: CampaignState | None = None
         # Live execution dict — set by save_state() after each phase so that
         # _save_state() serialises real phase output rather than the empty skeleton.
-        self._live_dict: Optional[Dict[str, Any]] = None
+        self._live_dict: dict[str, Any] | None = None
 
     def _generate_id(self) -> str:
         ts = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
@@ -93,7 +93,7 @@ class CampaignManager:
 
     # ── Setup ─────────────────────────────────────────────────────────────────
 
-    def setup(self) -> "CampaignManager":
+    def setup(self) -> CampaignManager:
         """Initialize all campaign infrastructure. Must be called before use."""
         self._create_directories()
         self._display_roe_banner()
@@ -216,7 +216,7 @@ class CampaignManager:
                 encoding="utf-8",
             )
 
-    def save_state(self, state_dict: Dict[str, Any]) -> None:
+    def save_state(self, state_dict: dict[str, Any]) -> None:
         """Persist the live execution state dict to disk.
 
         Called by the CLI loop after each phase so that ``state.json`` always
@@ -264,7 +264,7 @@ class CampaignManager:
     # ── Diff against last run ─────────────────────────────────────────────────
 
     @classmethod
-    def diff_campaigns(cls, old_campaign_dir: str | Path, new_campaign_dir: str | Path) -> Dict[str, Any]:
+    def diff_campaigns(cls, old_campaign_dir: str | Path, new_campaign_dir: str | Path) -> dict[str, Any]:
         """
         Compute diff between two campaign states.
         Returns new findings, new entities, and changed entities.
@@ -293,7 +293,7 @@ class CampaignManager:
             "new_total_finding_count": len(new_state.get("findings", [])),
         }
 
-    def finalize(self) -> Dict[str, Any]:
+    def finalize(self) -> dict[str, Any]:
         """Finalize campaign: save state, verify audit chain, return summary."""
         self._save_state()
 
@@ -307,7 +307,7 @@ class CampaignManager:
             if self._live_dict is not None
             else (len(self.state.findings) if self.state else 0)
         )
-        report_paths_for_log: Dict[str, Any] = (
+        report_paths_for_log: dict[str, Any] = (
             self._live_dict.get("report_paths", {})
             if self._live_dict is not None
             else (self.state.report_paths if self.state else {})

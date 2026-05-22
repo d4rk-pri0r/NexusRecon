@@ -1,7 +1,7 @@
 """CertSpotter — certificate transparency monitoring (sslmate.com)."""
 from __future__ import annotations
 
-from typing import Any, Dict, List, Set
+from typing import Any
 
 import httpx
 
@@ -22,7 +22,7 @@ class CertSpotterTool(OSINTTool):
 
     async def run(self, target: str, **kwargs: Any) -> ToolResult:
         key = self.config.get_secret("certspotter_api_key")
-        headers: Dict[str, str] = {
+        headers: dict[str, str] = {
             "Accept": "application/json",
             "User-Agent": random_ua(),
         }
@@ -52,12 +52,12 @@ class CertSpotterTool(OSINTTool):
                 if resp.status_code != 200:
                     return ToolResult(success=False, source=self.name, error=f"CertSpotter returned {resp.status_code}")
 
-                certs: List[Dict[str, Any]] = resp.json()
+                certs: list[dict[str, Any]] = resp.json()
 
-                all_dns_names: Set[str] = set()
-                cert_list: List[Dict[str, Any]] = []
+                all_dns_names: set[str] = set()
+                cert_list: list[dict[str, Any]] = []
                 for cert in certs[:200]:
-                    dns_names: List[str] = cert.get("dns_names", [])
+                    dns_names: list[str] = cert.get("dns_names", [])
                     all_dns_names.update(dns_names)
                     issuer = cert.get("issuer")
                     cert_list.append({
@@ -72,7 +72,7 @@ class CertSpotterTool(OSINTTool):
                 # Strip wildcards for the subdomain list
                 subdomains = sorted({n for n in all_dns_names if not n.startswith("*")})
 
-                data: Dict[str, Any] = {
+                data: dict[str, Any] = {
                     "domain": target,
                     "certificate_count": len(certs),
                     "unique_domains": len(subdomains),

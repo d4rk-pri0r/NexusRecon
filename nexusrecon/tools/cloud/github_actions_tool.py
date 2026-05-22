@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List
+from typing import Any
 
 import httpx
 
@@ -41,8 +41,8 @@ class GitHubActionsTool(OSINTTool):
             "User-Agent": random_ua(),
         }
 
-        findings: List[Dict[str, Any]] = []
-        workflows_reviewed: List[str] = []
+        findings: list[dict[str, Any]] = []
+        workflows_reviewed: list[str] = []
 
         try:
             async with httpx.AsyncClient(
@@ -64,7 +64,7 @@ class GitHubActionsTool(OSINTTool):
                     return ToolResult(success=False, source=self.name, error=f"GitHub returned {search_resp.status_code}")
 
                 for item in search_resp.json().get("items", []):
-                    file_url = item.get("url")
+                    item.get("url")
                     repo = item.get("repository", {}).get("full_name", "")
                     path = item.get("path", "")
                     workflows_reviewed.append(f"{repo}/{path}")
@@ -96,7 +96,7 @@ class GitHubActionsTool(OSINTTool):
         except Exception as exc:
             return ToolResult(success=False, source=self.name, error=str(exc))
 
-        data: Dict[str, Any] = {
+        data: dict[str, Any] = {
             "target": target,
             "workflows_reviewed": workflows_reviewed,
             "finding_count": len(findings),

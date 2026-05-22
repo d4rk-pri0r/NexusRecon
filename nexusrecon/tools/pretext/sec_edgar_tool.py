@@ -1,8 +1,11 @@
 """SEC EDGAR filings parsing tool."""
 from __future__ import annotations
+
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 import httpx
+
 from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
 
@@ -33,8 +36,8 @@ class SECEdgarTool(OSINTTool):
 
     async def run(self, target: str, **kwargs: Any) -> ToolResult:
         company_name = kwargs.get("company_name") or self._domain_to_company(target)
-        filings: List[Dict[str, Any]] = []
-        tech_mentions: Dict[str, int] = {}
+        filings: list[dict[str, Any]] = []
+        tech_mentions: dict[str, int] = {}
 
         # Search SEC EDGAR full-text index
         search_results = await self._search_edgar(company_name)
@@ -62,9 +65,9 @@ class SECEdgarTool(OSINTTool):
             result_count=len(filings),
         )
 
-    async def _search_edgar(self, company: str) -> List[Dict[str, Any]]:
+    async def _search_edgar(self, company: str) -> list[dict[str, Any]]:
         """Search SEC EDGAR full-text index for filings mentioning the company."""
-        results: List[Dict[str, Any]] = []
+        results: list[dict[str, Any]] = []
         try:
             async with httpx.AsyncClient(timeout=15.0) as client:
                 for filing_type in FILING_TYPES[:3]:
@@ -96,7 +99,7 @@ class SECEdgarTool(OSINTTool):
             pass
         return results
 
-    async def _fetch_filing_text(self, url: str) -> Optional[str]:
+    async def _fetch_filing_text(self, url: str) -> str | None:
         """Fetch filing text for keyword analysis."""
         if not url.startswith("http"):
             url = f"https://www.sec.gov{url}" if url.startswith("/") else url

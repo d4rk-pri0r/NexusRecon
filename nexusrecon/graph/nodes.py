@@ -12,7 +12,7 @@ from __future__ import annotations
 import asyncio
 import json
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any
 
 import structlog
 
@@ -42,7 +42,7 @@ def _reset_executor() -> None:
     _executor = None
 
 
-def _get_tools_by_tier(max_tier: str, exclude_categories: set = None) -> List[Any]:
+def _get_tools_by_tier(max_tier: str, exclude_categories: set = None) -> list[Any]:
     """Get available tools filtered by tier."""
     registry = get_registry()
     tier_limit = int(max_tier[1])
@@ -77,8 +77,8 @@ async def phase1_passive_footprinting(state: CampaignGraphState) -> CampaignGrap
     """T0 passive broad sweep — subdomains, DNS, WHOIS, certs, initial intel."""
     log.info("Phase 1: Passive footprinting")
     state["current_phase"] = "phase1"
-    subdomain_intel: Dict[str, Any] = {}
-    domain_intel: Dict[str, Any] = {}
+    subdomain_intel: dict[str, Any] = {}
+    domain_intel: dict[str, Any] = {}
 
     registry = get_registry()
 
@@ -144,7 +144,7 @@ async def phase1_passive_footprinting(state: CampaignGraphState) -> CampaignGrap
         })
 
     # Dark intel: ransomwatch, ahmia, pastebin, certstream — parallel per seed
-    dark_intel: Dict[str, Any] = {}
+    dark_intel: dict[str, Any] = {}
     dark_tasks = []
     for seed in state.get("seeds", []):
         dark_tasks.extend([
@@ -175,8 +175,8 @@ async def phase2_identity_cloud(state: CampaignGraphState) -> CampaignGraphState
     """M365/Entra/AWS/GCP enumeration, email harvesting, federation discovery."""
     log.info("Phase 2: Identity and cloud recon")
     state["current_phase"] = "phase2"
-    email_intel: Dict[str, Any] = {"emails": {}, "formats": {}}
-    cloud_intel: Dict[str, Any] = {}
+    email_intel: dict[str, Any] = {"emails": {}, "formats": {}}
+    cloud_intel: dict[str, Any] = {}
 
     registry = get_registry()
     seeds = state.get("seeds", [])
@@ -271,7 +271,7 @@ async def phase2_identity_cloud(state: CampaignGraphState) -> CampaignGraphState
             # email. Each email's record in email_intel may carry a
             # position/department/name field; collect what's there.
             email_record = email_intel["emails"].get(em, {})
-            harvested_names: List[str] = []
+            harvested_names: list[str] = []
             for key in ("name", "first_name", "last_name"):
                 val = email_record.get(key)
                 if val and isinstance(val, str):
@@ -325,7 +325,7 @@ async def phase2_identity_cloud(state: CampaignGraphState) -> CampaignGraphState
     # collisions (smith on Reddit derived from john.smith@... etc.)
     # have already been scored down by the attribution scorer; this
     # is just where we threshold.
-    account_summary: Dict[str, Any] = {
+    account_summary: dict[str, Any] = {
         "per_email_account_count": {},
         "actionable_accounts": [],
         "filtered_noise_count": 0,
@@ -488,7 +488,7 @@ async def phase3_code_leakage(state: CampaignGraphState) -> CampaignGraphState:
     """Recursive subdomain on high-value findings, GitHub/code recon."""
     log.info("Phase 3: Deep subdomain and code leakage")
     state["current_phase"] = "phase3"
-    code_intel: Dict[str, Any] = {}
+    code_intel: dict[str, Any] = {}
     seeds = state.get("seeds", [])
 
     registry = get_registry()
@@ -889,7 +889,7 @@ async def phase7_vuln_pretext(state: CampaignGraphState) -> CampaignGraphState:
     """Pretexting research, CVE correlation against fingerprinted tech."""
     log.info("Phase 7: Pretext and vulnerability correlation")
     state["current_phase"] = "phase7"
-    vuln_intel: Dict[str, Any] = {}
+    vuln_intel: dict[str, Any] = {}
 
     registry = get_registry()
 
@@ -926,7 +926,7 @@ async def phase7_vuln_pretext(state: CampaignGraphState) -> CampaignGraphState:
             vuln_intel[f"nvd/{tech}"] = res.data
 
     # Collect all CVE IDs from NVD results
-    all_cve_ids: Dict[str, str] = {}  # cve_id → tech_name
+    all_cve_ids: dict[str, str] = {}  # cve_id → tech_name
     for tech, res in zip(list(tech_names)[:5], nvd_results):
         if isinstance(res, BaseException) or not res.success:
             continue
@@ -938,9 +938,9 @@ async def phase7_vuln_pretext(state: CampaignGraphState) -> CampaignGraphState:
                     all_cve_ids[cid] = tech
 
     # CVE enrichment — for each CVE, run exploit/template lookups in parallel
-    enriched_cves: Dict[str, Any] = {}
+    enriched_cves: dict[str, Any] = {}
 
-    async def _enrich_cve(cve_id: str, tech: str) -> tuple[str, Dict[str, Any]]:
+    async def _enrich_cve(cve_id: str, tech: str) -> tuple[str, dict[str, Any]]:
         enrich_tasks = [
             registry.execute("exploitdb", cve_id, "cve"),
             registry.execute("github_advisory", cve_id, "cve"),
@@ -954,7 +954,7 @@ async def phase7_vuln_pretext(state: CampaignGraphState) -> CampaignGraphState:
 
         exploitdb_r, ghsa_r, osv_r, template_r, vulners_r = results_list
 
-        enriched: Dict[str, Any] = {"tech": tech, "sources": ["nvd"]}
+        enriched: dict[str, Any] = {"tech": tech, "sources": ["nvd"]}
 
         # EPSS
         epss_r = await registry.execute("epss", cve_id, "cve")
@@ -1049,6 +1049,146 @@ async def phase7_vuln_pretext(state: CampaignGraphState) -> CampaignGraphState:
     return state
 
 
+# ── Phase 2.5: Personal Identity Pivot ───────────────────────────────────────
+
+
+async def phase2_5_personal_identity_pivot(state: CampaignGraphState) -> CampaignGraphState:
+    """Bridge corporate identities to personal identity + breach credential exposure.
+
+    Runs after Phase 2 (which builds ``email_intel``) and before Phase 3.
+
+    Steps:
+      1. Build an IdentityGraph from Phase 2's ``email_intel``.
+      2. For each identity with a name, execute the personal_pivot tool
+         (D3) via the registry (OPSEC stack applies: rate limiting, proxy,
+         audit log).
+      3. Extend the graph with discovered personal identifiers +
+         credential exposures.
+      4. Run the D4 credential correlation engine against the graph +
+         cloud_intel to produce the operator punch list.
+      5. Commit the graph + punch list to state for Phase 8/9 consumers.
+
+    Wall-clock budget: Semaphore(3) caps concurrent pivot calls.
+    At most 20 identities are pivoted to bound campaign runtime.
+    """
+    log.info("Phase 2.5: Personal identity pivot")
+    state["current_phase"] = "phase2_5"
+
+    from nexusrecon.core.credential_correlation import correlate_credentials
+    from nexusrecon.core.identity_graph import (
+        IdentifierType,
+        build_from_email_intel,
+    )
+    from nexusrecon.tools.identity.personal_pivot_tool import apply_extensions_to_graph
+
+    registry = get_registry()
+    email_intel: dict[str, Any] = state.get("email_intel") or {}
+    cloud_intel: dict[str, Any] = state.get("cloud_intel") or {}
+
+    # Build the graph from Phase 2 output.
+    graph = build_from_email_intel(email_intel)
+
+    if not graph.all():
+        log.info("Phase 2.5: no identities in graph, skipping pivot")
+        state["identity_graph"] = graph.to_dict()
+        state["credential_punch_list"] = []
+        state["completed_phases"] = list(state.get("completed_phases", [])) + ["phase2_5"]
+        return state
+
+    pivot_sem = asyncio.Semaphore(3)
+    pivot_results: dict[str, Any] = {}  # identity_id → pivot ToolResult.data
+
+    async def _pivot_one(identity: Any) -> None:
+        corp_id = identity.best_identifier_for(IdentifierType.CORP_EMAIL)
+        if not corp_id:
+            return
+
+        email = corp_id.value
+        name_id = identity.best_identifier_for(IdentifierType.REAL_NAME)
+        name = name_id.value if name_id else None
+
+        if not name:
+            # derive_personal_handles requires first + last name.
+            log.debug(
+                "Phase 2.5: no name for identity, skipping pivot",
+                identity_id=identity.identity_id,
+            )
+            return
+
+        async with pivot_sem:
+            result = await registry.execute(
+                "personal_pivot",
+                email,
+                "identity",
+                name=name,
+                age_range=identity.metadata.get("age_range"),
+                interests=identity.metadata.get("interests"),
+                location=identity.metadata.get("location"),
+            )
+
+        if result.success and result.data:
+            pivot_results[identity.identity_id] = result.data
+            apply_extensions_to_graph(graph, identity.identity_id, result.data)
+
+    # Cap at 20 identities to bound wall-clock.
+    await asyncio.gather(
+        *(_pivot_one(i) for i in graph.all()[:20]),
+        return_exceptions=True,
+    )
+
+    # D4 correlation — pure function, no network.
+    punch_list = correlate_credentials(graph, cloud_intel)
+
+    # Agent synthesis — summarise for report narrative.
+    pivot_summary = {
+        "identities_pivoted": len(pivot_results),
+        "identities_total": len(graph.all()),
+        "credential_candidates": len(punch_list),
+        "identities_with_credentials": len(graph.identities_with_credentials()),
+        "identities_with_personal_email": len(graph.identities_with_personal_email()),
+    }
+    executor = _get_executor()
+    try:
+        agent_result = await executor.run_agent(
+            "correlation",
+            task_data={
+                "pivot_summary": pivot_summary,
+                "top_candidates": [c.to_dict() for c in punch_list[:5]],
+                "endpoint_types": list({c.endpoint_type for c in punch_list}),
+            },
+            task_prompt=(
+                "Analyze the personal identity pivot results. "
+                "The framework correlated corporate identities with personal accounts and "
+                "surfaced credential exposures from breach databases and infostealer logs. "
+                "Key questions: "
+                "1. Which identities have the strongest credential exposure paths? "
+                "2. Which auth endpoints are most targetable given the MFA + lockout signals? "
+                "3. Are there breach patterns (same source hitting multiple identities)? "
+                "4. What does MFA coverage look like across discovered endpoints? "
+                "Produce a brief summary for the credential exposure report. "
+                "DO NOT recommend executing any credential tests automatically — "
+                "the operator reviews and decides."
+            ),
+            state=state,
+        )
+        state.setdefault("agent_messages", []).append({
+            "phase": "phase2_5",
+            "agent": "correlation",
+            "analysis": agent_result.get("output", ""),
+            "timestamp": datetime.utcnow().isoformat(),
+        })
+    except Exception as e:
+        log.warning("Agent synthesis failed", phase="phase2_5", error=str(e))
+
+    # Commit to state.  Credentials are redacted in the serialised graph;
+    # unredacted values stay in memory only within the current session.
+    state["identity_graph"] = graph.to_dict(redact_credentials=True)
+    state["credential_punch_list"] = [c.to_dict() for c in punch_list]
+    state["personal_pivot_results"] = pivot_results
+    state["completed_phases"] = list(state.get("completed_phases", [])) + ["phase2_5"]
+    return state
+
+
 # ── Phase 7.5: Credential Harvest ────────────────────────────────────────────
 
 async def phase7_5_harvest(state: CampaignGraphState) -> CampaignGraphState:
@@ -1060,6 +1200,339 @@ async def phase7_5_harvest(state: CampaignGraphState) -> CampaignGraphState:
     creds = await harvest_credentials(state, validate=state.get("validate_credentials", False))
     state["harvested_credentials"] = [c.__dict__ for c in creds]
     state["completed_phases"] = list(state.get("completed_phases", [])) + ["phase7_5"]
+    return state
+
+
+# ── Phase 7.7: Pretext Intelligence (E11) ────────────────────────────────────
+
+
+# Per-target hard caps for Phase 7.7. Matches Phase 2.5's discipline of
+# bounding wall-clock by capping fan-out. A 50-employee org × 5 social
+# tools = 250 calls; capping at 20 identities keeps it to ~100.
+_PHASE_7_7_MAX_IDENTITIES = 20
+
+
+async def phase7_7_pretext_intelligence(
+    state: CampaignGraphState,
+) -> CampaignGraphState:
+    """Phase 7.7 — Pretext intelligence (relationship graph + scoring +
+    optional drafts).
+
+    Locked-in slot between Phase 7.5 (credential harvest) and Phase 8
+    (attack-surface scoring) so pretext quality feeds the attack-
+    surface ranking.
+
+    Steps:
+      1. Reload the :class:`IdentityGraph` from state (Phase 2.5 wrote
+         it as ``state["identity_graph"]``). Falls back to building
+         from ``email_intel`` when 2.5 didn't run.
+      2. Build a fresh :class:`RelationshipGraph` attached to the
+         graph and orchestrate the E2-E8 tools:
+         - Per identity (capped at 20): fire the social tools
+           (github / mastodon / bluesky / linkedin) when matching
+           handle identifiers exist; fire conference_speaker when a
+           real-name identifier exists.
+         - Per unique corp-email domain: fire business_partner +
+           news_intel once.
+         Each tool's edge-extraction adapter feeds the
+         RelationshipGraph; news_intel's RecentActivity records go
+         to the scoring engine.
+      3. Score pretext candidates via :func:`score_pretext_candidates`,
+         honoring the optional ``pretext_targets`` narrowing.
+      4. Build per-target dossiers (one dict per target with sender
+         summary + top pretexts + activity timeline). When
+         ``generate_phishing_drafts`` is set, invoke the
+         phishing_drafter agent to populate the per-target ``draft``
+         field.
+      5. Commit state slots: ``relationship_graph``, ``pretext_scores``,
+         ``spear_phishing_intelligence``.
+
+    Wall-clock budget: 20 identity caps + per-tool internal limits
+    keep total HTTP calls in the low hundreds. The OPSEC rate limiter
+    applies per registry.execute() so the throttle is whatever the
+    operator's stealth profile dictates.
+    """
+    log.info("Phase 7.7: Pretext intelligence")
+    state["current_phase"] = "phase7_7"
+
+    from nexusrecon.core.identity_graph import (
+        IdentifierType,
+        IdentityGraph,
+        build_from_email_intel,
+    )
+    from nexusrecon.core.pretext_scoring import (
+        group_candidates_by_target,
+        score_pretext_candidates,
+        summarise_candidates,
+    )
+    from nexusrecon.core.recent_activity import RecentActivity
+    from nexusrecon.core.relationship_graph import RelationshipGraph
+    from nexusrecon.tools.identity.bluesky_social_tool import (
+        extract_edges_from_bluesky,
+    )
+    from nexusrecon.tools.identity.github_social_tool import (
+        extract_edges_from_github_social,
+    )
+    from nexusrecon.tools.identity.linkedin_social_tool import (
+        extract_edges_from_linkedin,
+    )
+    from nexusrecon.tools.identity.mastodon_social_tool import (
+        extract_edges_from_mastodon,
+    )
+    from nexusrecon.tools.intel.business_partner_tool import (
+        extract_org_edges_from_business_partner,
+    )
+    from nexusrecon.tools.pretext.conference_speaker_tool import (
+        extract_edges_from_conference_speaker,
+    )
+
+    registry = get_registry()
+
+    # ── 1. Reload IdentityGraph ─────────────────────────────────────
+    identity_graph_data = state.get("identity_graph") or {}
+    if identity_graph_data.get("identities"):
+        identity_graph = IdentityGraph.from_dict(identity_graph_data)
+    else:
+        # Fallback: Phase 2.5 didn't run. Build from email_intel.
+        email_intel = state.get("email_intel") or {}
+        identity_graph = build_from_email_intel(email_intel)
+
+    identities = identity_graph.all()
+    if not identities:
+        log.info("Phase 7.7: no identities, skipping")
+        state["relationship_graph"] = RelationshipGraph().to_dict()
+        state["pretext_scores"] = []
+        state["spear_phishing_intelligence"] = {
+            "summary": summarise_candidates([]),
+            "targets": {},
+        }
+        state["completed_phases"] = list(state.get("completed_phases", [])) + ["phase7_7"]
+        return state
+
+    # Cap on identity-level fan-out.
+    crawl_identities = identities[:_PHASE_7_7_MAX_IDENTITIES]
+
+    relationship_graph = RelationshipGraph(identity_graph=identity_graph)
+    recent_activities: list[RecentActivity] = []
+    fan_sem = asyncio.Semaphore(3)  # bound concurrent tool calls
+
+    # ── 2a. Per-identity social-tool fan-out ────────────────────────
+
+    async def _fire_social_tools_for(identity: Any) -> None:
+        # GitHub
+        gh_handles = [
+            i for i in identity.identifiers
+            if i.identifier_type == IdentifierType.HANDLE
+            and (i.service or "").lower() == "github"
+        ]
+        if gh_handles:
+            async with fan_sem:
+                result = await registry.execute(
+                    "github_social", gh_handles[0].value, "handle",
+                )
+            if result.success and result.data:
+                for src_id, edge in extract_edges_from_github_social(
+                    result.data, identity.identity_id, identity_graph,
+                ):
+                    relationship_graph.add_edge(src_id, edge)
+
+        # Mastodon
+        mast_handles = [
+            i for i in identity.identifiers
+            if i.identifier_type == IdentifierType.HANDLE
+            and (i.service or "").lower() == "mastodon"
+        ]
+        if mast_handles:
+            async with fan_sem:
+                result = await registry.execute(
+                    "mastodon_social", mast_handles[0].value, "handle",
+                )
+            if result.success and result.data:
+                for src_id, edge in extract_edges_from_mastodon(
+                    result.data, identity.identity_id, identity_graph,
+                ):
+                    relationship_graph.add_edge(src_id, edge)
+
+        # Bluesky
+        bsky_handles = [
+            i for i in identity.identifiers
+            if i.identifier_type == IdentifierType.HANDLE
+            and (i.service or "").lower() == "bluesky"
+        ]
+        if bsky_handles:
+            async with fan_sem:
+                result = await registry.execute(
+                    "bluesky_social", bsky_handles[0].value, "handle",
+                )
+            if result.success and result.data:
+                for src_id, edge in extract_edges_from_bluesky(
+                    result.data, identity.identity_id, identity_graph,
+                ):
+                    relationship_graph.add_edge(src_id, edge)
+
+        # LinkedIn — only fires if auth is configured (is_available()
+        # returns False when both auth pairs are missing, so the
+        # registry returns the prereqs-not-met error and we skip).
+        li_handles = [
+            i for i in identity.identifiers
+            if i.identifier_type == IdentifierType.HANDLE
+            and (i.service or "").lower() == "linkedin"
+        ]
+        if li_handles:
+            async with fan_sem:
+                result = await registry.execute(
+                    "linkedin_social", li_handles[0].value, "handle",
+                )
+            if result.success and result.data:
+                for src_id, edge in extract_edges_from_linkedin(
+                    result.data, identity.identity_id, identity_graph,
+                ):
+                    relationship_graph.add_edge(src_id, edge)
+
+        # Conference speaker — by name
+        name_ident = identity.best_identifier_for(IdentifierType.REAL_NAME)
+        if name_ident and name_ident.value:
+            async with fan_sem:
+                result = await registry.execute(
+                    "conference_speaker", name_ident.value, "name",
+                )
+            if result.success and result.data:
+                for src_id, edge in extract_edges_from_conference_speaker(
+                    result.data, identity.identity_id, identity_graph,
+                ):
+                    relationship_graph.add_edge(src_id, edge)
+
+    await asyncio.gather(
+        *(_fire_social_tools_for(i) for i in crawl_identities),
+        return_exceptions=True,
+    )
+
+    # ── 2b. Per-corp-domain org tools (business_partner + news) ─────
+
+    corp_domains: set[str] = set()
+    for identity in crawl_identities:
+        corp_ident = identity.best_identifier_for(IdentifierType.CORP_EMAIL)
+        if corp_ident and "@" in corp_ident.value:
+            corp_domains.add(corp_ident.value.split("@", 1)[1].lower())
+
+    async def _fire_org_tools_for(domain: str) -> None:
+        # business_partner
+        async with fan_sem:
+            bp_result = await registry.execute(
+                "business_partner", domain, "domain",
+            )
+        if bp_result.success and bp_result.data:
+            # Org edges are between organisations. Use the domain-stub
+            # identity as the "target" of edges. We materialise a
+            # bare org identity here so the graph stays connected.
+            from nexusrecon.core.identity_graph import (
+                Identifier,
+                Identity,
+                derive_identity_id,
+            )
+            org_ident = Identifier(
+                value=domain,
+                identifier_type=IdentifierType.DOMAIN,
+                source="business_partner",
+                confidence=0.9,
+            )
+            org_id = derive_identity_id([org_ident])
+            if org_id not in identity_graph:
+                identity_graph.add_identity(Identity(
+                    identity_id=org_id,
+                    primary_label=domain,
+                    identifiers=[org_ident],
+                    metadata={"entity_type": "org"},
+                ))
+            for src_id, edge in extract_org_edges_from_business_partner(
+                bp_result.data, org_id, identity_graph,
+            ):
+                relationship_graph.add_edge(src_id, edge)
+
+        # news_intel — collect RecentActivity records
+        async with fan_sem:
+            news_result = await registry.execute(
+                "news_intel", domain, "domain",
+            )
+        if news_result.success and news_result.data:
+            for rec_dict in (news_result.data.get("recent_activity_records") or []):
+                try:
+                    recent_activities.append(RecentActivity.from_dict(rec_dict))
+                except (KeyError, TypeError) as exc:
+                    log.debug(
+                        "Phase 7.7: malformed recent_activity record skipped",
+                        error=str(exc),
+                    )
+
+    await asyncio.gather(
+        *(_fire_org_tools_for(d) for d in corp_domains),
+        return_exceptions=True,
+    )
+
+    # ── 3. Score pretext candidates ─────────────────────────────────
+
+    pretext_targets = state.get("pretext_targets") or None
+    candidates = score_pretext_candidates(
+        identity_graph=identity_graph,
+        relationship_graph=relationship_graph,
+        recent_activities=recent_activities,
+        target_ids=pretext_targets,
+    )
+
+    # ── 4. Per-target dossiers + optional drafter agent ─────────────
+
+    grouped = group_candidates_by_target(candidates)
+    target_dossiers: dict[str, Any] = {}
+    for target_id, target_candidates in grouped.items():
+        target_identity = identity_graph.get(target_id)
+        target_dossiers[target_id] = {
+            "target_identity_id": target_id,
+            "target_label": (
+                target_identity.primary_label if target_identity else target_id
+            ),
+            "top_candidates": [c.to_dict() for c in target_candidates],
+            "draft": None,
+        }
+
+    # Drafter is gated on --generate-phishing.
+    if state.get("generate_phishing_drafts") and target_dossiers:
+        executor = _get_executor()
+        for target_id, dossier in target_dossiers.items():
+            try:
+                agent_result = await executor.run_agent(
+                    "phishing_drafter",
+                    task_data={
+                        "target_identity_id": target_id,
+                        "target_label": dossier["target_label"],
+                        "top_pretext_candidates": dossier["top_candidates"][:3],
+                    },
+                    task_prompt=(
+                        "Produce ONE spear-phishing draft for the target "
+                        "identity, following the JSON schema in your "
+                        "backstory. Use only the supplied OSINT signals; "
+                        "do not invent prior interactions. If the "
+                        "top pretext candidate has combined_score < 0.15, "
+                        "return the no-draft fallback shape."
+                    ),
+                    state=state,
+                )
+                dossier["draft"] = agent_result.get("output", "")
+            except Exception as exc:
+                log.warning(
+                    "Phase 7.7 drafter failed",
+                    target_id=target_id, error=str(exc),
+                )
+
+    # ── 5. Commit state ─────────────────────────────────────────────
+
+    state["identity_graph"] = identity_graph.to_dict(redact_credentials=True)
+    state["relationship_graph"] = relationship_graph.to_dict()
+    state["pretext_scores"] = [c.to_dict() for c in candidates]
+    state["spear_phishing_intelligence"] = {
+        "summary": summarise_candidates(candidates),
+        "targets": target_dossiers,
+    }
+    state["completed_phases"] = list(state.get("completed_phases", [])) + ["phase7_7"]
     return state
 
 
@@ -1242,7 +1715,7 @@ def route_to_next_phase(state: CampaignGraphState) -> str:
     """Determine the next phase based on current state."""
     completed = set(state.get("completed_phases", []))
     phase_order = [
-        "phase1", "phase2", "phase3", "phase4",
+        "phase1", "phase2", "phase2_5", "phase3", "phase4",
         "phase5", "phase6", "phase7", "phase7_5", "phase8", "phase9",
     ]
 

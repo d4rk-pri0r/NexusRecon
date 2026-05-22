@@ -1,8 +1,12 @@
 """Tests for models/findings.py — Finding model."""
+
 import pytest
-from datetime import datetime
+
 from nexusrecon.models.findings import (
-    Finding, FindingSeverity, ConfidenceLevel, FindingCategory,
+    ConfidenceLevel,
+    Finding,
+    FindingCategory,
+    FindingSeverity,
 )
 
 

@@ -26,7 +26,6 @@ from nexusrecon.core.profile_fetcher import (
     fetch_profiles_batch,
 )
 
-
 # ──────────────────────────────────────────────────────────────────────
 # ProfileData behaviour
 # ──────────────────────────────────────────────────────────────────────

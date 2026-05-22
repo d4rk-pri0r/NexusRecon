@@ -1,9 +1,12 @@
 """Google dork automation — queries via HTTP search with rate limiting and fallback."""
 from __future__ import annotations
+
 import asyncio
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 import httpx
+
 from nexusrecon.opsec.useragent import random_ua
 from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
@@ -74,7 +77,7 @@ class DorksTool(OSINTTool):
             result_count=total_found,
         )
 
-    async def _search_google(self, client: httpx.AsyncClient, query: str) -> Optional[List[str]]:
+    async def _search_google(self, client: httpx.AsyncClient, query: str) -> list[str] | None:
         headers = {
             "User-Agent": random_ua(),
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -94,7 +97,7 @@ class DorksTool(OSINTTool):
         except Exception:
             return None
 
-    async def _search_bing(self, client: httpx.AsyncClient, query: str) -> Optional[List[str]]:
+    async def _search_bing(self, client: httpx.AsyncClient, query: str) -> list[str] | None:
         headers = {"User-Agent": random_ua(), "Accept": "text/html"}
         params = {"q": query, "count": 10}
         try:

@@ -1,7 +1,7 @@
 """EmailRep — email reputation, breach signals, and deliverability."""
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 import httpx
 
@@ -25,7 +25,7 @@ class EmailRepTool(OSINTTool):
 
     async def run(self, target: str, **kwargs: Any) -> ToolResult:
         key = self.config.get_secret("emailrep_api_key")
-        headers: Dict[str, str] = {
+        headers: dict[str, str] = {
             "User-Agent": random_ua(),
             "Accept": "application/json",
         }

@@ -14,26 +14,20 @@ ToolsScreen remains read-only (browse-only).
 """
 from __future__ import annotations
 
-import asyncio
 import shutil
 from pathlib import Path
-from typing import Any, Dict, List, Optional
 
 from textual.app import ComposeResult
-from textual.binding import Binding
-from textual.containers import Container, Horizontal, Vertical, VerticalScroll
+from textual.containers import Container, Horizontal, Vertical
 from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header, ListItem, ListView, Static
 
 from nexusrecon.tui.config_schema import (
-    BINARIES_CATEGORY,
-    CATEGORIES,
     ConfigCategory,
-    ConfigVar,
     all_categories,
-    find_var,
 )
 from nexusrecon.tui.env_editor import EnvFile, mask_value
+from nexusrecon.tui.widgets import StatusBar
 
 
 def _resolve_env_path() -> Path:
@@ -64,16 +58,40 @@ class ConfigScreen(Screen):
         ("ctrl+q", "quit_app", "Quit"),
     ]
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        initial_category_id: str | None = None,
+        initial_key: str | None = None,
+    ) -> None:
+        """Construct a Config screen.
+
+        Args:
+            initial_category_id: Pre-select this category on mount
+                (e.g. jumped here from the tools browser). Falls
+                back to the first category when ``None`` or unknown.
+            initial_key: Pre-highlight this env var row in the
+                right pane and immediately open its edit modal so
+                the operator never has to scan for the key they
+                came to configure.
+        """
         super().__init__()
         self.env_path = _resolve_env_path()
-        self._cats: List[ConfigCategory] = all_categories()
+        self._cats: list[ConfigCategory] = all_categories()
         self._current_cat_idx: int = 0
+        if initial_category_id:
+            for i, c in enumerate(self._cats):
+                if c.id == initial_category_id:
+                    self._current_cat_idx = i
+                    break
+        self._initial_key = initial_key
+        self._initial_edit_fired = False
 
     # ── Compose ────────────────────────────────────────────────────────
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=False)
+        yield StatusBar()
         with Container(id="config-content"):
             with Vertical(id="config-stack"):
                 yield Static(
@@ -114,13 +132,35 @@ class ConfigScreen(Screen):
     # ── Lifecycle ──────────────────────────────────────────────────────
 
     async def on_mount(self) -> None:
-        # Pre-select first category so the right pane has content immediately
+        # Pre-select the category requested by deep-link, or the first
+        # one when no caller specified.
         try:
-            self.query_one("#cat-list", ListView).index = 0
+            self.query_one("#cat-list", ListView).index = self._current_cat_idx
         except Exception:
             pass
         self._render_keys_pane()
-        # Focus the category list so arrow keys start working immediately
+        # Deep-link path: if the caller asked to jump to a specific
+        # env var (Tools browser → Config), highlight its row in the
+        # keys table and immediately open the edit modal. The
+        # operator went here to edit one specific key — don't make
+        # them hunt for it again.
+        if self._initial_key and not self._initial_edit_fired:
+            self._initial_edit_fired = True
+            cat = self._cats[self._current_cat_idx]
+            for row_idx, var in enumerate(cat.vars):
+                if var.key == self._initial_key:
+                    try:
+                        table = self.query_one("#keys-table", DataTable)
+                        table.cursor_coordinate = (row_idx, 0)
+                        table.focus()
+                    except Exception:
+                        pass
+                    # Fire the edit action right away so the modal
+                    # opens on the targeted key.
+                    await self.action_edit_selected()
+                    return
+        # Default path: focus the category list so arrow keys start
+        # working immediately.
         try:
             self.query_one("#cat-list", ListView).focus()
         except Exception:
@@ -163,7 +203,7 @@ class ConfigScreen(Screen):
 
     def _populate_binaries_table(self, table: DataTable) -> None:
         table.add_columns("Binary", "Path", "Notes")
-        seen: Dict[str, str] = {}
+        seen: dict[str, str] = {}
         try:
             from nexusrecon.tools.registry import get_registry
             for t in get_registry()._tools.values():
@@ -228,7 +268,7 @@ class ConfigScreen(Screen):
         var = cat.vars[row]
         from nexusrecon.tui.screens.edit_key import EditKeyModal
 
-        def _on_dismiss(result: Optional[str]) -> None:
+        def _on_dismiss(result: str | None) -> None:
             # result is None on cancel, the new value (or "" for clear) on save
             self._render_keys_pane()
 
@@ -269,6 +309,7 @@ class ToolsScreen(Screen):
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=False)
+        yield StatusBar()
         yield Static(
             "[bold #00ff9c]Tools[/bold #00ff9c]  "
             "[dim](press Esc to return)[/dim]",

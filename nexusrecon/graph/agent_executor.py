@@ -17,31 +17,28 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 import structlog
 
-from nexusrecon.core.cost_tracker import CostTracker, BudgetExceededError
 from nexusrecon.agents.base import (
     BaseNexusAgent,
-    wrap_as_data,
-    sanitize_scraped_content,
 )
-from nexusrecon.agents.planner import CampaignPlannerAgent
-from nexusrecon.agents.recon_passive import PassiveReconSpecialist
-from nexusrecon.agents.recon_active import ActiveReconSpecialist
 from nexusrecon.agents.cloud_identity import CloudIdentitySpecialist
-from nexusrecon.agents.pretext_humint import PretextHumintAgent
 from nexusrecon.agents.correlation import CorrelationAgent
-from nexusrecon.agents.risk_analyst import RiskAnalystAgent
-from nexusrecon.agents.vuln_correlator import VulnCorrelatorAgent
+from nexusrecon.agents.dynamic_dispatcher import DynamicDispatcherAgent
 from nexusrecon.agents.evidence_auditor import EvidenceAuditorAgent
-from nexusrecon.agents.reporter import ExecutiveReporterAgent
 from nexusrecon.agents.master_reporter import MasterReporterAgent
 from nexusrecon.agents.phishing_drafter import PhishingDrafterAgent
-from nexusrecon.agents.dynamic_dispatcher import DynamicDispatcherAgent
+from nexusrecon.agents.planner import CampaignPlannerAgent
+from nexusrecon.agents.pretext_humint import PretextHumintAgent
+from nexusrecon.agents.recon_active import ActiveReconSpecialist
+from nexusrecon.agents.recon_passive import PassiveReconSpecialist
+from nexusrecon.agents.reporter import ExecutiveReporterAgent
+from nexusrecon.agents.risk_analyst import RiskAnalystAgent
+from nexusrecon.agents.vuln_correlator import VulnCorrelatorAgent
+from nexusrecon.core.cost_tracker import BudgetExceededError, CostTracker
 
 log = structlog.get_logger(__name__)
 
@@ -239,10 +236,10 @@ class AgentExecutor:
     async def run_agent(
         self,
         agent_name: str,
-        task_data: Dict[str, Any],
+        task_data: dict[str, Any],
         task_prompt: str,
-        state: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        state: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """
         Run a specific agent with the given task data.
 
@@ -337,7 +334,7 @@ class AgentExecutor:
             }
 
     @staticmethod
-    def _parse_findings_json(content: str, phase: str) -> List[Dict[str, Any]]:
+    def _parse_findings_json(content: str, phase: str) -> list[dict[str, Any]]:
         """
         Extract and parse the FINDINGS_JSON block from agent output.
 
@@ -355,8 +352,8 @@ class AgentExecutor:
             if not isinstance(parsed, list):
                 log.debug("FINDINGS_JSON block is not a list", type=type(parsed).__name__)
                 return []
-            now = datetime.now(timezone.utc).isoformat()
-            valid: List[Dict[str, Any]] = []
+            now = datetime.now(UTC).isoformat()
+            valid: list[dict[str, Any]] = []
             for finding in parsed:
                 if isinstance(finding, dict):
                     finding.setdefault("phase", phase)
@@ -382,9 +379,9 @@ class AgentExecutor:
 
     @staticmethod
     def _gate_findings_by_attribution(
-        findings: List[Dict[str, Any]],
-        state: Optional[Dict[str, Any]],
-    ) -> List[Dict[str, Any]]:
+        findings: list[dict[str, Any]],
+        state: dict[str, Any] | None,
+    ) -> list[dict[str, Any]]:
         """
         B29: defensive backstop that downgrades findings citing low-confidence
         (stem-match) cloud data to ``info`` severity + ``[POSSIBLE]`` prefix.
@@ -527,9 +524,9 @@ class AgentExecutor:
 
     @staticmethod
     def _build_context(
-        data: Dict[str, Any],
+        data: dict[str, Any],
         task_prompt: str,
-        agent: Optional["BaseNexusAgent"] = None,
+        agent: BaseNexusAgent | None = None,
     ) -> str:
         """Build the full prompt with context and data, incorporating agent identity."""
         context_parts = []
@@ -608,7 +605,7 @@ class AgentExecutor:
 
     @staticmethod
     def audit_findings(
-        findings: List[Dict[str, Any]],
+        findings: list[dict[str, Any]],
     ) -> tuple:
         """Validate findings have complete citations (runs synchronously)."""
         auditor = EvidenceAuditorAgent()

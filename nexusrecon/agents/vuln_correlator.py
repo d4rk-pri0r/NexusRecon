@@ -1,7 +1,7 @@
 """Vulnerability Correlator agent — tech stack → CVE mapping."""
 from __future__ import annotations
-from nexusrecon.agents.base import BaseNexusAgent
 
+from nexusrecon.agents.base import BaseNexusAgent
 
 VULN_ROLE = """
 Vulnerability Correlation Specialist. You map fingerprinted technologies

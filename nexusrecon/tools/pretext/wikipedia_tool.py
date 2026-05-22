@@ -1,7 +1,7 @@
 """Wikipedia/Wikidata — structured org intelligence from public encyclopedic sources."""
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import httpx
 
@@ -65,14 +65,14 @@ class WikipediaTool(OSINTTool):
 
                 # Step 3 — Wikidata structured properties
                 entity_resp = await client.get(
-                    "https://www.wikidata.org/wiki/Special:EntityData/{}.json".format(qid),
+                    f"https://www.wikidata.org/wiki/Special:EntityData/{qid}.json",
                 )
-                claims: Dict[str, Any] = {}
+                claims: dict[str, Any] = {}
                 if entity_resp.status_code == 200:
                     entity = entity_resp.json().get("entities", {}).get(qid, {})
                     claims = entity.get("claims", {})
 
-                def _claim_value(prop: str) -> Optional[str]:
+                def _claim_value(prop: str) -> str | None:
                     snaks = claims.get(prop, [{}])
                     if not snaks:
                         return None
@@ -81,7 +81,7 @@ class WikipediaTool(OSINTTool):
                         return mv.get("text") or mv.get("time") or str(mv)
                     return str(mv) if mv else None
 
-                def _claim_values(prop: str, limit: int = 5) -> List[str]:
+                def _claim_values(prop: str, limit: int = 5) -> list[str]:
                     vals = []
                     for snak in claims.get(prop, [])[:limit]:
                         mv = snak.get("mainsnak", {}).get("datavalue", {}).get("value")
@@ -93,7 +93,7 @@ class WikipediaTool(OSINTTool):
                             vals.append(v)
                     return vals
 
-                data: Dict[str, Any] = {
+                data: dict[str, Any] = {
                     "target": target,
                     "found": True,
                     "wikidata_id": qid,

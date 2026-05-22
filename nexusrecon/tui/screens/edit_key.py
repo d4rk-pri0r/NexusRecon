@@ -8,18 +8,17 @@ and buttons.
 from __future__ import annotations
 
 import asyncio
-from typing import Optional
 
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, Footer, Input, Select, Static
 
-from nexusrecon.tui.config_schema import ConfigVar, find_var
+from nexusrecon.tui.config_schema import ConfigVar
 from nexusrecon.tui.env_editor import EnvFile, mask_value
 
 
-class EditKeyModal(ModalScreen[Optional[str]]):
+class EditKeyModal(ModalScreen[str | None]):
     """Modal: edit one env key, write to .env, hot-reload the config.
 
     Returns the new value (or None on cancel) via the standard
@@ -143,26 +142,62 @@ class EditKeyModal(ModalScreen[Optional[str]]):
         return self.query_one("#edit-input", Input).value or ""
 
     def action_save(self) -> None:
-        """Write the new value to .env and dismiss with it."""
+        """Write the new value to .env and dismiss with it.
+
+        TUI-6: success surfaces as a toast on the underlying screen
+        so the operator gets concrete feedback that the save
+        actually happened (the modal closes but the toast lingers
+        for the standard 4 seconds)."""
         new_val = self._new_value().strip()
         try:
             self._env.set_value(self.var.key, new_val)
             self._env.write()
             self._hot_reload_config()
+            label = "set" if new_val else "cleared"
+            try:
+                self.app.notify(
+                    f"{self.var.key} {label}",
+                    severity="information",
+                )
+            except Exception:
+                pass
             self.dismiss(new_val)
         except Exception as exc:
             self._show_error(f"Save failed: {exc}")
+            try:
+                self.app.notify(
+                    f"Save failed: {exc}",
+                    severity="error",
+                )
+            except Exception:
+                pass
 
     def action_delete(self) -> None:
-        """Clear the key entirely (removes the line from .env)."""
+        """Clear the key entirely (removes the line from .env).
+
+        TUI-6: success/error toast for parity with action_save."""
         try:
             removed = self._env.delete_value(self.var.key)
             if removed:
                 self._env.write()
                 self._hot_reload_config()
+                try:
+                    self.app.notify(
+                        f"{self.var.key} cleared",
+                        severity="information",
+                    )
+                except Exception:
+                    pass
             self.dismiss("")
         except Exception as exc:
             self._show_error(f"Clear failed: {exc}")
+            try:
+                self.app.notify(
+                    f"Clear failed: {exc}",
+                    severity="error",
+                )
+            except Exception:
+                pass
 
     @staticmethod
     def _hot_reload_config() -> None:

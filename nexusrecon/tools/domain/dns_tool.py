@@ -1,7 +1,10 @@
 """Full DNS record sweep tool."""
 from __future__ import annotations
-from typing import Any, Dict, List, Optional
+
+from typing import Any
+
 import dns.asyncresolver
+
 from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
 
@@ -25,7 +28,7 @@ class DNSTool(OSINTTool):
             resolver.lifetime = 10
 
             record_types = ["A", "AAAA", "MX", "TXT", "NS", "SOA", "CAA", "SRV", "CNAME"]
-            results: Dict[str, List[str]] = {}
+            results: dict[str, list[str]] = {}
 
             for rtype in record_types:
                 try:

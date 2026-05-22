@@ -31,16 +31,13 @@ gau, arjun, webtech) are covered separately under ``test_tools_binary``.
 """
 from __future__ import annotations
 
+from collections.abc import Iterable
 from types import SimpleNamespace
-from typing import Any, Iterable, List
 from unittest.mock import MagicMock, patch
 
 import httpx
-import pytest
 import respx
 from httpx import Response
-
-from tests.fixtures import load_fixture, load_text_fixture
 
 from nexusrecon.tools.web.cms_detect_tool import CMSDetectTool
 from nexusrecon.tools.web.linkfinder_tool import LinkFinderTool
@@ -48,7 +45,7 @@ from nexusrecon.tools.web.sslyze_tool import SSLyzeTool
 from nexusrecon.tools.web.subdomain_takeover_tool import SubdomainTakeoverTool
 from nexusrecon.tools.web.wafw00f_tool import WafW00fTool
 from nexusrecon.tools.web.wayback_tool import WaybackTool
-
+from tests.fixtures import load_fixture, load_text_fixture
 
 # ────────────────────────────────────────────────────────────────────────
 # Wayback Machine — waybackpy.WaybackMachineCDXServerAPI
@@ -64,7 +61,7 @@ from nexusrecon.tools.web.wayback_tool import WaybackTool
 # ever started reading mis-named attributes again.
 # ────────────────────────────────────────────────────────────────────────
 
-def _fake_snapshots(records: Iterable[dict]) -> List[SimpleNamespace]:
+def _fake_snapshots(records: Iterable[dict]) -> list[SimpleNamespace]:
     """Convert raw CDX-style dicts into objects with the attributes
     the wayback tool reads off each snapshot.
 
@@ -155,7 +152,7 @@ class TestWaybackTool:
         """A snapshot record missing the attributes the tool reads should
         raise AttributeError inside the iteration loop; the tool's
         ``except Exception`` catches it and returns failure."""
-        broken = MagicMock()
+        MagicMock()
         # ``broken.url`` returns another MagicMock (fine), but iterating
         # the list and adding to ``set`` requires hashable items — make
         # the snapshot generator itself blow up partway through.
@@ -362,7 +359,7 @@ class TestLinkFinderTool:
 # Location, ServerScanRequest) and feed a fake scan result.
 # ────────────────────────────────────────────────────────────────────────
 
-def _make_fake_cipher_result(cipher_names: List[str]) -> MagicMock:
+def _make_fake_cipher_result(cipher_names: list[str]) -> MagicMock:
     """Return a fake per-protocol scan result with ``accepted_cipher_suites``."""
     suites = []
     for name in cipher_names:

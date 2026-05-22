@@ -1,2 +1,9 @@
 """Code and secret scanning tools."""
-from . import github_tool, gitleaks_tool, trufflehog_tool, gitdorker_tool, postman_tool, dockerhub_tool
+from . import (
+    dockerhub_tool,
+    gitdorker_tool,
+    github_tool,
+    gitleaks_tool,
+    postman_tool,
+    trufflehog_tool,
+)

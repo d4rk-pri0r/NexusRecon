@@ -1,7 +1,7 @@
 """GitHub Security Advisory (GHSA) — package-level vulnerability data by CVE."""
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import httpx
 
@@ -24,7 +24,7 @@ class GitHubAdvisoryTool(OSINTTool):
         cve_id = target.upper()
         token = self.config.get_secret("github_token")
 
-        headers: Dict[str, str] = {
+        headers: dict[str, str] = {
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
             "User-Agent": random_ua(),
@@ -51,8 +51,8 @@ class GitHubAdvisoryTool(OSINTTool):
                         error=f"GitHub Advisory returned {resp.status_code}",
                     )
 
-                advisories: List[Dict[str, Any]] = resp.json()
-                parsed: List[Dict[str, Any]] = []
+                advisories: list[dict[str, Any]] = resp.json()
+                parsed: list[dict[str, Any]] = []
 
                 for adv in advisories:
                     cvss = adv.get("cvss") or {}
@@ -79,7 +79,7 @@ class GitHubAdvisoryTool(OSINTTool):
                         "url": adv.get("html_url"),
                     })
 
-                data: Dict[str, Any] = {
+                data: dict[str, Any] = {
                     "cve": cve_id,
                     "advisory_count": len(parsed),
                     "advisories": parsed,

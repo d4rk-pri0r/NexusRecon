@@ -17,16 +17,17 @@ import hashlib
 import json
 import sqlite3
 import time
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Dict, Generator, Optional
+from typing import Any
 
 import structlog
 
 log = structlog.get_logger(__name__)
 
 # Default TTLs in seconds
-DEFAULT_TTLS: Dict[str, int] = {
+DEFAULT_TTLS: dict[str, int] = {
     "crtsh": 86400,           # 24h
     "shodan": 21600,          # 6h
     "censys": 21600,          # 6h
@@ -101,7 +102,7 @@ class Cache:
         canonical = source + "|" + json.dumps(query, sort_keys=True, default=str)
         return hashlib.sha256(canonical.encode()).hexdigest()
 
-    def get(self, source: str, query: Any) -> Optional[Any]:
+    def get(self, source: str, query: Any) -> Any | None:
         """Return cached result or None if missing/expired."""
         key = self._make_key(source, query)
         now = time.time()
@@ -125,7 +126,7 @@ class Cache:
             )
             return json.loads(row["result"])
 
-    def set(self, source: str, query: Any, result: Any, ttl: Optional[int] = None) -> None:
+    def set(self, source: str, query: Any, result: Any, ttl: int | None = None) -> None:
         """Store a result in the cache."""
         if ttl is None:
             ttl = DEFAULT_TTLS.get(source.lower(), DEFAULT_TTLS["default"])
@@ -179,7 +180,7 @@ class Cache:
             log.info("Cache purged expired entries", count=count)
         return count
 
-    def stats(self) -> Dict[str, Any]:
+    def stats(self) -> dict[str, Any]:
         """Return cache statistics."""
         with self._conn() as conn:
             total = conn.execute("SELECT COUNT(*) FROM tool_cache").fetchone()[0]

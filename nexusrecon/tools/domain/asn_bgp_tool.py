@@ -1,9 +1,12 @@
 """ASN and BGP lookup tool via BGPView API."""
 from __future__ import annotations
+
 import ipaddress
 import socket
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 import httpx
+
 from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
 
@@ -37,7 +40,7 @@ class ASNBGPTool(OSINTTool):
                         )
 
             client = httpx.AsyncClient(base_url="https://api.bgpview.io", timeout=10.0)
-            results: Dict[str, Any] = {}
+            results: dict[str, Any] = {}
 
             if is_asn:
                 # ASN lookup

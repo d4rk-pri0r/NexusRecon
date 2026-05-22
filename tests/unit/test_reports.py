@@ -2,7 +2,6 @@
 import json
 import tempfile
 from pathlib import Path
-from datetime import datetime
 
 from nexusrecon.reports.engine import ReportEngine
 

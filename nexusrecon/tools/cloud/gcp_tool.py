@@ -1,8 +1,19 @@
-"""GCP cloud reconnaissance tool (stubbed — implements GCS + App Engine)."""
+"""GCP cloud reconnaissance tool.
+
+GCS bucket enumeration + App Engine discovery are real;
+Firebase project enumeration and Cloud Run service discovery are
+flagged inline as TODO sub-stubs and surface as
+``{"status": "stubbed"}`` in the per-feature output. The tool as
+a whole is NOT marked ``stubbed`` because its primary surface
+(GCS + App Engine) does real work.
+"""
 
 from __future__ import annotations
-from typing import Any, Dict, List, Optional
+
+from typing import Any
+
 import httpx
+
 from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
 
@@ -19,12 +30,15 @@ class GCPReconTool(OSINTTool):
     tier = Tier.T0
     category = Category.CLOUD_GCP
     requires_keys = []
-    description = "GCP cloud asset enumeration (GCS, App Engine, Firebase, Cloud Run) — stubbed"
+    description = (
+        "GCP cloud asset enumeration. Implemented: GCS bucket + App "
+        "Engine discovery. Sub-stubs: Firebase, Cloud Run."
+    )
     target_types = ["domain"]
 
     def __init__(self) -> None:
         super().__init__()
-        self._http: Optional[httpx.AsyncClient] = None
+        self._http: httpx.AsyncClient | None = None
 
     async def _get_client(self) -> httpx.AsyncClient:
         if self._http is None:
@@ -32,7 +46,7 @@ class GCPReconTool(OSINTTool):
         return self._http
 
     async def run(self, target: str, **kwargs: Any) -> ToolResult:
-        results: Dict[str, Any] = {}
+        results: dict[str, Any] = {}
         try:
             client = await self._get_client()
             base = target.split(".")[0].lower().replace("-", "")
@@ -57,7 +71,7 @@ class GCPReconTool(OSINTTool):
         except Exception as e:
             return ToolResult(success=False, source=self.name, error=str(e))
 
-    async def _enumerate_gcs(self, client: httpx.AsyncClient, base: str) -> List[Dict[str, Any]]:
+    async def _enumerate_gcs(self, client: httpx.AsyncClient, base: str) -> list[dict[str, Any]]:
         found = []
         for perm in GCS_PERMUTATIONS:
             name = perm.format(name=base).lower()
@@ -72,7 +86,7 @@ class GCPReconTool(OSINTTool):
                 continue
         return found
 
-    async def _enumerate_appengine(self, client: httpx.AsyncClient, base: str) -> List[Dict[str, Any]]:
+    async def _enumerate_appengine(self, client: httpx.AsyncClient, base: str) -> list[dict[str, Any]]:
         names = [base, f"{base}-api", f"{base}-app"]
         found = []
         for name in names:

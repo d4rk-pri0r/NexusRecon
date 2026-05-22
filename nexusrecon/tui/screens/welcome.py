@@ -1,25 +1,43 @@
-"""Welcome screen — banner, status line, and main menu."""
+"""Backwards-compat shim for the old WelcomeScreen module.
+
+TUI-3 replaced the welcome screen with the new
+:class:`~nexusrecon.tui.screens.dashboard.DashboardScreen` (status
+bar + sidebar + recent campaigns table). This module re-exports the
+new class under the legacy name AND the helper functions the old
+TUI-1 tests imported, so any external code (tests, plugin authors,
+custom launchers) that still imports from this module keeps working
+without modification.
+
+Operator-facing behaviour is unchanged: the dashboard mounts on
+app startup; only the class lineage and the location of the helper
+functions changed.
+"""
 from __future__ import annotations
 
-import asyncio
-from pathlib import Path
-from typing import Any
-
-from textual import work
-from textual.app import ComposeResult
-from textual.containers import Center, Container, Vertical
-from textual.screen import Screen
-from textual.widgets import Button, Footer, Header, Static
-
-from nexusrecon.tui.banner import (
-    render_banner,
-    render_version,
-    render_attribution,
+from nexusrecon.tui.screens.dashboard import (
+    DashboardScreen,
+    _persist_onboarding_dismissal,
+    _should_show_onboarding,
 )
+
+# The original class name. Anything importing WelcomeScreen gets the
+# Dashboard ── identical bindings + menu actions, richer layout.
+WelcomeScreen = DashboardScreen
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Helper re-exports
+# ──────────────────────────────────────────────────────────────────────
+# These names existed on the original welcome.py module and are
+# referenced by tests + (potentially) external plugin code. The
+# implementation lives in ``dashboard.py``; re-exporting under the
+# old names keeps import-by-name compatible.
 
 
 def _quick_stats() -> str:
-    """Cheap startup stats — registered tools, campaigns on disk, LLM provider."""
+    """Top-line: ``X tools registered · Y campaigns · LLM provider``."""
+    from pathlib import Path
+
     tool_count = 0
     campaigns_on_disk = 0
     llm_provider = "unknown"
@@ -44,172 +62,93 @@ def _quick_stats() -> str:
     )
 
 
-class WelcomeScreen(Screen):
-    """Splash + main menu.
+def _tool_availability_breakdown() -> str:
+    """``N active · M skipped (missing keys)`` — original TUI-1 string
+    format (slightly different from the dashboard's
+    ``_tool_breakdown`` which leads with the total count)."""
+    try:
+        from nexusrecon.tools.registry import get_registry
+        registry = get_registry()
+        total = 0
+        active = 0
+        stubbed = 0
+        for tool in registry._tools.values():
+            total += 1
+            if getattr(tool, "stubbed", False):
+                stubbed += 1
+                continue
+            if tool.is_available():
+                active += 1
+        skipped = total - active - stubbed
+        parts = [f"{active} active"]
+        if skipped:
+            parts.append(f"{skipped} skipped (missing keys)")
+        if stubbed:
+            parts.append(f"{stubbed} stub(s)")
+        return " · ".join(parts)
+    except Exception:
+        return ""
 
-    Keyboard-first: ↑/↓ cycle focus through the menu buttons; the letter
-    shortcuts (n/r/p/c/t/q) fire each option directly without needing to
-    focus its button first. The first button is focused on mount so a
-    single Enter launches the highlighted item.
-    """
 
-    # Letter shortcuts ARE the keyboard menu. ↑/↓ cycle focus through the
-    # buttons so the visible highlight follows the user's selection. Footer
-    # auto-renders these so the operator sees them at the bottom of the screen.
-    BINDINGS = [
-        ("n", "menu_new", "New Campaign"),
-        ("r", "menu_resume", "Resume"),
-        ("p", "menu_past", "Past"),
-        ("c", "menu_config", "Config"),
-        ("t", "menu_tools", "Tools"),
-        ("q", "quit_app", "Quit"),
-        ("ctrl+q", "quit_app", "Quit"),
-        ("escape", "quit_app", "Quit"),
-        ("up", "focus_prev", "↑"),
-        ("down", "focus_next_btn", "↓"),
-    ]
+def _last_campaign_hint() -> str:
+    """``Last run: <when> · <seed-or-id>`` (empty when no campaigns)."""
+    from datetime import UTC, datetime
+    from pathlib import Path
 
-    def compose(self) -> ComposeResult:
-        yield Header(show_clock=False)
-        # Outer container fills the screen between Header/Footer and centers
-        # its children both horizontally and vertically (via CSS align rule).
-        # Without this wrapper the banner + menu pin to the top-left on
-        # large displays, which looks unfinished.
-        # Every block below is wrapped in its own Center widget so each
-        # one centers within the full screen width independently. Without
-        # the per-block Center, children of a Vertical container left-align
-        # to the column where the widest sibling starts — which made the
-        # banner look "stuck to the left" relative to the menu box.
-        with Container(id="welcome-content"):
-            with Vertical(id="welcome-stack"):
-                with Center():
-                    yield Static(render_banner(), id="welcome-banner")
-                version_text = render_version()
-                if version_text:
-                    with Center():
-                        yield Static(version_text, id="welcome-version")
-                attribution_text = render_attribution()
-                if attribution_text:
-                    with Center():
-                        yield Static(attribution_text, id="welcome-attribution")
-                with Center():
-                    yield Static(
-                        "Agentic OSINT Orchestration Framework",
-                        id="welcome-subtitle",
-                    )
-                with Center():
-                    yield Static(_quick_stats(), id="welcome-stats")
-                with Center():
-                    yield Static(
-                        "[dim]↑/↓ navigate · Enter select · "
-                        "n/r/p/c/t quick · q quit[/dim]",
-                        id="welcome-hint",
-                    )
-                with Center():
-                    with Vertical(id="welcome-menu"):
-                        yield Button("🎯  New Campaign  (n)", id="btn-new", classes="-primary")
-                        yield Button("🔄  Resume Campaign  (r)", id="btn-resume")
-                        yield Button("📊  View Past Campaigns  (p)", id="btn-past")
-                        yield Button("🔧  Configuration  (c)", id="btn-config")
-                        yield Button("🛠   Tools  (t)", id="btn-tools")
-                        yield Button("❌  Quit  (q)", id="btn-quit")
-        yield Footer()
-
-    def on_mount(self) -> None:
-        # Focus the first menu button so a fresh Enter launches the wizard
-        # without forcing the operator to Tab in from the Header first.
+    try:
+        from nexusrecon.core.config import get_config
+        cfg = get_config()
+        out_dir = Path(cfg.output_dir)
+        if not out_dir.exists():
+            return ""
+        candidates = list(out_dir.rglob("state.json"))
+        if not candidates:
+            return ""
+        latest = max(candidates, key=lambda p: p.stat().st_mtime)
+        when = datetime.fromtimestamp(latest.stat().st_mtime, tz=UTC)
+        label = latest.parent.name
         try:
-            self.query_one("#btn-new", Button).focus()
+            import json
+            data = json.loads(latest.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                seeds = data.get("seeds") or []
+                if isinstance(seeds, list) and seeds:
+                    label = str(seeds[0])
+                elif data.get("campaign_id"):
+                    label = str(data["campaign_id"])
         except Exception:
             pass
-        # Pre-warm the heavy imports the campaign worker will need.
-        # CrewAI, LangGraph, LiteLLM, and the full tool registry together
-        # take ~30s on a cold start — without this, the operator would
-        # stare at "Initializing campaign…" for that whole stretch after
-        # pressing Save & Run. Doing it now in a background thread means
-        # the imports are already cached by the time they finish the
-        # wizard. ``sys.modules`` caches the result so the runner's own
-        # ``import`` statements become near-free lookups.
-        self._warm_imports()
+        return f"Last run: {_human_when(when)} · {label}"
+    except Exception:
+        return ""
 
-    @work(thread=True, exclusive=True, group="warmup")
-    def _warm_imports(self) -> None:
-        """Background warm-up of the heavy imports the runner needs.
-        Runs in a thread (not on the event loop) so it can't stall
-        the welcome screen's input handling."""
-        try:
-            # Pull in the agent / graph / tool subsystems. The order
-            # mirrors the runner's own imports so anything they
-            # transitively pull in (CrewAI, LangGraph, LiteLLM,
-            # structlog wrappers, etc.) lands in sys.modules now.
-            import nexusrecon.core.campaign  # noqa: F401
-            import nexusrecon.core.scope  # noqa: F401
-            import nexusrecon.core.campaign_runner  # noqa: F401
-            import nexusrecon.tools.registry  # noqa: F401
-            import nexusrecon.reports.engine  # noqa: F401
-            import nexusrecon.models.campaign  # noqa: F401
-            import nexusrecon.graph.workflow  # noqa: F401
-            import nexusrecon.graph.dynamic_dispatcher  # noqa: F401
-        except Exception:
-            # If warmup fails it's not user-visible — the runner
-            # will just hit the cold-import path itself.
-            pass
 
-    # ── Mouse-button dispatcher delegates to the same actions the keys use ──
+def _human_when(when) -> str:
+    from datetime import UTC, datetime
 
-    async def on_button_pressed(self, event: Button.Pressed) -> None:
-        mapping = {
-            "btn-new": self.action_menu_new,
-            "btn-resume": self.action_menu_resume,
-            "btn-past": self.action_menu_past,
-            "btn-config": self.action_menu_config,
-            "btn-tools": self.action_menu_tools,
-            "btn-quit": self.action_quit_app,
-        }
-        handler = mapping.get(event.button.id or "")
-        if handler is None:
-            return
-        result = handler()
-        if asyncio.iscoroutine(result):
-            await result
+    try:
+        now = datetime.now(UTC)
+        diff = (now - when).total_seconds()
+        if diff < 60:
+            return "just now"
+        if diff < 3600:
+            return f"{int(diff // 60)}m ago"
+        if diff < 86400:
+            return f"{int(diff // 3600)}h ago"
+        if diff < 86400 * 2:
+            return "yesterday"
+        if diff < 86400 * 7:
+            return f"{int(diff // 86400)}d ago"
+        return when.strftime("%Y-%m-%d")
+    except Exception:
+        return "earlier"
 
-    # ── Actions: identical entry points for both keyboard and mouse ─────────
 
-    async def action_menu_new(self) -> None:
-        from nexusrecon.tui.screens.wizard import WizardScreen
-        await self.app.push_screen(WizardScreen())
-
-    async def action_menu_resume(self) -> None:
-        from nexusrecon.tui.screens.campaigns import CampaignsScreen
-        await self.app.push_screen(CampaignsScreen(resume_mode=True))
-
-    async def action_menu_past(self) -> None:
-        from nexusrecon.tui.screens.campaigns import CampaignsScreen
-        await self.app.push_screen(CampaignsScreen(resume_mode=False))
-
-    async def action_menu_config(self) -> None:
-        from nexusrecon.tui.screens.config import ConfigScreen
-        await self.app.push_screen(ConfigScreen())
-
-    async def action_menu_tools(self) -> None:
-        from nexusrecon.tui.screens.config import ToolsScreen
-        await self.app.push_screen(ToolsScreen())
-
-    def action_quit_app(self) -> None:
-        self.app.exit()
-
-    # ── Arrow-key focus cycling between menu buttons ────────────────────────
-
-    def action_focus_prev(self) -> None:
-        # Screen.focus_previous() cycles backwards through focusable widgets.
-        # In this screen the only focusables are the 6 menu buttons.
-        try:
-            self.focus_previous()
-        except Exception:
-            pass
-
-    def action_focus_next_btn(self) -> None:
-        try:
-            self.focus_next()
-        except Exception:
-            pass
+__all__ = [
+    "WelcomeScreen",
+    "_quick_stats",
+    "_tool_availability_breakdown",
+    "_last_campaign_hint",
+    "_should_show_onboarding",
+    "_persist_onboarding_dismissal",
+]

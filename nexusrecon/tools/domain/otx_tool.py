@@ -1,7 +1,7 @@
 """AlienVault OTX — passive subdomain enumeration and threat intel."""
 from __future__ import annotations
 
-from typing import Any, Dict, List, Set
+from typing import Any
 
 import httpx
 
@@ -22,7 +22,7 @@ class OTXTool(OSINTTool):
 
     async def run(self, target: str, **kwargs: Any) -> ToolResult:
         otx_key = self.config.get_secret("otx_api_key")
-        headers: Dict[str, str] = {
+        headers: dict[str, str] = {
             "Accept": "application/json",
             "User-Agent": random_ua(),
         }
@@ -45,15 +45,15 @@ class OTXTool(OSINTTool):
                     return ToolResult(success=False, source=self.name, error=f"OTX returned {resp.status_code}")
 
                 raw = resp.json()
-                records: List[Dict[str, Any]] = raw.get("passive_dns", [])
+                records: list[dict[str, Any]] = raw.get("passive_dns", [])
 
-                subdomains: Set[str] = set()
+                subdomains: set[str] = set()
                 for r in records:
                     hostname = r.get("hostname", "")
                     if hostname and (hostname == target or hostname.endswith(f".{target}")):
                         subdomains.add(hostname)
 
-                data: Dict[str, Any] = {
+                data: dict[str, Any] = {
                     "domain": target,
                     "subdomain_count": len(subdomains),
                     "subdomains": sorted(subdomains),

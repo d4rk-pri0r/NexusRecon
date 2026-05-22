@@ -1,11 +1,10 @@
 """gitleaks tool — wraps the gitleaks CLI binary for secret scanning."""
 
 from __future__ import annotations
+
 import json
-import os
-import tempfile
-from pathlib import Path
-from typing import Any, Optional
+from typing import Any
+
 from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
 

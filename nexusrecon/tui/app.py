@@ -8,6 +8,7 @@ actual semver-tracked release number.
 from __future__ import annotations
 
 import logging
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -15,12 +16,24 @@ from pathlib import Path
 import structlog
 from textual.app import App
 
+from nexusrecon.tui.command_palette import (
+    CommandPalette,
+    NavigationSource,
+    ReportsSource,
+    ToolsSource,
+)
+from nexusrecon.tui.themes import THEMES, resolve_theme_name
+
 
 class NexusReconApp(App):
     """Top-level Textual application."""
 
     CSS_PATH = "app.tcss"
     TITLE = "NexusRecon — Agentic OSINT Orchestration"
+    # Textual 8.x ships its own command palette bound to Ctrl+P. We
+    # disable it so the NexusRecon palette (which has tool-aware
+    # ranking + theme-matched styling) gets the binding instead.
+    ENABLE_COMMAND_PALETTE = False
     # Display version pulled from the package __version__ so banner /
     # subtitle / pyproject can never drift apart.
     from nexusrecon import __version__ as _pkg_version
@@ -28,6 +41,11 @@ class NexusReconApp(App):
 
     BINDINGS = [
         ("ctrl+q", "quit", "Quit"),
+        # Global help overlay — every screen inherits this binding.
+        ("question_mark", "show_help", "Help"),
+        # Command palette — the flagship discoverability surface.
+        ("ctrl+p", "show_palette", "Palette"),
+        ("colon", "show_palette", "Palette"),
     ]
 
     # Path to the per-session log file (set by ``run_tui`` before
@@ -36,12 +54,160 @@ class NexusReconApp(App):
     # configured" — screens that depend on it should handle that.
     session_log_path: Path | None = None
 
+    #: Singleton :class:`CommandPalette` shared across the app's
+    #: lifetime. Built lazily on first access so test harnesses
+    #: that instantiate the app without running can still mount
+    #: screens.
+    _palette: CommandPalette | None = None
+
     def on_mount(self) -> None:
-        from nexusrecon.tui.screens.welcome import WelcomeScreen
-        self.push_screen(WelcomeScreen())
+        # Register NexusRecon's themes so :class:`Theme` colour
+        # variables resolve in app.tcss. The active theme picks up
+        # from the ``NEXUSRECON_TUI_THEME`` env var; unknown values
+        # fall back to the default rather than crashing on launch.
+        for theme in THEMES.values():
+            try:
+                self.register_theme(theme)
+            except Exception:
+                # register_theme is idempotent in current Textual but
+                # we never want a theme registration error to keep the
+                # TUI from launching.
+                pass
+        self.theme = resolve_theme_name(os.environ.get("NEXUSRECON_TUI_THEME"))
+
+        # Build the palette with the sources we ship in TUI-2. Each
+        # source receives a callable wired into this app so the
+        # palette can navigate without owning a reference to it.
+        self._palette = CommandPalette()
+        self._palette.register(NavigationSource(navigate=self._palette_navigate))
+        self._palette.register(ToolsSource(jump_to_tools_screen=self._jump_to_tools))
+        self._palette.register(ReportsSource(open_path=self._open_path))
+
+        # TUI-3: launch into the new Dashboard (was WelcomeScreen).
+        # The persistent status bar + sidebar live here. The
+        # WelcomeScreen file remains as a backwards-compat shim
+        # for any code that still imports it directly.
+        from nexusrecon.tui.screens.dashboard import DashboardScreen
+        self.push_screen(DashboardScreen())
+
+    # ── Palette wiring ──────────────────────────────────────────────
+
+    def get_command_palette(self) -> CommandPalette:
+        """Public accessor — screens / tests get the live palette
+        instance, building one if mount hasn't run yet (test
+        harness path)."""
+        if self._palette is None:
+            self._palette = CommandPalette()
+            self._palette.register(NavigationSource(navigate=self._palette_navigate))
+            self._palette.register(ToolsSource(jump_to_tools_screen=self._jump_to_tools))
+            self._palette.register(ReportsSource(open_path=self._open_path))
+        return self._palette
+
+    def _palette_navigate(self, destination: str) -> None:
+        """Top-level navigation executor for :class:`NavigationSource`.
+
+        Each canonical destination ID maps to a screen push. The
+        palette dismisses itself BEFORE invoking this callable, so
+        the new screen lands on the stack below where the palette
+        used to be.
+        """
+        try:
+            if destination == "dashboard":
+                # Pop everything back to the dashboard ── the default
+                # position. If the dashboard isn't on the stack, push
+                # a fresh one.
+                from nexusrecon.tui.screens.dashboard import DashboardScreen
+                if not any(
+                    isinstance(s, DashboardScreen) for s in self.screen_stack
+                ):
+                    self.push_screen(DashboardScreen())
+                else:
+                    while self.screen_stack and not isinstance(
+                        self.screen_stack[-1], DashboardScreen,
+                    ):
+                        self.pop_screen()
+            elif destination == "new_campaign":
+                from nexusrecon.tui.screens.wizard import WizardScreen
+                self.push_screen(WizardScreen())
+            elif destination == "campaigns":
+                from nexusrecon.tui.screens.campaigns import CampaignsScreen
+                self.push_screen(CampaignsScreen(resume_mode=False))
+            elif destination == "tools":
+                self._jump_to_tools(None)
+            elif destination == "config":
+                from nexusrecon.tui.screens.config import ConfigScreen
+                self.push_screen(ConfigScreen())
+            elif destination == "help":
+                from nexusrecon.tui.screens.help import HelpModal
+                self.push_screen(HelpModal())
+        except Exception:
+            pass
+
+    def _jump_to_tools(self, tool_name: str | None) -> None:
+        """Open the new tools browser. ``tool_name`` is the
+        selected match's tool name; the screen will focus that
+        tool when the deep-link wiring lands in a follow-up
+        (currently the screen lands on its default selection)."""
+        try:
+            from nexusrecon.tui.screens.tools import ToolsScreen
+            self.push_screen(ToolsScreen())
+        except Exception:
+            pass
+
+    def _open_path(self, path: str) -> None:
+        """OS-level open of a report file. Same dispatch used by
+        the results screen."""
+        try:
+            from nexusrecon.tui.screens.results import _open_path
+            _open_path(path)
+        except Exception:
+            # Defensive fallback ── if the results-screen helper
+            # changes, this still tries the system opener.
+            import subprocess
+            import sys
+            try:
+                if sys.platform == "darwin":
+                    subprocess.Popen(["open", path])
+                elif sys.platform.startswith("linux"):
+                    subprocess.Popen(["xdg-open", path])
+                elif sys.platform == "win32":
+                    subprocess.Popen(["start", "", path], shell=True)
+            except Exception:
+                pass
+
+    # ── Global actions ──────────────────────────────────────────────
+
+    async def action_show_help(self) -> None:
+        """Open the global keyboard-help overlay (``?`` from any screen)."""
+        from nexusrecon.tui.screens.help import HelpModal
+        # If a help modal is already on top, don't stack a second one ──
+        # the second ``?`` press should be a no-op (the binding inside
+        # the modal closes it via Escape).
+        try:
+            top = self.screen_stack[-1] if self.screen_stack else None
+            if isinstance(top, HelpModal):
+                return
+        except Exception:
+            pass
+        await self.push_screen(HelpModal())
+
+    async def action_show_palette(self) -> None:
+        """Open the command palette (``Ctrl+P`` / ``:`` from any
+        screen). No-op when the palette is already on top so a
+        second Ctrl+P doesn't stack."""
+        from nexusrecon.tui.screens.command_palette import (
+            CommandPaletteScreen,
+        )
+        try:
+            top = self.screen_stack[-1] if self.screen_stack else None
+            if isinstance(top, CommandPaletteScreen):
+                return
+        except Exception:
+            pass
+        await self.push_screen(CommandPaletteScreen(self.get_command_palette()))
 
 
-def _open_session_log() -> tuple[Path, "object"]:
+def _open_session_log() -> tuple[Path, object]:
     """Open a per-session log file under `~/.nexusrecon/logs/`.
 
     Returns (path, file_object). Caller is responsible for closing the

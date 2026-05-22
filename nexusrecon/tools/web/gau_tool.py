@@ -1,6 +1,8 @@
 """gau — URL discovery via GetAllUrls."""
 from __future__ import annotations
-from typing import Any, Optional
+
+from typing import Any
+
 from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
 
@@ -12,7 +14,7 @@ class GAUTool(OSINTTool):
     category = Category.WEB
     requires_keys = []
     binary_required = "gau"
-    description = "URL discovery via GetAllUrls binary (stubbed)"
+    description = "URL discovery via the GetAllUrls (gau) CLI"
     target_types = ["domain"]
 
     async def run(self, target: str, **kwargs: Any) -> ToolResult:

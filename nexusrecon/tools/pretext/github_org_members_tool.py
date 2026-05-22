@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Dict, List
+from typing import Any
 
 import httpx
 
@@ -40,7 +40,7 @@ class GitHubOrgMembersTool(OSINTTool):
                 timeout=20.0,
             ) as client:
                 # If target is a domain, first find the org handle
-                org_names: List[str] = []
+                org_names: list[str] = []
                 if target_type == "username":
                     org_names = [target]
                 else:
@@ -57,8 +57,8 @@ class GitHubOrgMembersTool(OSINTTool):
                     if company not in org_names:
                         org_names.insert(0, company)
 
-                all_members: List[Dict[str, Any]] = []
-                orgs_enumerated: List[str] = []
+                all_members: list[dict[str, Any]] = []
+                orgs_enumerated: list[str] = []
 
                 for org in org_names[:3]:
                     members_resp = await client.get(
@@ -72,7 +72,7 @@ class GitHubOrgMembersTool(OSINTTool):
                     members = members_resp.json()
 
                     # Fetch extended profile for up to 30 members in parallel
-                    async def _get_profile(login: str) -> Dict[str, Any]:
+                    async def _get_profile(login: str) -> dict[str, Any]:
                         r = await client.get(f"/users/{login}")
                         if r.status_code == 200:
                             u = r.json()
@@ -103,7 +103,7 @@ class GitHubOrgMembersTool(OSINTTool):
             return ToolResult(success=False, source=self.name, error=str(exc))
 
         emails = [m["email"] for m in all_members if m.get("email")]
-        data: Dict[str, Any] = {
+        data: dict[str, Any] = {
             "target": target,
             "orgs_found": orgs_enumerated,
             "member_count": len(all_members),

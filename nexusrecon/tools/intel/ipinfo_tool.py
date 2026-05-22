@@ -1,7 +1,7 @@
 """IPinfo — IP geolocation, ASN, and VPN/proxy/hosting detection."""
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 import httpx
 
@@ -22,7 +22,7 @@ class IPInfoTool(OSINTTool):
 
     async def run(self, target: str, **kwargs: Any) -> ToolResult:
         token = self.config.get_secret("ipinfo_api_key")
-        params: Dict[str, str] = {}
+        params: dict[str, str] = {}
         if token:
             params["token"] = token
 
@@ -48,7 +48,7 @@ class IPInfoTool(OSINTTool):
                 org = raw.get("org", "")
                 asn, org_name = (org.split(" ", 1) + [""])[:2] if " " in org else (org, "")
 
-                data: Dict[str, Any] = {
+                data: dict[str, Any] = {
                     "ip": raw.get("ip"),
                     "hostname": raw.get("hostname"),
                     "city": raw.get("city"),

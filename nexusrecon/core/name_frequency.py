@@ -41,8 +41,6 @@ of collision risk).
 from __future__ import annotations
 
 import re
-from typing import List
-
 
 # ── Tier A: top ~50 most common (frequency 0.95) ─────────────────────
 # Selected from SSA's all-decades top-1000 and Census top 50 surnames.
@@ -298,7 +296,7 @@ def handle_commonness(handle: str) -> float:
     return max(name_commonness(t) for t in tokens)
 
 
-def _tokenise(handle: str) -> List[str]:
+def _tokenise(handle: str) -> list[str]:
     """Split a handle into component name-tokens.
 
     Separators handled: ``.``, ``_``, ``-`` and digit runs (so
@@ -309,7 +307,7 @@ def _tokenise(handle: str) -> List[str]:
     # Split on dots/underscores/dashes AND boundaries between letters
     # and digits.
     parts = re.split(r"[._\-]+", handle)
-    out: List[str] = []
+    out: list[str] = []
     for p in parts:
         # Further split letter-digit boundaries: jane1985 → jane, 1985
         for sub in re.findall(r"[a-zA-Z]+|\d+", p):

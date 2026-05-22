@@ -3,11 +3,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from nexusrecon.graph.nodes import route_to_next_phase
 from nexusrecon.graph.state import CampaignGraphState
 from nexusrecon.graph.workflow import (
-    build_campaign_workflow, PHASE_ORDER, PHASE_TIERS, run_workflow,
+    PHASE_ORDER,
+    PHASE_TIERS,
+    build_campaign_workflow,
+    run_workflow,
 )
-from nexusrecon.graph.nodes import route_to_next_phase
 from nexusrecon.models.campaign import CampaignMode
 from nexusrecon.tools.base import ToolResult
 
@@ -50,12 +53,14 @@ def mock_workflow_deps():
 class TestPhaseOrder:
     def test_phases_in_order(self):
         assert PHASE_ORDER == [
-            "phase1", "phase2", "phase3", "phase4",
-            "phase5", "phase6", "phase7", "phase7_5", "phase8", "phase9",
+            "phase1", "phase2", "phase2_5", "phase3", "phase4",
+            "phase5", "phase6", "phase7", "phase7_5", "phase7_7",
+            "phase8", "phase9",
         ]
 
     def test_all_phases_present(self):
-        assert len(PHASE_ORDER) == 10
+        # 12 phases: includes phase2_5 (D7) + phase7_7 (E11).
+        assert len(PHASE_ORDER) == 12
 
 
 class TestRouteToNextPhase:
@@ -81,8 +86,9 @@ class TestRouteToNextPhase:
         assert route_to_next_phase(state) == "__end__"
 
     def test_skips_completed_phases(self):
+        # phase2_5 is between phase2 and phase3; skip phase1, phase2, phase2_5, phase3
         state: CampaignGraphState = {
-            "completed_phases": ["phase1", "phase2", "phase3"],
+            "completed_phases": ["phase1", "phase2", "phase2_5", "phase3"],
             "current_phase": "phase3",
         }
         assert route_to_next_phase(state) == "phase4"

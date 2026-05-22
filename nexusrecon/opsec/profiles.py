@@ -14,11 +14,10 @@ Profiles:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Dict, List, Optional, Tuple
+from enum import StrEnum
 
 
-class ProfileName(str, Enum):
+class ProfileName(StrEnum):
     PARANOID = "paranoid"
     HIGH = "high"
     NORMAL = "normal"
@@ -47,12 +46,12 @@ class StealthProfile:
     ua_rotate_interval: int = 10   # rotate after N requests
 
     # DNS
-    custom_dns_resolvers: List[str] = field(default_factory=lambda: ["1.1.1.1", "8.8.8.8"])
+    custom_dns_resolvers: list[str] = field(default_factory=lambda: ["1.1.1.1", "8.8.8.8"])
     avoid_system_resolver: bool = True
 
     # Per-source rate limits (requests per second)
     # Lower = more stealthy
-    source_rates: Dict[str, float] = field(default_factory=dict)
+    source_rates: dict[str, float] = field(default_factory=dict)
 
     # Burst detection self-throttle
     burst_detection_enabled: bool = True
@@ -63,7 +62,7 @@ class StealthProfile:
     log_all_requests: bool = True
 
 
-def _paranoid_rates() -> Dict[str, float]:
+def _paranoid_rates() -> dict[str, float]:
     return {
         "shodan": 0.1,
         "censys": 0.05,
@@ -78,7 +77,7 @@ def _paranoid_rates() -> Dict[str, float]:
     }
 
 
-def _high_rates() -> Dict[str, float]:
+def _high_rates() -> dict[str, float]:
     return {
         "shodan": 0.5,
         "censys": 0.3,
@@ -93,7 +92,7 @@ def _high_rates() -> Dict[str, float]:
     }
 
 
-def _normal_rates() -> Dict[str, float]:
+def _normal_rates() -> dict[str, float]:
     return {
         "shodan": 1.0,
         "censys": 0.5,
@@ -108,7 +107,7 @@ def _normal_rates() -> Dict[str, float]:
     }
 
 
-def _loud_rates() -> Dict[str, float]:
+def _loud_rates() -> dict[str, float]:
     return {
         "shodan": 5.0,
         "censys": 3.0,
@@ -123,7 +122,7 @@ def _loud_rates() -> Dict[str, float]:
     }
 
 
-PROFILES: Dict[ProfileName, StealthProfile] = {
+PROFILES: dict[ProfileName, StealthProfile] = {
     ProfileName.PARANOID: StealthProfile(
         name=ProfileName.PARANOID,
         max_concurrent_tools=1,

@@ -1,8 +1,11 @@
 """Metadata extraction from publicly accessible documents (PDF, DOCX, XLSX, images)."""
 from __future__ import annotations
+
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 import httpx
+
 from nexusrecon.opsec.useragent import random_ua
 from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
@@ -68,9 +71,9 @@ class MetadataTool(OSINTTool):
 
     async def run(self, target: str, **kwargs: Any) -> ToolResult:
         base_url = f"https://{target}" if not target.startswith("http") else target
-        discovered_files: List[Dict[str, Any]] = []
-        env_leaks: List[str] = []
-        sensitive_findings: List[str] = []
+        discovered_files: list[dict[str, Any]] = []
+        env_leaks: list[str] = []
+        sensitive_findings: list[str] = []
 
         async with httpx.AsyncClient(timeout=10.0, follow_redirects=True, verify=False) as client:
             # Scan common sensitive paths
@@ -135,8 +138,8 @@ class MetadataTool(OSINTTool):
         )
 
     @staticmethod
-    def _extract_pdf_text_meta(data: bytes) -> Dict[str, Any]:
-        meta: Dict[str, Any] = {}
+    def _extract_pdf_text_meta(data: bytes) -> dict[str, Any]:
+        meta: dict[str, Any] = {}
         try:
             text = data.decode("latin-1")
             patterns = {

@@ -1,7 +1,7 @@
 """ZoomEye — internet scan intelligence from China-region vantage point."""
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any
 
 import httpx
 
@@ -58,8 +58,8 @@ class ZoomEyeTool(OSINTTool):
                         error=f"ZoomEye error {raw.get('code')}: {raw.get('message')}",
                     )
 
-                matches: List[Dict[str, Any]] = raw.get("matches", [])
-                data: Dict[str, Any] = {
+                matches: list[dict[str, Any]] = raw.get("matches", [])
+                data: dict[str, Any] = {
                     "query": query,
                     "total": raw.get("total", len(matches)),
                     "hosts": [
