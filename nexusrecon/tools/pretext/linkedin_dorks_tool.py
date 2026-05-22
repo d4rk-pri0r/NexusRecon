@@ -28,6 +28,7 @@ class LinkedInDorksTool(OSINTTool):
     tier = Tier.T0
     category = Category.PRETEXT
     requires_keys = []
+    optional_keys = ["bing_search_api_key"]
     description = "LinkedIn employee discovery — generates and optionally executes search dorks for company staff"
     target_types = ["domain"]
 

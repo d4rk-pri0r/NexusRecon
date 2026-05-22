@@ -33,6 +33,7 @@ class PastebinTool(OSINTTool):
     tier = Tier.T0
     category = Category.INFRASTRUCTURE
     requires_keys = []
+    optional_keys = ["github_token"]
     description = "Search psbdmp.ws and GitHub Gists for target domain/email leaks"
     target_types = ["domain", "email"]
     dynamic_trigger_hints = ["paste leak found", "credentials in paste"]

@@ -121,6 +121,12 @@ CATEGORIES: list[ConfigCategory] = [
             ConfigVar("DEHASHED_API_KEY", "dehashed.com secret.", sensitive=True),
             ConfigVar("INTELX_API_KEY", "intelx.io — paid.", sensitive=True),
             ConfigVar("LEAKCHECK_API_KEY", "leakcheck.io — paid from $9/mo.", sensitive=True),
+            ConfigVar(
+                "LINKEDIN_LI_AT",
+                "LinkedIn session cookie (li_at). Used by linkedin_social — "
+                "extract from a logged-in browser session. ToS-sensitive.",
+                sensitive=True,
+            ),
         ],
     ),
     ConfigCategory(
@@ -196,7 +202,10 @@ CATEGORIES: list[ConfigCategory] = [
 ]
 
 
-# Special pseudo-category: external binaries (read-only inventory)
+# Special pseudo-category: external binaries (read-only inventory).
+# No longer shown in the Config screen (binaries are tool-related —
+# see the Tools detail pane's ``bin:`` rows). Retained because some
+# tests reference it; ``all_categories()`` no longer includes it.
 BINARIES_CATEGORY = ConfigCategory(
     id="_binaries",
     name="🔌 External Binaries",
@@ -205,17 +214,46 @@ BINARIES_CATEGORY = ConfigCategory(
 )
 
 
+#: Category IDs that belong on the application-wide ``Config`` screen.
+#: Everything else in ``CATEGORIES`` is tool-related (API keys for
+#: individual tools) and surfaces through the Tools screen instead —
+#: the Config screen would otherwise duplicate that surface and
+#: confuse the operator about where to set what.
+APP_CATEGORY_IDS: frozenset[str] = frozenset({"llm", "opsec", "storage", "debug"})
+
+
+def app_categories() -> list[ConfigCategory]:
+    """Categories shown on the application-wide ``Config`` screen.
+
+    The Config screen is for NexusRecon-wide settings: LLM provider,
+    proxy / DNS, storage paths, logging. Per-tool API keys live in
+    the Tools screen so an operator who wants to configure a tool
+    only navigates one place.
+    """
+    return [c for c in CATEGORIES if c.id in APP_CATEGORY_IDS]
+
+
 def all_categories() -> list[ConfigCategory]:
-    """Categories in the order they appear in the left pane, with the
-    binaries inventory appended at the end."""
+    """Every category in the schema, app + tool.
+
+    Used by lookups (``find_var``) and by the Tools screen's
+    per-tool key editor. NOT used to render the Config screen —
+    see ``app_categories()`` for that.
+    """
     return CATEGORIES + [BINARIES_CATEGORY]
 
 
 def find_var(key: str) -> ConfigVar | None:
-    """Lookup helper used by the edit modal to fetch help text + choices."""
+    """Lookup helper used by the edit modal to fetch help text + choices.
+
+    Matches case-insensitively because tools declare ``requires_keys``
+    in lowercase (matching the pydantic-settings field name) while the
+    schema stores them in uppercase (matching ``.env`` convention).
+    """
+    needle = (key or "").upper()
     for cat in CATEGORIES:
         for v in cat.vars:
-            if v.key == key:
+            if v.key.upper() == needle:
                 return v
     return None
 
@@ -227,9 +265,13 @@ def find_category_for_var(key: str) -> tuple[ConfigCategory, ConfigVar] | None:
     Used by the Tools browser's deep-link ── pressing ``c`` on a
     tool jumps the operator straight to that env var's row in the
     Config screen, not back to the top-level category list.
+
+    Case-insensitive match: tool ``requires_keys`` are lowercase
+    pydantic field names; schema keys are uppercase ``.env`` names.
     """
+    needle = (key or "").upper()
     for cat in CATEGORIES:
         for v in cat.vars:
-            if v.key == key:
+            if v.key.upper() == needle:
                 return cat, v
     return None

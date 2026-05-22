@@ -103,6 +103,7 @@ class BusinessPartnerTool(BaseHTTPTool):
     # signal (e.g., DNS TXT only) when neither paid key is set, so
     # we don't set this. Per-source fail-fast happens inside run().
     requires_keys: list[str] = []
+    optional_keys = ["builtwith_api_key"]
     description = (
         "Business-partner / vendor / customer org-to-org "
         "intelligence aggregator. Combines Crunchbase (funding / "

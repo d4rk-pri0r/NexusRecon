@@ -17,6 +17,7 @@ class IPInfoTool(OSINTTool):
     category = Category.INFRASTRUCTURE
     # Key is optional — free tier allows 50k req/month without auth
     requires_keys = []
+    optional_keys = ["ipinfo_api_key"]
     description = "IPinfo — IP geolocation, ASN, ISP, and VPN/proxy/hosting flag detection"
     target_types = ["ip"]
 

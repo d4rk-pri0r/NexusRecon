@@ -114,6 +114,9 @@ class ToolRegistry:
                 parts.append(f"bin:{tool.binary_required}")
             return ", ".join(parts) if parts else ""
 
+        def _optional(tool: OSINTTool) -> str:
+            return ", ".join(tool.optional_keys) if tool.optional_keys else ""
+
         def _describe(tool: OSINTTool) -> str:
             # Surface the [STUB] prefix prominently so operators don't
             # discover a tool is a stub by reading the source mid-
@@ -132,6 +135,7 @@ class ToolRegistry:
                 "available": str(t.is_available()),
                 "description": _describe(t),
                 "requires": _requires(t),
+                "optional": _optional(t),
                 "stubbed": str(t.stubbed),
             }
             for t in self._tools.values()

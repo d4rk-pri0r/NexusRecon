@@ -17,6 +17,7 @@ class EmailRepTool(OSINTTool):
     category = Category.BREACH
     # Key is optional — unauthenticated requests work but are rate-limited
     requires_keys = []
+    optional_keys = ["emailrep_api_key"]
     description = (
         "EmailRep.io email reputation: breach signals, deliverability, "
         "spoofability, and malicious-activity flags"

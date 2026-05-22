@@ -258,6 +258,13 @@ class DashboardScreen(Screen):
         ("t", "menu_tools", "Tools"),
         ("d", "dismiss_onboarding", "Dismiss nudge"),
         ("close_bracket", "toggle_sidebar", "Toggle sidebar"),
+        # Sidebar cursor — ↑/↓ move the highlight, Enter activates.
+        # Letter shortcuts (n/p/c/t/?) still jump directly; the
+        # arrow keys are an additive, more-discoverable second
+        # path for operators who didn't memorize the shortcuts yet.
+        ("up", "sidebar_up", "Sidebar ↑"),
+        ("down", "sidebar_down", "Sidebar ↓"),
+        ("enter", "sidebar_activate", "Open"),
         ("q", "quit_app", "Quit"),
         ("ctrl+q", "quit_app", "Quit"),
         ("escape", "quit_app", "Quit"),
@@ -294,12 +301,19 @@ class DashboardScreen(Screen):
                         "[bold $primary]Recent campaigns[/bold $primary]",
                         id="dashboard-recents-title",
                     )
-                    yield DataTable(
+                    # ``can_focus=False`` so the table never steals
+                    # arrow keys from the screen-level sidebar-cursor
+                    # bindings. It's a read-only summary; the operator
+                    # navigates campaigns via ``p`` / the sidebar, not
+                    # by scrolling this widget.
+                    recents = DataTable(
                         id="dashboard-recents",
                         zebra_stripes=True,
                         cursor_type="row",
                         show_cursor=False,
                     )
+                    recents.can_focus = False
+                    yield recents
                     # Quick stats panel.
                     #
                     # The Sidebar on the left already provides primary
@@ -465,5 +479,43 @@ class DashboardScreen(Screen):
         """``]`` shortcut — collapse / expand the sidebar."""
         try:
             self.query_one("#dashboard-sidebar", Sidebar).toggle_collapsed()
+        except Exception:
+            pass
+
+    # ── Arrow-key sidebar navigation ────────────────────────────────
+
+    def action_sidebar_up(self) -> None:
+        """``↑`` — move the sidebar cursor to the previous entry."""
+        try:
+            self.query_one("#dashboard-sidebar", Sidebar).move_cursor_up()
+        except Exception:
+            pass
+
+    def action_sidebar_down(self) -> None:
+        """``↓`` — move the sidebar cursor to the next entry."""
+        try:
+            self.query_one("#dashboard-sidebar", Sidebar).move_cursor_down()
+        except Exception:
+            pass
+
+    async def action_sidebar_activate(self) -> None:
+        """``Enter`` — open the screen under the sidebar cursor.
+
+        The sidebar owns the cursor state; we dispatch through the
+        app's central navigator so palette and sidebar agree on
+        what "go to tools" means. ``dashboard`` is a no-op because
+        we're already on it (matches the palette's behavior).
+        """
+        try:
+            sidebar = self.query_one("#dashboard-sidebar", Sidebar)
+            destination = sidebar.current_destination()
+        except Exception:
+            return
+        if destination == "dashboard":
+            return
+        # Reuse the app's existing navigation dispatcher so the
+        # sidebar, palette, and letter shortcuts never drift apart.
+        try:
+            self.app._palette_navigate(destination)
         except Exception:
             pass

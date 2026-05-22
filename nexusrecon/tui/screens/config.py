@@ -1,20 +1,22 @@
-"""Configuration + Tools screens.
+"""Configuration screen.
 
-ConfigScreen is now an interactive `.env` editor: left pane lists
-categories from `config_schema`, right pane shows the keys in the
-selected category with their current configured-or-not status. Enter
-or `e` on a key opens the EditKeyModal, which writes back to `.env`
-and hot-reloads the runtime config singleton.
+Interactive ``.env`` editor: left pane lists categories from
+`config_schema`, right pane shows the keys in the selected category
+with their current configured-or-not status. Enter or `e` on a key
+opens the EditKeyModal, which writes back to `.env` and hot-reloads
+the runtime config singleton.
 
 Values are masked by default for sensitive keys (only the last 4
 characters of API keys / tokens are shown), and reveal is opt-in per
 edit. Values are NEVER copied to the clipboard or echoed to logs.
 
-ToolsScreen remains read-only (browse-only).
+The Tools browser lives in :mod:`nexusrecon.tui.screens.tools` and
+edits the same ``.env`` directly via its own deep-link to
+:class:`EditKeyModal` — so an operator going Tools → ``c`` skips
+this screen entirely.
 """
 from __future__ import annotations
 
-import shutil
 from pathlib import Path
 
 from textual.app import ComposeResult
@@ -24,7 +26,7 @@ from textual.widgets import DataTable, Footer, Header, ListItem, ListView, Stati
 
 from nexusrecon.tui.config_schema import (
     ConfigCategory,
-    all_categories,
+    app_categories,
 )
 from nexusrecon.tui.env_editor import EnvFile, mask_value
 from nexusrecon.tui.widgets import StatusBar
@@ -77,7 +79,10 @@ class ConfigScreen(Screen):
         """
         super().__init__()
         self.env_path = _resolve_env_path()
-        self._cats: list[ConfigCategory] = all_categories()
+        # Config screen renders ONLY application-wide categories.
+        # Tool API keys live in the Tools screen so the two surfaces
+        # don't duplicate each other.
+        self._cats: list[ConfigCategory] = app_categories()
         self._current_cat_idx: int = 0
         if initial_category_id:
             for i, c in enumerate(self._cats):
@@ -183,11 +188,6 @@ class ConfigScreen(Screen):
         # Table
         table = self.query_one("#keys-table", DataTable)
         table.clear(columns=True)
-
-        if cat.id == "_binaries":
-            self._populate_binaries_table(table)
-            return
-
         table.add_columns("Variable", "Status", "Value", "Help")
         env_file = EnvFile(self.env_path)
         for var in cat.vars:
@@ -200,29 +200,6 @@ class ConfigScreen(Screen):
                 value_cell = mask_value(current) if var.sensitive else current
             help_short = (var.help or "")[:60]
             table.add_row(var.key, status, value_cell, help_short)
-
-    def _populate_binaries_table(self, table: DataTable) -> None:
-        table.add_columns("Binary", "Path", "Notes")
-        seen: dict[str, str] = {}
-        try:
-            from nexusrecon.tools.registry import get_registry
-            for t in get_registry()._tools.values():
-                binary = getattr(t, "binary_required", None)
-                if binary and binary not in seen:
-                    seen[binary] = shutil.which(binary) or ""
-        except Exception:
-            pass
-        # Sort so missing ones float to the top — operator sees gaps fastest
-        for binary, path in sorted(seen.items(), key=lambda kv: (bool(kv[1]), kv[0])):
-            if path:
-                table.add_row(
-                    binary, f"[#00ff9c]✓ {path}[/#00ff9c]", "ready"
-                )
-            else:
-                table.add_row(
-                    binary, "[#ff5555]✗ not on PATH[/#ff5555]",
-                    "install via brew / go install / pipx",
-                )
 
     # ── Events ─────────────────────────────────────────────────────────
 
@@ -251,16 +228,6 @@ class ConfigScreen(Screen):
 
     async def action_edit_selected(self) -> None:
         cat = self._cats[self._current_cat_idx]
-        if cat.id == "_binaries":
-            # Binaries can't be edited from the TUI — surface a hint
-            try:
-                self.query_one("#keys-pane-desc", Static).update(
-                    "[dim]Binaries can't be edited here. Install via "
-                    "brew / go install / pipx in your shell, then press r to refresh.[/dim]"
-                )
-            except Exception:
-                pass
-            return
         table = self.query_one("#keys-table", DataTable)
         row = table.cursor_row
         if row is None or row < 0 or row >= len(cat.vars):
@@ -291,53 +258,6 @@ class ConfigScreen(Screen):
                 self.query_one("#cat-list", ListView).focus()
         except Exception:
             pass
-
-    def action_back(self) -> None:
-        self.app.pop_screen()
-
-    def action_quit_app(self) -> None:
-        self.app.exit()
-
-
-class ToolsScreen(Screen):
-    """List every registered tool with availability."""
-
-    BINDINGS = [
-        ("escape", "back", "Back"),
-        ("ctrl+q", "quit_app", "Quit"),
-    ]
-
-    def compose(self) -> ComposeResult:
-        yield Header(show_clock=False)
-        yield StatusBar()
-        yield Static(
-            "[bold #00ff9c]Tools[/bold #00ff9c]  "
-            "[dim](press Esc to return)[/dim]",
-            classes="wizard-label",
-        )
-        yield DataTable(id="tools-table", zebra_stripes=True)
-        yield Footer()
-
-    async def on_mount(self) -> None:
-        table = self.query_one("#tools-table", DataTable)
-        table.add_columns("Name", "Category", "Tier", "Status", "Description")
-        try:
-            from nexusrecon.tools.registry import get_registry
-            for t in sorted(
-                get_registry().list_tools(),
-                key=lambda x: (x.get("category", ""), x.get("name", "")),
-            ):
-                avail = "✓ ready" if t.get("available") == "True" else "✗ missing"
-                desc = (t.get("description") or "")[:80]
-                table.add_row(
-                    t.get("name", ""),
-                    t.get("category", ""),
-                    t.get("tier", ""),
-                    avail,
-                    desc,
-                )
-        except Exception as exc:
-            table.add_row("(load failed)", str(exc)[:40], "", "", "")
 
     def action_back(self) -> None:
         self.app.pop_screen()

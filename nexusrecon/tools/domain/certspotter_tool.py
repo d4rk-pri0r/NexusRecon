@@ -17,6 +17,7 @@ class CertSpotterTool(OSINTTool):
     category = Category.CERTIFICATE
     # Key is optional — unauthenticated works at lower rate limits
     requires_keys = []
+    optional_keys = ["certspotter_api_key"]
     description = "CertSpotter CT log search — alternative to crt.sh with independent indexing"
     target_types = ["domain"]
 

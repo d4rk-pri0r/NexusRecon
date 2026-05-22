@@ -17,6 +17,7 @@ class GitHubAdvisoryTool(OSINTTool):
     category = Category.VULNERABILITY
     # Works unauthenticated (60 req/hr); GITHUB_TOKEN raises to 5000/hr
     requires_keys = []
+    optional_keys = ["github_token"]
     description = "GitHub Security Advisory DB (GHSA) — package-level CVE data with affected/patched versions"
     target_types = ["cve"]
 

@@ -162,6 +162,101 @@ class TestSidebar:
         sidebar.collapsed = True
         assert sidebar.collapsed is True
 
+    def test_cursor_movement_wraps_top_and_bottom(self):
+        """Arrow-key cursor moves the highlight one entry at a time
+        and wraps at both ends, so the operator never gets stuck at
+        the boundary."""
+        from nexusrecon.tui.widgets.sidebar import SIDEBAR_ENTRIES, Sidebar
+        sidebar = Sidebar()
+        ids = [eid for eid, _, _, _ in SIDEBAR_ENTRIES]
+        # Start position is "dashboard" by default.
+        assert sidebar.active_id == ids[0]
+        sidebar.move_cursor_down()
+        assert sidebar.active_id == ids[1]
+        # Walk to the last entry then wrap.
+        for _ in range(len(ids) - 1):
+            sidebar.move_cursor_down()
+        # From ids[1], len(ids)-1 more downs lands back at ids[0]
+        # (wrapped around).
+        assert sidebar.active_id == ids[0]
+        # Up wraps from top to bottom.
+        sidebar.active_id = ids[0]
+        sidebar.move_cursor_up()
+        assert sidebar.active_id == ids[-1]
+
+    def test_current_destination_returns_active_id(self):
+        from nexusrecon.tui.widgets.sidebar import Sidebar
+        sidebar = Sidebar()
+        sidebar.active_id = "tools"
+        assert sidebar.current_destination() == "tools"
+
+
+class TestDashboardArrowNavigation:
+    """The TUI-7 follow-up: ↑/↓ should move the sidebar cursor on
+    the dashboard, Enter activates the highlighted entry. This is
+    additive to the letter shortcuts (n/p/c/t) — both paths must
+    keep working."""
+
+    def test_arrow_keys_move_sidebar_cursor_and_enter_navigates(self):
+        import asyncio as _asyncio
+
+        from nexusrecon.tui.app import NexusReconApp
+        from nexusrecon.tui.screens.dashboard import DashboardScreen
+        from nexusrecon.tui.widgets import Sidebar
+
+        async def _drive():
+            app = NexusReconApp()
+            async with app.run_test(headless=True) as pilot:
+                await pilot.pause(0.5)
+                screen = app.screen
+                assert isinstance(screen, DashboardScreen)
+                sidebar = screen.query_one("#dashboard-sidebar", Sidebar)
+                assert sidebar.active_id == "dashboard"
+
+                await pilot.press("down")
+                await pilot.pause(0.1)
+                assert sidebar.active_id == "new_campaign"
+
+                await pilot.press("down", "down")
+                await pilot.pause(0.1)
+                assert sidebar.active_id == "tools"
+
+                await pilot.press("enter")
+                await pilot.pause(0.5)
+                # Routed through the central navigator — same path
+                # the palette uses — so we land on ToolsScreen.
+                assert type(app.screen).__name__ == "ToolsScreen", (
+                    f"got {type(app.screen).__name__}"
+                )
+
+                app.exit()
+                await pilot.pause(0.1)
+
+        _asyncio.run(_drive())
+
+    def test_letter_shortcuts_still_work_alongside_arrows(self):
+        """Adding arrow bindings must NOT shadow the existing
+        letter shortcuts. ``t`` from anywhere on the dashboard
+        still jumps to the tools browser regardless of cursor
+        position."""
+        import asyncio as _asyncio
+
+        from nexusrecon.tui.app import NexusReconApp
+        from nexusrecon.tui.screens.dashboard import DashboardScreen
+
+        async def _drive():
+            app = NexusReconApp()
+            async with app.run_test(headless=True) as pilot:
+                await pilot.pause(0.5)
+                assert isinstance(app.screen, DashboardScreen)
+                await pilot.press("t")
+                await pilot.pause(0.5)
+                assert type(app.screen).__name__ == "ToolsScreen"
+                app.exit()
+                await pilot.pause(0.1)
+
+        _asyncio.run(_drive())
+
 
 # ──────────────────────────────────────────────────────────────────────
 # Dashboard helpers

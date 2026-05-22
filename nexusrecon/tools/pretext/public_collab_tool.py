@@ -27,6 +27,7 @@ class PublicCollabTool(OSINTTool):
     tier = Tier.T0
     category = Category.PRETEXT
     requires_keys = []
+    optional_keys = ["bing_search_api_key"]
     description = "Public collab board discovery — finds accidentally-public Trello/Confluence/Notion boards"
     target_types = ["domain"]
 

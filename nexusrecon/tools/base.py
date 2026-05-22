@@ -95,6 +95,14 @@ class OSINTTool(abc.ABC):
     avg_runtime_sec: int = 30
     reliability: float = 0.95
     requires_keys: list[str] = []
+    #: Env vars the tool ENHANCES with but doesn't require — providing
+    #: them unlocks higher rate limits, paid endpoints, or richer
+    #: response fields. ``is_available()`` ignores these (a tool with
+    #: only ``optional_keys`` runs unauthenticated). The TUI surfaces
+    #: them in the per-tool detail pane so operators can configure
+    #: them from one place; without this declaration an enhancement
+    #: key would be invisible in the UI.
+    optional_keys: list[str] = []
     binary_required: str | None = None
     description: str = ""
     target_types: list[str] = ["domain"]  # domain, ip, email, etc.

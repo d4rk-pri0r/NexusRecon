@@ -27,6 +27,7 @@ class JobsTool(OSINTTool):
     tier = Tier.T0
     category = Category.PRETEXT
     requires_keys = []
+    optional_keys = ["adzuna_app_id", "adzuna_api_key"]
     description = "Job posting tech stack mining from Adzuna API + web fallback"
     target_types = ["domain"]
 

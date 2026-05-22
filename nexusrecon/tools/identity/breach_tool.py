@@ -16,6 +16,7 @@ class BreachTool(OSINTTool):
     tier = Tier.T0
     category = Category.BREACH
     requires_keys = ["haveibeenpwned_api_key"]
+    optional_keys = ["dehashed_username", "dehashed_api_key", "intelx_api_key"]
     description = "Breach data lookup via HIBP API, optional DeHashed and IntelX"
     target_types = ["email", "domain"]
     dynamic_trigger_hints = ["credential breach found", "email breach detected"]

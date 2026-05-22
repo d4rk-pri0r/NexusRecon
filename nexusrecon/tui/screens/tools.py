@@ -10,18 +10,25 @@ Three-pane layout replacing the old flat DataTable in
     category. Press ``/`` to focus the filter input; type to
     narrow; Esc clears.
   - **Right pane:** detail card for the highlighted tool —
-    description, tier, category, required keys, availability,
-    stub flag. Action shortcuts at the bottom (``c`` jump to
-    config screen with this tool's keys, ``t`` test connection
-    when implemented per-tool).
+    description, tier, category, required keys (with live
+    configured/missing status per key), availability, stub
+    flag. Action shortcuts at the bottom (``c`` opens the edit
+    modal directly on the first missing key, ``t`` test
+    connection when implemented per-tool).
 
 The previous screen surfaced 97 entries as a single sorted
 DataTable. With Phase E live, the count is only going up; the
 new layout scales linearly and gives operators a real workflow
 for finding the tool they need.
+
+Direct-edit UX: pressing ``c`` opens :class:`EditKeyModal`
+in-place instead of pushing a separate ``ConfigScreen`` with
+auto-edit. Two screen transitions become one — and the operator
+returns to exactly the same tools list when the modal closes.
 """
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from textual.app import ComposeResult
@@ -73,9 +80,88 @@ def _group_by_category(
     return buckets
 
 
+#: Display labels for the tool functional categories. The keys are
+#: the ``Category`` enum values; missing entries fall back to the
+#: raw enum value. Kept in sync with ``nexusrecon.tools.base.Category``.
+#: Labels mirror the emoji + Title-Case style the Config screen uses,
+#: so an operator switching between the two screens isn't reading
+#: two visually divergent taxonomies.
+_CATEGORY_LABELS: dict[str, str] = {
+    "breach": "🩸 Breach",
+    "certificate": "🔏 Certificate",
+    "cloud_aws": "☁  Cloud · AWS",
+    "cloud_azure": "☁  Cloud · Azure",
+    "cloud_gcp": "☁  Cloud · GCP",
+    "code": "💻 Code & Repo",
+    "dns": "🌐 DNS",
+    "domain": "🌍 Domain",
+    "email": "📧 Email",
+    "identity": "👤 Identity",
+    "infrastructure": "🛰  Infrastructure",
+    "mobile": "📱 Mobile",
+    "news": "📰 News",
+    "pretext": "🎭 Pretext",
+    "secret": "🔑 Secret",
+    "social": "💬 Social",
+    "subdomain": "🔍 Subdomain",
+    "vulnerability": "🛡  Vulnerability",
+    "web": "🕸  Web",
+}
+
+
+def _pretty_category(category: str) -> str:
+    """Return the display label for a functional category, falling
+    back to the raw enum value when no friendly label is mapped."""
+    return _CATEGORY_LABELS.get(category, category)
+
+
 def _category_label(category: str, count: int) -> str:
-    """Render a left-pane row label: ``identity  (12)``."""
-    return f"{category}  [dim]({count})[/dim]"
+    """Render a left-pane row label: ``👤 Identity  (12)``."""
+    return f"{_pretty_category(category)}  [dim]({count})[/dim]"
+
+
+def _resolve_env_path() -> Path:
+    """Find the project's ``.env``. Same heuristic as the config
+    screen so both surfaces agree on which file they edit."""
+    cwd = Path.cwd()
+    if (cwd / ".env").exists():
+        return cwd / ".env"
+    for parent in [cwd] + list(cwd.parents):
+        if (parent / "pyproject.toml").exists():
+            return parent / ".env"
+    return cwd / ".env"
+
+
+def _editable_requires(tool: dict[str, Any]) -> list[str]:
+    """Extract the env-var names a tool requires that can be edited
+    from the TUI. Skips ``bin:foo`` markers (binary installs are
+    handled outside the TUI). Returns uppercase names because the
+    schema + .env both use uppercase.
+    """
+    raw = tool.get("requires", "") or ""
+    out: list[str] = []
+    for cand in raw.split(","):
+        cand = cand.strip()
+        if not cand or cand.startswith("bin:"):
+            continue
+        out.append(cand.upper())
+    return out
+
+
+def _editable_optional(tool: dict[str, Any]) -> list[str]:
+    """Extract the tool's *optional* env-var names — keys that
+    aren't needed to run the tool but unlock higher quotas or paid
+    fields when set. Returned uppercase like ``_editable_requires``.
+    Empty when the tool declares no ``optional_keys``.
+    """
+    raw = tool.get("optional", "") or ""
+    out: list[str] = []
+    for cand in raw.split(","):
+        cand = cand.strip()
+        if not cand:
+            continue
+        out.append(cand.upper())
+    return out
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -89,18 +175,20 @@ class ToolsScreen(Screen):
     Navigation summary:
       - Tab cycles focus between the three panes.
       - ``/`` focuses the filter input (clears on Esc).
-      - Enter on a tool opens a "go to config" shortcut for that
-        tool's required keys.
-      - ``c`` from anywhere on the screen jumps to the
-        ConfigScreen for the highlighted tool's first required
-        key, when one exists.
+      - ``c`` (or Enter) opens :class:`EditKeyModal` directly on
+        the highlighted tool's first unconfigured env var. No
+        intermediate ConfigScreen — operator returns to the
+        same tools list when the modal closes.
+      - Tools whose only requirement is a binary on PATH surface
+        a hint instead — those installs happen outside the TUI.
     """
 
     BINDINGS = [
         Binding("escape", "back", "Back"),
         Binding("slash", "focus_filter", "Filter"),
         Binding("tab", "focus_next_pane", "Cycle panes"),
-        Binding("c", "jump_to_config", "Config"),
+        Binding("c", "edit_selected_key", "Configure"),
+        Binding("enter", "edit_selected_key", "Configure", show=False),
         Binding("ctrl+q", "quit_app", "Quit"),
     ]
 
@@ -116,6 +204,10 @@ class ToolsScreen(Screen):
         # Cache the visible list (after category + filter) so the
         # selected-row → tool resolution is cheap.
         self._visible: list[dict[str, Any]] = []
+        # Resolve once — every per-key status check needs to read
+        # ``.env``; doing it on every detail render is fine but the
+        # path resolution doesn't need to repeat.
+        self._env_path: Path = _resolve_env_path()
 
     # ── Compose ─────────────────────────────────────────────────────
 
@@ -285,52 +377,159 @@ class ToolsScreen(Screen):
             status_line = "[$success]✓ available[/$success]"
         else:
             status_line = "[$error]✗ requires key(s) not yet configured[/$error]"
-        requires = tool.get("requires", "") or "[dim]none[/dim]"
         meta_lines = [
             f"[dim]Tier:[/dim]     {tool.get('tier', '?')}",
-            f"[dim]Category:[/dim] {tool.get('category', '?')}",
-            f"[dim]Requires:[/dim] {requires}",
+            f"[dim]Category:[/dim] {_pretty_category(tool.get('category', '?'))}",
             f"[dim]Status:[/dim]   {status_line}",
+            "",
+            "[dim]Requires:[/dim]",
+            *self._render_requires_lines(tool),
         ]
         title_widget.update(f"[bold $primary]{name}[/bold $primary]")
         meta_widget.update("\n".join(meta_lines))
         desc_widget.update((tool.get("description") or "").strip())
-        # Action footer is concrete: when the tool needs a key the
-        # operator can set, we name it ── "Press c to set
-        # GITHUB_TOKEN". When there's no setable env var (binary-
-        # only tool, or no missing key) the hint stays generic.
         action_hint = self._action_hint_for(tool)
         actions_widget.update(action_hint)
+
+    def _render_requires_lines(self, tool: dict[str, Any]) -> list[str]:
+        """Per-requirement status lines for the detail pane.
+
+        Each editable env var gets a configured / missing marker
+        sourced from the live ``.env``. ``bin:`` markers get a
+        PATH-presence check via ``shutil.which`` so the operator
+        knows at a glance whether ``gowitness`` is installed.
+
+        Optional keys (declared via ``optional_keys`` on the tool)
+        get a separate ◯ marker so the operator can tell at a
+        glance which are needed vs which enhance behaviour.
+        """
+        import shutil
+
+        from nexusrecon.tui.env_editor import EnvFile
+
+        raw = tool.get("requires", "") or ""
+        required_parts = [p.strip() for p in raw.split(",") if p.strip()]
+        optional_keys = _editable_optional(tool)
+        if not required_parts and not optional_keys:
+            return ["  [dim](none — runs unauthenticated)[/dim]"]
+        env_file = EnvFile(self._env_path)
+        out: list[str] = []
+        for part in required_parts:
+            if part.startswith("bin:"):
+                binary = part[4:]
+                path = shutil.which(binary)
+                if path:
+                    out.append(
+                        f"  [$success]✓[/$success] [bold]{binary}[/bold]  "
+                        f"[dim]bin · {path}[/dim]"
+                    )
+                else:
+                    out.append(
+                        f"  [$error]✗[/$error] [bold]{binary}[/bold]  "
+                        "[dim]bin · not on PATH[/dim]"
+                    )
+                continue
+            key = part.upper()
+            value = env_file.get(key)
+            if value:
+                out.append(
+                    f"  [$success]✓[/$success] [bold]{key}[/bold]  "
+                    "[dim]configured[/dim]"
+                )
+            else:
+                out.append(
+                    f"  [$error]✗[/$error] [bold]{key}[/bold]  "
+                    "[dim]not set[/dim]"
+                )
+        for key in optional_keys:
+            value = env_file.get(key)
+            if value:
+                out.append(
+                    f"  [$success]✓[/$success] [bold]{key}[/bold]  "
+                    "[dim]optional · configured[/dim]"
+                )
+            else:
+                out.append(
+                    f"  [$accent]◯[/$accent] [bold]{key}[/bold]  "
+                    "[dim]optional · not set (enhancement)[/dim]"
+                )
+        return out
 
     def _action_hint_for(self, tool: dict[str, Any]) -> str:
         """Build the right-pane action hint string for ``tool``.
 
-        Mentions the first edit-able env var by name so pressing
-        ``c`` produces no surprise. Binary-only ``requires`` rows
-        like ``bin:gowitness`` are skipped because the config
-        screen can't edit those.
+        The hint names the first env var the operator can set so
+        pressing ``c`` produces no surprise. When the tool requires
+        nothing settable from the TUI (binary-only or no keys at
+        all) the hint says so explicitly rather than offering a
+        config shortcut that wouldn't do anything.
+        """
+        editable = self._editable_target(tool)
+        if editable is not None:
+            _, key, kind = editable
+            qualifier = "" if kind == "required" else " [dim](optional)[/dim]"
+            return (
+                f"[bold]c[/bold] set [bold $primary]{key}[/bold $primary]"
+                f"{qualifier}   [dim]Esc[/dim] back"
+            )
+        # Tool has no editable env vars. Surface why the operator
+        # can't configure it from here, in concrete terms.
+        raw = tool.get("requires", "") or ""
+        bin_only = raw and all(
+            p.strip().startswith("bin:")
+            for p in raw.split(",")
+            if p.strip()
+        )
+        if bin_only:
+            return (
+                "[dim]install binary via shell · "
+                "Esc back[/dim]"
+            )
+        return "[dim](no env vars to configure)   Esc back[/dim]"
+
+    def _editable_target(
+        self, tool: dict[str, Any],
+    ) -> tuple[Any, str, str] | None:
+        """Pick the env var an operator should be sent to edit.
+
+        Walks the required keys first (a missing required key is
+        always the highest-priority gap to fix), then the optional
+        keys. Within each group, prefer the first key that is
+        **not yet set**. Falls back to the first declared key when
+        everything is already configured (rotation case).
+
+        Returns ``(ConfigVar, key, kind)`` where ``kind`` is
+        ``"required"`` or ``"optional"`` — the caller uses it to
+        word the action hint correctly. ``None`` when the tool has
+        no schema-known editable keys.
         """
         try:
-            from nexusrecon.tui.config_schema import find_category_for_var
+            from nexusrecon.tui.config_schema import find_var
+            from nexusrecon.tui.env_editor import EnvFile
         except Exception:
-            find_category_for_var = lambda _k: None  # noqa: E731
-        requires = tool.get("requires", "") or ""
-        target_key: str | None = None
-        for raw in requires.split(","):
-            cand = raw.strip()
-            if not cand or cand.startswith("bin:"):
-                continue
-            if find_category_for_var(cand) is not None:
-                target_key = cand
-                break
-        if target_key:
-            return (
-                f"[bold]c[/bold] set [bold $primary]{target_key}[/bold $primary]   "
-                "[dim]Esc[/dim] back"
-            )
-        return (
-            "[dim]c config screen   Esc back[/dim]"
-        )
+            return None
+        env_file = EnvFile(self._env_path)
+        fallback: tuple[Any, str, str] | None = None
+
+        def _scan(keys: list[str], kind: str) -> tuple[Any, str, str] | None:
+            nonlocal fallback
+            for key in keys:
+                var = find_var(key)
+                if var is None:
+                    continue
+                if fallback is None:
+                    fallback = (var, var.key, kind)
+                if not env_file.get(var.key):
+                    return var, var.key, kind
+            return None
+
+        hit = _scan(_editable_requires(tool), "required")
+        if hit:
+            return hit
+        hit = _scan(_editable_optional(tool), "optional")
+        if hit:
+            return hit
+        return fallback
 
     # ── Event handlers ──────────────────────────────────────────────
 
@@ -389,54 +588,73 @@ class ToolsScreen(Screen):
         except Exception:
             pass
 
-    def action_jump_to_config(self) -> None:
-        """Deep-link into the Config screen for the highlighted
-        tool's first required env var.
+    async def action_edit_selected_key(self) -> None:
+        """Open the EditKeyModal in-place for the highlighted tool's
+        first editable env var.
 
-        Pre-`c` behaviour was to push a blank ConfigScreen and let
-        the operator navigate to the relevant key themselves. That's
-        backwards — the only reason to press `c` from the tools
-        browser is *because* you want to set the missing key for the
-        current tool. The screen now pre-selects the category and
-        opens the edit modal directly. When the tool requires no
-        key at all (binary-only tools, etc.) we just push the
-        screen at its default.
+        This is the primary configure surface from the Tools
+        browser. We open the modal directly here rather than
+        pushing a ConfigScreen and letting it auto-edit — that
+        added a redundant screen transition (operator sees the
+        config category list flash by) and made "back" land on
+        ConfigScreen instead of back on the tool the operator
+        was just looking at.
+
+        Selection rule: first missing key wins; otherwise the
+        first editable key. Tools whose only requirements are
+        binaries (``bin:gowitness``) or that require nothing
+        flash a hint instead — there's nothing to edit from
+        here.
         """
-        try:
-            from nexusrecon.tui.config_schema import find_category_for_var
-            from nexusrecon.tui.screens.config import ConfigScreen
-            target_var: str | None = None
-            target_cat: str | None = None
-            # Resolve the highlighted tool's first required env var.
-            if (
-                self._visible
-                and 0 <= self._current_idx() < len(self._visible)
-            ):
-                tool = self._visible[self._current_idx()]
-                requires = tool.get("requires", "") or ""
-                # ``requires`` is a comma-separated string like
-                # "GITHUB_TOKEN, bin:gowitness". Filter out
-                # ``bin:`` entries — those aren't env vars; the
-                # config screen can't edit a binary install.
-                for raw in requires.split(","):
-                    cand = raw.strip()
-                    if not cand or cand.startswith("bin:"):
-                        continue
-                    pair = find_category_for_var(cand)
-                    if pair is not None:
-                        target_cat = pair[0].id
-                        target_var = pair[1].key
-                        break
-            self.app.push_screen(ConfigScreen(
-                initial_category_id=target_cat,
-                initial_key=target_var,
-            ))
-        except Exception:
+        if not self._visible:
+            return
+        idx = self._current_idx()
+        if idx is None or idx < 0 or idx >= len(self._visible):
+            return
+        tool = self._visible[idx]
+        target = self._editable_target(tool)
+        if target is None:
+            # Surface why nothing happened. The detail pane already
+            # explains, but a toast makes the keypress feel acknowledged.
             try:
-                from nexusrecon.tui.screens.config import ConfigScreen
-                self.app.push_screen(ConfigScreen())
+                raw = tool.get("requires", "") or ""
+                bin_only = raw and all(
+                    p.strip().startswith("bin:")
+                    for p in raw.split(",")
+                    if p.strip()
+                )
+                if bin_only:
+                    self.app.notify(
+                        f"{tool.get('name', '?')} requires a binary on PATH "
+                        "(install via shell — can't edit from TUI)",
+                        severity="warning",
+                    )
+                else:
+                    self.app.notify(
+                        f"{tool.get('name', '?')} has no env vars to configure",
+                        severity="information",
+                    )
             except Exception:
                 pass
+            return
+        var, _key, _kind = target
+        try:
+            from nexusrecon.tui.screens.edit_key import EditKeyModal
+        except Exception:
+            return
+
+        def _on_dismiss(_result: Any) -> None:
+            # Re-render the detail pane so the per-key status
+            # marker reflects the new .env state.
+            self._render_detail(tool)
+
+        try:
+            await self.app.push_screen(
+                EditKeyModal(env_path=str(self._env_path), var=var),
+                _on_dismiss,
+            )
+        except Exception:
+            pass
 
     def _current_idx(self) -> int:
         """Index of the highlighted tool in ``self._visible`` (-1 if

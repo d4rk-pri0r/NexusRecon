@@ -73,11 +73,50 @@ class Sidebar(Vertical):
     }
     """
 
-    #: Currently-active entry's id. Highlight follows.
+    #: Currently-active entry's id. Highlight follows. Used both as
+    #: the "you are here" indicator on mount and as the cursor
+    #: position when the parent screen drives arrow-key navigation
+    #: into the sidebar.
     active_id: reactive[str] = reactive("dashboard")
 
     #: Collapsed state — toggled by the parent screen's ``]`` binding.
     collapsed: reactive[bool] = reactive(False)
+
+    # ── Cursor movement (parent screen drives via ↑/↓) ──────────────
+
+    def _entry_ids(self) -> list[str]:
+        return [eid for eid, _, _, _ in SIDEBAR_ENTRIES]
+
+    def _cursor_index(self) -> int:
+        ids = self._entry_ids()
+        try:
+            return ids.index(self.active_id)
+        except ValueError:
+            return 0
+
+    def move_cursor_up(self) -> None:
+        """Move the highlight to the previous entry (wraps to bottom).
+
+        Parent screens call this from an arrow-key action so the
+        cursor model lives in one place — the widget that already
+        owns the entry catalog and the reactive highlight class.
+        """
+        ids = self._entry_ids()
+        if not ids:
+            return
+        self.active_id = ids[(self._cursor_index() - 1) % len(ids)]
+
+    def move_cursor_down(self) -> None:
+        """Move the highlight to the next entry (wraps to top)."""
+        ids = self._entry_ids()
+        if not ids:
+            return
+        self.active_id = ids[(self._cursor_index() + 1) % len(ids)]
+
+    def current_destination(self) -> str:
+        """Return the destination_id under the cursor — used by the
+        parent screen's Enter binding to dispatch navigation."""
+        return self.active_id
 
     def compose(self) -> ComposeResult:
         for entry_id, label, key, icon in SIDEBAR_ENTRIES:

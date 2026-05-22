@@ -457,49 +457,56 @@ class TestPilotIntegration:
 
 
 class TestConfigDeepLink:
-    """Regression for the Tools → Config navigation bug.
+    """Regression for the deep-link kwargs on ConfigScreen.
 
-    Pressing `c` in the tools browser used to dump the operator
-    into the generic ConfigScreen — they then had to navigate to
-    the right category AND the right row themselves. The fix:
-    ConfigScreen now accepts ``initial_category_id`` +
-    ``initial_key`` and, on mount, pre-selects that category +
-    immediately opens the edit modal on the targeted row.
+    Originally added so the Tools browser could shove the operator
+    straight onto the right env-var edit row. The Tools browser now
+    opens ``EditKeyModal`` directly (see ``TestToolsScreenDirectEdit``),
+    so these tests only cover the app-wide path that ConfigScreen
+    still actually owns: the LLM / OPSEC / Storage / Debug
+    categories. Tool-key lookups are still case-insensitive across
+    every category for the Tools screen's modal-opening flow.
     """
 
-    def test_find_category_for_var_locates_known_key(self):
+    def test_find_category_for_var_locates_app_wide_key(self):
         from nexusrecon.tui.config_schema import find_category_for_var
-        pair = find_category_for_var("GITHUB_TOKEN")
+        pair = find_category_for_var("NEXUS_LLM_PROVIDER")
         assert pair is not None
         cat, var = pair
-        # GITHUB_TOKEN lives in the "code" category.
-        assert var.key == "GITHUB_TOKEN"
-        assert cat.id == "code"
+        assert var.key == "NEXUS_LLM_PROVIDER"
+        assert cat.id == "llm"
+
+    def test_find_var_still_finds_tool_keys_case_insensitively(self):
+        """The Config screen no longer displays tool categories, but
+        ``find_var`` still resolves tool API keys so the Tools
+        browser's EditKeyModal flow keeps working."""
+        from nexusrecon.tui.config_schema import find_var
+        v = find_var("github_token")
+        assert v is not None
+        assert v.key == "GITHUB_TOKEN"
+        assert v.sensitive
 
     def test_find_category_for_var_returns_none_for_unknown(self):
         from nexusrecon.tui.config_schema import find_category_for_var
         assert find_category_for_var("NOT_A_REAL_KEY_xyz") is None
 
     def test_config_screen_accepts_deep_link_args(self):
-        """ConfigScreen.__init__ must accept the new kwargs without
-        crashing. Defensive check against a future refactor that
-        removes them."""
+        """ConfigScreen.__init__ accepts kwargs and pre-selects the
+        requested *app-wide* category. Tool categories no longer
+        appear here, but the kwarg path itself remains for app-wide
+        deep-links (e.g. palette → "set LLM provider")."""
         from nexusrecon.tui.screens.config import ConfigScreen
         screen = ConfigScreen(
-            initial_category_id="code",
-            initial_key="GITHUB_TOKEN",
+            initial_category_id="llm",
+            initial_key="NEXUS_LLM_PROVIDER",
         )
-        # The screen stashes the requested key + finds the right
-        # category index.
-        assert screen._initial_key == "GITHUB_TOKEN"
-        assert screen._cats[screen._current_cat_idx].id == "code"
+        assert screen._initial_key == "NEXUS_LLM_PROVIDER"
+        assert screen._cats[screen._current_cat_idx].id == "llm"
 
     def test_config_screen_deep_link_opens_edit_modal(self):
-        """Full integration: pushing ConfigScreen with deep-link
-        kwargs results in the EditKeyModal being on top of the
-        stack (i.e. the operator lands directly on the edit
-        surface for the targeted key, not on the category list).
-        """
+        """Full integration via the app-wide path: pushing
+        ConfigScreen with deep-link kwargs results in the
+        EditKeyModal being on top of the stack."""
         import asyncio as _asyncio
 
         from nexusrecon.tui.app import NexusReconApp
@@ -510,12 +517,10 @@ class TestConfigDeepLink:
             async with app.run_test(headless=True) as pilot:
                 await pilot.pause(0.5)
                 await app.push_screen(ConfigScreen(
-                    initial_category_id="code",
-                    initial_key="GITHUB_TOKEN",
+                    initial_category_id="llm",
+                    initial_key="NEXUS_LLM_PROVIDER",
                 ))
                 await pilot.pause(0.5)
-                # Modal pushed automatically — its class name is
-                # EditKeyModal in nexusrecon.tui.screens.edit_key.
                 assert type(app.screen).__name__ == "EditKeyModal", (
                     f"expected deep-link to open EditKeyModal; got "
                     f"{type(app.screen).__name__}"
@@ -524,6 +529,22 @@ class TestConfigDeepLink:
                 await pilot.pause(0.1)
 
         _asyncio.run(_drive())
+
+    def test_config_screen_hides_tool_categories(self):
+        """The Config screen must NOT list tool API-key categories
+        like ``code``, ``intel``, ``identity`` — those live in the
+        Tools screen now. Operator looking for SHODAN/GITHUB/etc.
+        keys belongs in the Tools surface, not here."""
+        from nexusrecon.tui.config_schema import APP_CATEGORY_IDS
+        from nexusrecon.tui.screens.config import ConfigScreen
+        screen = ConfigScreen()
+        shown = {c.id for c in screen._cats}
+        assert shown == APP_CATEGORY_IDS, (
+            f"expected only app-wide categories, got {shown}"
+        )
+        # And the tool-category IDs that used to be here are gone:
+        for stale in ("intel", "identity", "code", "cloud", "_binaries"):
+            assert stale not in shown
 
 
 class TestToolsScreenHelpers:
@@ -556,3 +577,172 @@ class TestToolsScreenHelpers:
             return_value=[],
         ):
             assert tools_mod._load_tools() == []
+
+    def test_editable_requires_filters_binaries_and_upcases(self):
+        from nexusrecon.tui.screens.tools import _editable_requires
+        # bin: markers excluded; remaining keys normalized to UPPER
+        assert _editable_requires(
+            {"requires": "github_token, bin:gowitness, hunter_api_key"},
+        ) == ["GITHUB_TOKEN", "HUNTER_API_KEY"]
+        assert _editable_requires({"requires": ""}) == []
+        assert _editable_requires({"requires": "bin:nuclei"}) == []
+
+    def test_editable_optional_extracts_optional_keys(self):
+        from nexusrecon.tui.screens.tools import _editable_optional
+        assert _editable_optional(
+            {"optional": "github_token, certspotter_api_key"},
+        ) == ["GITHUB_TOKEN", "CERTSPOTTER_API_KEY"]
+        # Missing / empty optional field => no keys
+        assert _editable_optional({"optional": ""}) == []
+        assert _editable_optional({}) == []
+
+    def test_pretty_category_falls_back_for_unknown(self):
+        from nexusrecon.tui.screens.tools import _pretty_category
+        # known mapping returns the emoji label
+        assert "🌐" in _pretty_category("dns")
+        # unknown category passes through verbatim
+        assert _pretty_category("brand_new_cat") == "brand_new_cat"
+
+
+class TestToolsScreenDirectEdit:
+    """The TUI-7 fix: pressing ``c`` on the Tools screen must open
+    the EditKeyModal on the highlighted tool's first editable env
+    var directly — not stop over at ConfigScreen, and not be
+    case-sensitive to the tool's lowercase ``requires_keys``.
+    """
+
+    def test_lowercase_requires_resolves_to_uppercase_schema(self):
+        """Tools declare ``requires_keys = ["github_token"]`` (the
+        pydantic field name). The schema stores ``GITHUB_TOKEN``
+        (the .env name). The lookup that powers the deep-link must
+        bridge the two.
+        """
+        from nexusrecon.tui.config_schema import find_var
+        v = find_var("github_token")
+        assert v is not None
+        assert v.key == "GITHUB_TOKEN"
+
+    def test_linkedin_li_at_is_in_schema(self):
+        """LINKEDIN_LI_AT must be editable from the TUI now that
+        linkedin_social requires it (was missing from the schema
+        until TUI-7)."""
+        from nexusrecon.tui.config_schema import find_var
+        v = find_var("LINKEDIN_LI_AT")
+        assert v is not None
+        assert v.sensitive  # session cookie — must be masked
+
+    def test_c_opens_edit_modal_directly(self):
+        """End-to-end: highlight a tool that requires keys, press
+        ``c``, verify the EditKeyModal lands on top and Cancel
+        returns to the ToolsScreen (NOT ConfigScreen)."""
+        import asyncio as _asyncio
+
+        from nexusrecon.tui.app import NexusReconApp
+        from nexusrecon.tui.screens.edit_key import EditKeyModal
+        from nexusrecon.tui.screens.tools import ToolsScreen
+
+        async def _drive():
+            app = NexusReconApp()
+            async with app.run_test(headless=True) as pilot:
+                await pilot.pause(0.5)
+                await app.push_screen(ToolsScreen())
+                await pilot.pause(0.5)
+                screen = app.screen
+                assert isinstance(screen, ToolsScreen)
+                # Snap to a known target — github_recon requires
+                # GITHUB_TOKEN.
+                screen._current_category = ToolsScreen.ALL_CATEGORIES
+                screen._rebuild_tools_list()
+                names = [t["name"] for t in screen._visible]
+                idx = names.index("github_recon")
+                screen.query_one("#tools-list").index = idx
+                await pilot.pause(0.1)
+                await screen.action_edit_selected_key()
+                await pilot.pause(0.3)
+                top = app.screen
+                assert isinstance(top, EditKeyModal), (
+                    f"expected EditKeyModal; got {type(top).__name__}"
+                )
+                assert top.var.key == "GITHUB_TOKEN"
+                top.action_cancel()
+                await pilot.pause(0.2)
+                # Cancelling returns to Tools, NOT to a stranded
+                # ConfigScreen mid-stack.
+                assert isinstance(app.screen, ToolsScreen)
+                app.exit()
+                await pilot.pause(0.1)
+
+        _asyncio.run(_drive())
+
+    def test_optional_keys_appear_in_editable_target(self):
+        """Tools with no required keys but with declared
+        ``optional_keys`` should still be editable from the Tools
+        screen — the editable target falls through to the first
+        optional key. Regression: before optional_keys existed,
+        these tools had no UI surface for their enhancement keys."""
+        import asyncio as _asyncio
+
+        from nexusrecon.tui.app import NexusReconApp
+        from nexusrecon.tui.screens.edit_key import EditKeyModal
+        from nexusrecon.tui.screens.tools import ToolsScreen
+
+        async def _drive():
+            app = NexusReconApp()
+            async with app.run_test(headless=True) as pilot:
+                await pilot.pause(0.5)
+                await app.push_screen(ToolsScreen())
+                await pilot.pause(0.5)
+                screen = app.screen
+                # otx_subdomains has only an optional key
+                # (otx_api_key); the Tools detail pane MUST still
+                # offer it to ``c``.
+                otx = next(
+                    t for t in screen._visible if t["name"] == "otx_subdomains"
+                )
+                target = screen._editable_target(otx)
+                assert target is not None, "otx_subdomains must be editable"
+                _var, key, kind = target
+                assert key == "OTX_API_KEY"
+                assert kind == "optional"
+
+                # Drive `c` and confirm the modal opens on OTX_API_KEY.
+                names = [t["name"] for t in screen._visible]
+                idx = names.index("otx_subdomains")
+                screen.query_one("#tools-list").index = idx
+                await pilot.pause(0.1)
+                await screen.action_edit_selected_key()
+                await pilot.pause(0.3)
+                top = app.screen
+                assert isinstance(top, EditKeyModal)
+                assert top.var.key == "OTX_API_KEY"
+                top.action_cancel()
+                app.exit()
+                await pilot.pause(0.1)
+
+        _asyncio.run(_drive())
+
+    def test_required_keys_win_over_optional_when_missing(self):
+        """When a tool has both required and optional keys and the
+        required one is missing, ``c`` must edit the required key
+        first — fixing a real gap beats configuring an enhancement.
+        """
+        from nexusrecon.tui.screens.tools import ToolsScreen
+        # breach_lookup has required HIBP + optional dehashed/intelx
+        screen = ToolsScreen()
+        screen._tools = [
+            {
+                "name": "breach_lookup",
+                "category": "breach",
+                "tier": "T0",
+                "available": "False",
+                "stubbed": "False",
+                "requires": "haveibeenpwned_api_key",
+                "optional": "dehashed_username, dehashed_api_key, intelx_api_key",
+                "description": "",
+            },
+        ]
+        target = screen._editable_target(screen._tools[0])
+        assert target is not None
+        _var, key, kind = target
+        assert key == "HAVEIBEENPWNED_API_KEY"
+        assert kind == "required"

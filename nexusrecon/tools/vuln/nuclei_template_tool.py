@@ -17,6 +17,7 @@ class NucleiTemplateTool(OSINTTool):
     category = Category.VULNERABILITY
     # Works unauthenticated; GITHUB_TOKEN gives 5000 req/hr vs 60
     requires_keys = []
+    optional_keys = ["github_token"]
     description = (
         "Nuclei template lookup — checks projectdiscovery/nuclei-templates for a ready-to-run "
         "CVE template and provides the exact nuclei command to run"

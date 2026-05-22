@@ -17,6 +17,7 @@ class LeakIXTool(OSINTTool):
     category = Category.INFRASTRUCTURE
     # Key is optional — unauthenticated returns basic results
     requires_keys = []
+    optional_keys = ["leakix_api_key"]
     description = (
         "LeakIX — exposed services with vulnerability context; uniquely surfaces "
         "misconfigurations and CVEs directly attached to discovered hosts"

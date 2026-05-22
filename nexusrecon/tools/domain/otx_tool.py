@@ -17,6 +17,7 @@ class OTXTool(OSINTTool):
     category = Category.SUBDOMAIN
     # Key is optional — unauthenticated works but is rate-limited
     requires_keys = []
+    optional_keys = ["otx_api_key"]
     description = "AlienVault OTX passive subdomain enumeration (no key required, key increases quota)"
     target_types = ["domain"]
 

@@ -69,6 +69,7 @@ class NewsTool(OSINTTool):
     tier = Tier.T0
     category = Category.NEWS
     requires_keys = []
+    optional_keys = ["newsapi_api_key"]
     description = (
         "News, press releases, M&A activity, and earnings mining. "
         "Phase E8 adds time-windowed RecentActivity records for "

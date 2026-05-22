@@ -107,6 +107,7 @@ class HudsonRockTool(OSINTTool):
     # API key is optional — the community tier works without it.
     # When present it unlocks the captured-credentials array.
     requires_keys = []
+    optional_keys = ["hudsonrock_api_key"]
     description = (
         "Hudson Rock Cavalier — checks whether an email or domain appears in "
         "infostealer malware logs (Raccoon, RedLine, Vidar, etc.). "

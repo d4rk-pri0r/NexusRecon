@@ -15,6 +15,7 @@ class URLScanTool(OSINTTool):
     tier = Tier.T0
     category = Category.INFRASTRUCTURE
     requires_keys = []
+    optional_keys = ["urlscan_api_key"]
     description = "urlscan.io historical scan data and screenshot correlation"
     target_types = ["domain"]
     dynamic_trigger_hints = ["malicious url found", "phishing page detected"]
