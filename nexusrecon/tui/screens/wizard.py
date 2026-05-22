@@ -1,4 +1,17 @@
-"""Multi-step new-campaign wizard."""
+"""Multi-step new-campaign wizard.
+
+TUI-4 additions:
+  - Sticky right-side summary pane that updates as the operator
+    advances through the steps.
+  - Scope-file preset library on Step 2 (a Select that prefills
+    constraints/run options from a named template).
+  - Cost-preview gauge on Step 5 ── operator sees what they're
+    about to spend before pressing Save & Run.
+
+The original 5-step flow and validation surface are preserved; the
+helpers live in :mod:`nexusrecon.tui.wizard_helpers` so they stay
+pure-Python unit-testable.
+"""
 from __future__ import annotations
 
 import datetime as _dt
@@ -14,6 +27,13 @@ from textual.screen import Screen
 from textual.widgets import Button, Footer, Header, Input, Select, Static, Switch
 
 from nexusrecon.tui.widgets import StatusBar
+from nexusrecon.tui.wizard_helpers import (
+    apply_preset,
+    estimate_campaign_cost,
+    load_presets,
+    preset_by_id,
+    render_summary,
+)
 
 _DOMAIN_RE = re.compile(r"^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$")
 _HEX64_RE = re.compile(r"^[0-9a-fA-F]{64}$")
@@ -92,18 +112,25 @@ class WizardScreen(Screen):
         yield Header(show_clock=False)
         # TUI-3: persistent status bar on every screen.
         yield StatusBar()
-        # Centering container keeps the wizard a comfortable reading width
-        # on large monitors instead of stretching form fields across the
-        # whole display. CSS caps #wizard-content at max-width and
-        # centers it horizontally.
+        # TUI-4: the wizard now has a two-pane main area — the form
+        # body on the left, a sticky summary pane on the right that
+        # reflects what's been entered so far.
         with Container(id="wizard-content"):
-            with Vertical(id="wizard-stack"):
-                yield Static(id="wizard-title")
-                yield VerticalScroll(id="wizard-body")
-                with Horizontal(classes="wizard-nav"):
-                    yield Button("Back", id="btn-back")
-                    yield Button("Next", id="btn-next", classes="-primary")
-                    yield Button("Cancel", id="btn-cancel")
+            with Horizontal(id="wizard-layout"):
+                with Vertical(id="wizard-stack"):
+                    yield Static(id="wizard-title")
+                    yield VerticalScroll(id="wizard-body")
+                    with Horizontal(classes="wizard-nav"):
+                        yield Button("Back", id="btn-back")
+                        yield Button("Next", id="btn-next", classes="-primary")
+                        yield Button("Cancel", id="btn-cancel")
+                with Vertical(id="wizard-summary-pane"):
+                    yield Static(
+                        "[bold $primary]Summary[/bold $primary]",
+                        id="wizard-summary-title",
+                    )
+                    yield Static(id="wizard-summary-body")
+                    yield Static(id="wizard-summary-cost")
         yield Footer()
 
     async def on_mount(self) -> None:
@@ -140,6 +167,11 @@ class WizardScreen(Screen):
         if self._error:
             await body.mount(Static(f"⚠ {self._error}", classes="wizard-error"))
 
+        # Refresh the sticky summary pane on every step transition so
+        # the operator can verify accumulated state without scrolling
+        # back through previous steps.
+        self._refresh_summary()
+
         # Auto-focus the first focusable widget in the body so keyboard users
         # don't have to Tab in from the Header on every step. Falls back to
         # the Next button on the Review step (which has no input fields).
@@ -149,6 +181,61 @@ class WizardScreen(Screen):
                 break
             else:
                 self.query_one("#btn-next", Button).focus()
+        except Exception:
+            pass
+
+    def _refresh_summary(self) -> None:
+        """Re-render the sticky summary pane + cost preview.
+
+        Called after every step transition and after preset
+        application. Cost preview only renders on Step 5 ── it's
+        the most useful right before the operator commits.
+        """
+        try:
+            self.query_one("#wizard-summary-body", Static).update(
+                render_summary(self.data),
+            )
+        except Exception:
+            pass
+        # Cost preview only renders on the review step.
+        try:
+            cost_widget = self.query_one("#wizard-summary-cost", Static)
+            if self.step == 5:
+                seeds = 1 if self.data.get("seed_domain", "").strip() else 0
+                additional = sum(
+                    1 for d in (self.data.get("additional_domains") or "").split(",")
+                    if d.strip()
+                )
+                try:
+                    budget = float(self.data.get("max_cost_usd", "0") or "0")
+                except Exception:
+                    budget = 0.0
+                preview = estimate_campaign_cost(
+                    mode=self.data.get("mode", "medium"),
+                    dispatch_mode=self.data.get("dispatch_mode", "lite"),
+                    max_tier=self.data.get("max_tier", "T2"),
+                    stealth=self.data.get("stealth", "high"),
+                    seed_count=seeds,
+                    additional_count=additional,
+                    generate_phishing=bool(self.data.get("generate_phishing")),
+                )
+                # Render a compact cost block.
+                budget_warn = ""
+                if budget > 0 and not preview.fits_budget(budget):
+                    budget_warn = (
+                        "  [$warning]⚠ upper estimate exceeds budget"
+                        "[/$warning]"
+                    )
+                cost_widget.update(
+                    f"\n[bold $primary]Cost preview[/bold $primary]\n"
+                    f"  [dim]Low:[/dim]  ${preview.low_usd:.2f}\n"
+                    f"  [dim]Mid:[/dim]  ${preview.mid_usd:.2f}\n"
+                    f"  [dim]High:[/dim] ${preview.high_usd:.2f}"
+                    f"{budget_warn}\n"
+                    f"  [dim]{preview.rationale}[/dim]",
+                )
+            else:
+                cost_widget.update("")
         except Exception:
             pass
 
@@ -175,7 +262,26 @@ class WizardScreen(Screen):
 
     async def _render_step2(self, body) -> None:
         d = self.data
+        # TUI-4: scope-file preset library — pick a named preset to
+        # prefill the form (operator can still edit before continuing).
+        presets = load_presets()
+        preset_options: list[tuple[str, str]] = [
+            (f"{p.name}  ({p.id})", p.id) for p in presets
+        ]
         await body.mount_all([
+            Static("Load scope preset (optional)", classes="wizard-label"),
+            Static(
+                "Built-in templates for common engagement shapes. "
+                "User presets in ~/.nexusrecon/scope-presets/ override "
+                "built-ins by id.",
+                classes="wizard-help",
+            ),
+            Select(
+                preset_options,
+                prompt="— choose a preset —",
+                allow_blank=True,
+                id="f-preset",
+            ),
             Static("Seed domain *", classes="wizard-label"),
             Input(value=d["seed_domain"], placeholder="example.com", id="f-seed_domain"),
             Static("Additional in-scope domains (comma-separated)", classes="wizard-label"),
@@ -384,6 +490,27 @@ class WizardScreen(Screen):
             await self.action_back()
         elif bid == "btn-next":
             await self.action_next()
+
+    async def on_select_changed(self, event: Select.Changed) -> None:
+        """Preset Select dropdown on Step 2: apply the chosen preset
+        to ``self.data`` and re-render the step so the form picks up
+        the new constraints/run-options."""
+        try:
+            if event.select.id != "f-preset":
+                return
+            if event.value is Select.BLANK:
+                return
+            preset = preset_by_id(str(event.value))
+            if preset is None:
+                return
+            # Snapshot the current step's free-text inputs (seed
+            # domain, additional, out-of-scope) so they survive the
+            # rerender. The preset doesn't touch them.
+            self._collect_step()
+            apply_preset(self.data, preset)
+            await self._render_step()
+        except Exception:
+            pass
 
     async def action_back(self) -> None:
         """Step backward one screen. No-op on step 1 (handled by
