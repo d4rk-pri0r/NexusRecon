@@ -10,6 +10,10 @@
 .env.*
 !.env.example
 
+# ── Editor / interactive session artefacts ─────────────────
+# Stray Claude Code / terminal transcript dumps.
+20[0-9][0-9]-[0-1][0-9]-[0-3][0-9]-*.txt
+
 # ── Runtime: campaigns and reports (CONTAIN CUSTOMER DATA) ──
 campaigns/
 # Top-level / runtime ``reports/`` only — must not match
