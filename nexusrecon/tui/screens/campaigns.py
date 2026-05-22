@@ -9,6 +9,8 @@ from textual.app import ComposeResult
 from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header, Static
 
+from nexusrecon.tui.widgets import StatusBar
+
 
 class CampaignsScreen(Screen):
     """List of past campaigns. Enter on a row → results screen for it."""
@@ -25,6 +27,7 @@ class CampaignsScreen(Screen):
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=False)
+        yield StatusBar()
         title = "Resume Campaign" if self.resume_mode else "Past Campaigns"
         yield Static(f"[bold #00ff9c]{title}[/bold #00ff9c]", classes="wizard-label")
         yield Static(id="campaigns-status")

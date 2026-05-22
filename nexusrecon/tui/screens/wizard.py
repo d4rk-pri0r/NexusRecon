@@ -13,6 +13,8 @@ from textual.containers import Container, Horizontal, Vertical, VerticalScroll
 from textual.screen import Screen
 from textual.widgets import Button, Footer, Header, Input, Select, Static, Switch
 
+from nexusrecon.tui.widgets import StatusBar
+
 _DOMAIN_RE = re.compile(r"^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$")
 _HEX64_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 
@@ -88,6 +90,8 @@ class WizardScreen(Screen):
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=False)
+        # TUI-3: persistent status bar on every screen.
+        yield StatusBar()
         # Centering container keeps the wizard a comfortable reading width
         # on large monitors instead of stretching form fields across the
         # whole display. CSS caps #wizard-content at max-width and

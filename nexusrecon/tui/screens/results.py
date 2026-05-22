@@ -12,6 +12,8 @@ from textual.containers import VerticalScroll
 from textual.screen import Screen
 from textual.widgets import Footer, Header, Static
 
+from nexusrecon.tui.widgets import StatusBar
+
 
 def _open_path(path: str) -> Exception | None:
     """Open `path` with the user's editor / system handler. Returns the exception on failure."""
@@ -55,6 +57,7 @@ class ResultsScreen(Screen):
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=False)
+        yield StatusBar()
         yield Static(id="results-summary")
         yield Static("[bold]Top 3 threats[/bold]", classes="wizard-label")
         yield VerticalScroll(Static(id="results-threads"), id="results-threads-wrap")

@@ -83,8 +83,12 @@ class NexusReconApp(App):
         self._palette.register(ToolsSource(jump_to_tools_screen=self._jump_to_tools))
         self._palette.register(ReportsSource(open_path=self._open_path))
 
-        from nexusrecon.tui.screens.welcome import WelcomeScreen
-        self.push_screen(WelcomeScreen())
+        # TUI-3: launch into the new Dashboard (was WelcomeScreen).
+        # The persistent status bar + sidebar live here. The
+        # WelcomeScreen file remains as a backwards-compat shim
+        # for any code that still imports it directly.
+        from nexusrecon.tui.screens.dashboard import DashboardScreen
+        self.push_screen(DashboardScreen())
 
     # ── Palette wiring ──────────────────────────────────────────────
 
@@ -109,15 +113,17 @@ class NexusReconApp(App):
         """
         try:
             if destination == "dashboard":
-                # Pop everything back to the welcome screen ── the
-                # default position. If the dashboard isn't on the
-                # stack, push a fresh one.
-                from nexusrecon.tui.screens.welcome import WelcomeScreen
-                if not any(isinstance(s, WelcomeScreen) for s in self.screen_stack):
-                    self.push_screen(WelcomeScreen())
+                # Pop everything back to the dashboard ── the default
+                # position. If the dashboard isn't on the stack, push
+                # a fresh one.
+                from nexusrecon.tui.screens.dashboard import DashboardScreen
+                if not any(
+                    isinstance(s, DashboardScreen) for s in self.screen_stack
+                ):
+                    self.push_screen(DashboardScreen())
                 else:
                     while self.screen_stack and not isinstance(
-                        self.screen_stack[-1], WelcomeScreen,
+                        self.screen_stack[-1], DashboardScreen,
                     ):
                         self.pop_screen()
             elif destination == "new_campaign":

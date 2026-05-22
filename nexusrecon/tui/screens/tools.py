@@ -37,6 +37,8 @@ from textual.widgets import (
     Static,
 )
 
+from nexusrecon.tui.widgets import StatusBar
+
 # ──────────────────────────────────────────────────────────────────────
 # Data extraction
 # ──────────────────────────────────────────────────────────────────────
@@ -119,6 +121,7 @@ class ToolsScreen(Screen):
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=False)
+        yield StatusBar()
         with Vertical(id="tools-stack"):
             yield Static(
                 "[bold $primary]Tools[/bold $primary]   "

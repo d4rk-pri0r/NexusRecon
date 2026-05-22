@@ -48,6 +48,8 @@ from textual.reactive import reactive
 from textual.screen import Screen
 from textual.widgets import Footer, Header, Static
 
+from nexusrecon.tui.widgets import StatusBar
+
 _TOTAL_PHASES = 10  # phase1..phase8 + phase7_5 + phase9
 
 
@@ -208,6 +210,8 @@ class RunnerScreen(Screen):
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=False)
+        # TUI-3: persistent status bar shown on every screen.
+        yield StatusBar()
 
         # 1) Top header panel — campaign id in the border title, big phase
         #    indicator + full-width chunky progress bar in the body.

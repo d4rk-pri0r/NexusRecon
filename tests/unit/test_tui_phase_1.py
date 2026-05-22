@@ -329,10 +329,13 @@ class TestAppIntegration:
             app = NexusReconApp()
             async with app.run_test(headless=True) as pilot:
                 await pilot.pause(0.5)
-                # If CSS parse failed, the welcome screen never
+                # If CSS parse failed, the dashboard screen never
                 # mounts and app.screen is the default screen.
-                assert type(app.screen).__name__ == "WelcomeScreen", (
-                    f"Welcome screen failed to mount; got "
+                # TUI-3 renamed WelcomeScreen → DashboardScreen;
+                # the welcome shim re-exports the new class under
+                # the old name but the runtime type IS Dashboard.
+                assert type(app.screen).__name__ == "DashboardScreen", (
+                    f"Dashboard screen failed to mount; got "
                     f"{type(app.screen).__name__}"
                 )
                 app.exit()

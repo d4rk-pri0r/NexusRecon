@@ -591,6 +591,124 @@ CommandPaletteScreen {
     height: auto;
 }
 
+/* Dashboard (TUI-3 — persistent shell home) */
+
+#dashboard-shell {
+    width: 100%;
+    height: 1fr;
+}
+
+#dashboard-main {
+    width: 1fr;
+    height: 1fr;
+    padding: 0 1;
+}
+
+#dashboard-stack {
+    width: 100%;
+    height: 100%;
+    padding: 1 2;
+}
+
+#dashboard-banner {
+    color: $primary;
+    text-style: bold;
+    width: auto;
+    height: auto;
+}
+
+#dashboard-version {
+    color: $primary;
+    text-style: bold;
+    width: auto;
+    height: auto;
+}
+
+#dashboard-attribution {
+    color: $nx-text-dim;
+    text-style: italic;
+    margin-bottom: 1;
+    width: auto;
+    height: auto;
+}
+
+#dashboard-subtitle {
+    color: $foreground;
+    margin-bottom: 1;
+    width: auto;
+    height: auto;
+}
+
+#dashboard-recents-title {
+    color: $primary;
+    text-style: bold;
+    margin: 1 0 0 0;
+    height: auto;
+}
+
+#dashboard-recents {
+    height: auto;
+    max-height: 9;
+    margin-bottom: 1;
+}
+
+#dashboard-bottom {
+    height: auto;
+    margin-top: 1;
+}
+
+.dashboard-stat-card {
+    width: 1fr;
+    border: round $secondary;
+    padding: 1 2;
+    margin: 0 1 0 0;
+    height: auto;
+}
+
+.dashboard-card-title {
+    margin-bottom: 1;
+    height: auto;
+}
+
+#dashboard-tools {
+    color: $nx-text-muted;
+    height: auto;
+}
+
+#dashboard-menu Button {
+    width: 100%;
+    margin-bottom: 1;
+    background: $surface;
+    color: $foreground;
+    border: tall $surface;
+}
+
+#dashboard-menu Button:hover {
+    background: $secondary;
+    color: $background;
+}
+
+#dashboard-menu Button.-primary {
+    background: $primary 20%;
+    color: $primary;
+    border: tall $primary;
+}
+
+#dashboard-onboarding {
+    color: $warning;
+    text-style: bold;
+    margin: 1 0;
+    width: auto;
+    height: auto;
+}
+
+#dashboard-hint {
+    color: $nx-text-dim;
+    margin-top: 1;
+    width: auto;
+    height: auto;
+}
+
 /* Help overlay (global ? binding) */
 
 HelpModal {

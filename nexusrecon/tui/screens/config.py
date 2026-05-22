@@ -27,6 +27,7 @@ from nexusrecon.tui.config_schema import (
     all_categories,
 )
 from nexusrecon.tui.env_editor import EnvFile, mask_value
+from nexusrecon.tui.widgets import StatusBar
 
 
 def _resolve_env_path() -> Path:
@@ -67,6 +68,7 @@ class ConfigScreen(Screen):
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=False)
+        yield StatusBar()
         with Container(id="config-content"):
             with Vertical(id="config-stack"):
                 yield Static(
@@ -262,6 +264,7 @@ class ToolsScreen(Screen):
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=False)
+        yield StatusBar()
         yield Static(
             "[bold #00ff9c]Tools[/bold #00ff9c]  "
             "[dim](press Esc to return)[/dim]",
