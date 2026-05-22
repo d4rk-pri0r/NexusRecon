@@ -704,16 +704,21 @@ class TestGAUTool:
 class TestGowitnessTool:
     """Contract test only — gowitness's implementation is intentionally
     a stub right now (T2 screenshot tooling needs a working binary in
-    PATH and we don't ship one). Confirm the documented stub response
-    holds so anyone who later replaces the body knows what the
-    expected output shape was."""
+    PATH and we don't ship one).
+
+    The tool now returns ``success=False`` with an explicit "stubbed"
+    error message — earlier versions returned ``success=True`` with a
+    ``status="stubbed"`` data payload, which made stub responses
+    indistinguishable from real successful screenshots downstream.
+    Confirm the current fail-fast shape so anyone who later replaces
+    the body knows what the expected pre-implementation output was.
+    """
 
     async def test_returns_stubbed_response(self) -> None:
         tool = GowitnessTool()
         result = await tool.run("example.com")
-        assert result.success is True
-        assert result.result_count == 0
-        assert result.data == {"status": "stubbed — T2 requires gowitness binary"}
+        assert result.success is False
+        assert "stubbed" in (result.error or "").lower()
 
 
 # ────────────────────────────────────────────────────────────────────────

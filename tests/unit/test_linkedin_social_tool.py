@@ -255,6 +255,18 @@ class TestRunFailFast:
 
 
 class TestAuthPrecedence:
+    """``linkedin_api`` is an optional runtime dependency.  Most tests in
+    this file patch ``tool._build_client`` directly so they don't need
+    the module imported.  These two tests ``patch("linkedin_api.Linkedin",
+    ...)``, which requires the module to exist — skip the class when
+    it isn't installed so CI environments without the optional dep
+    don't fail."""
+
+    pytestmark = pytest.mark.skipif(
+        __import__("importlib.util", fromlist=["find_spec"]).find_spec("linkedin_api") is None,
+        reason="linkedin_api optional dep not installed",
+    )
+
     def test_cookies_wins_when_both_set(self):
         tool = _make_tool({
             "LINKEDIN_LI_AT": "abc",
