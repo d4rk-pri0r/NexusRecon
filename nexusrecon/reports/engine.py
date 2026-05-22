@@ -37,6 +37,18 @@ class ReportEngine:
         self.campaign_id = campaign_id
         self.engagement_id = engagement_id
         self.scope_hash = scope_hash
+        # Pin the version of the framework that produced the report.
+        # Pairs with ``scope_hash`` in every footer so an auditor can
+        # reproduce the run: same scope file + same code = same report
+        # (modulo upstream provider drift). Resolved lazily ── if the
+        # package import is somehow broken at runtime, the report
+        # still ships with ``unknown`` rather than crashing the
+        # campaign at deliverable time.
+        try:
+            from nexusrecon import __version__ as _pkg_version
+            self.nexusrecon_version: str = str(_pkg_version)
+        except Exception:
+            self.nexusrecon_version = "unknown"
         self.output_dir = output_dir
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.report_paths: dict[str, str] = {}
@@ -250,6 +262,7 @@ class ReportEngine:
             f"**Engagement ID:** {self.engagement_id}",
             f"**Generated:** {datetime.utcnow().isoformat()}",
             f"**Scope Hash:** {self.scope_hash}",
+            f"**Tooling:** NexusRecon v{self.nexusrecon_version}",
             "",
             "---",
             "",
@@ -351,6 +364,7 @@ class ReportEngine:
             f"**Engagement ID:** {self.engagement_id}",
             f"**Generated:** {datetime.utcnow().isoformat()}",
             f"**Scope Hash:** {self.scope_hash}",
+            f"**Tooling:** NexusRecon v{self.nexusrecon_version}",
             "",
             "---",
             "",
@@ -482,6 +496,7 @@ class ReportEngine:
         inventory = {
             "campaign_id": self.campaign_id,
             "scope_hash": self.scope_hash,
+            "nexusrecon_version": self.nexusrecon_version,
             "generated": datetime.utcnow().isoformat(),
             "subdomains": sorted(subdomains.keys()),
             "emails": list(emails.keys()),
@@ -736,7 +751,21 @@ class ReportEngine:
             if "onmicrosoft_domain" in data:
                 onm = data["onmicrosoft_domain"]
                 if onm.get("domains"):
-                    lines.append(f"- onmicrosoft.com domains: {', '.join(d['domain'] for d in onm['domains'])}")
+                    # Defensive ``.get(...)`` ── some tenant-enum
+                    # tools surface entries with only ``tenant_id``
+                    # populated. A bare ``d['domain']`` raises
+                    # KeyError and tanks the whole cloud-posture
+                    # report mid-render.
+                    domain_strs = [
+                        str(d.get("domain") or d.get("tenant_id") or "?")
+                        for d in onm["domains"]
+                        if isinstance(d, dict)
+                    ]
+                    if domain_strs:
+                        lines.append(
+                            "- onmicrosoft.com domains: "
+                            + ", ".join(domain_strs),
+                        )
 
             lines.append("")
 
@@ -779,6 +808,7 @@ class ReportEngine:
         findings = {
             "campaign_id": self.campaign_id,
             "scope_hash": self.scope_hash,
+            "nexusrecon_version": self.nexusrecon_version,
             "generated": datetime.utcnow().isoformat(),
             "findings": state.get("findings", []),
         }
@@ -794,6 +824,7 @@ class ReportEngine:
             "campaign_id": self.campaign_id,
             "engagement_id": self.engagement_id,
             "scope_hash": self.scope_hash,
+            "nexusrecon_version": self.nexusrecon_version,
             "generated": datetime.utcnow().isoformat(),
             "phases_completed": state.get("completed_phases", []),
             "total_findings": len(state.get("findings", [])),
@@ -1972,7 +2003,8 @@ class ReportEngine:
             f"**Campaign ID:** `{self.campaign_id}`  ",
             f"**Engagement ID:** `{self.engagement_id}`  ",
             f"**Generated:** {datetime.utcnow().isoformat()}  ",
-            f"**Scope Hash:** `{self.scope_hash}`",
+            f"**Scope Hash:** `{self.scope_hash}`  ",
+            f"**Tooling:** NexusRecon v`{self.nexusrecon_version}`",
             "",
             "---",
             "",
