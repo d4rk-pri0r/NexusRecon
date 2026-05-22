@@ -494,7 +494,11 @@ class WizardScreen(Screen):
     async def on_select_changed(self, event: Select.Changed) -> None:
         """Preset Select dropdown on Step 2: apply the chosen preset
         to ``self.data`` and re-render the step so the form picks up
-        the new constraints/run-options."""
+        the new constraints/run-options.
+
+        TUI-6: confirms preset application via a toast so the
+        operator sees the change took effect (the Select itself
+        clears back to the prompt after apply)."""
         try:
             if event.select.id != "f-preset":
                 return
@@ -509,6 +513,13 @@ class WizardScreen(Screen):
             self._collect_step()
             apply_preset(self.data, preset)
             await self._render_step()
+            try:
+                self.app.notify(
+                    f"Applied preset: {preset.name}",
+                    severity="information",
+                )
+            except Exception:
+                pass
         except Exception:
             pass
 
@@ -595,7 +606,12 @@ class WizardScreen(Screen):
 
     async def _save_scope_only(self) -> None:
         """Save the assembled scope YAML to the operator's home directory
-        without launching a campaign. Triggered by Ctrl-S on step 5."""
+        without launching a campaign. Triggered by Ctrl-S on step 5.
+
+        TUI-6: success surfaces as a toast in addition to the
+        body message — the toast persists when the operator
+        navigates back to the dashboard, providing reassurance the
+        save actually happened."""
         scope_yaml = self._build_scope_yaml()
         eid = self.data.get("engagement_id", "scope") or "scope"
         # Sanitize engagement_id for filesystem use
@@ -611,6 +627,14 @@ class WizardScreen(Screen):
             f"[dim]Esc to return to the main menu.[/dim]",
             classes="wizard-label",
         ))
+        try:
+            self.app.notify(
+                f"Scope saved to {out_path.name}",
+                severity="information",
+                timeout=6.0,
+            )
+        except Exception:
+            pass
 
     def _build_scope_yaml(self) -> dict[str, Any]:
         """Shared YAML construction used by both _launch_campaign and

@@ -107,10 +107,38 @@ NEXUSRECON_HICONTRAST = Theme(
 # ──────────────────────────────────────────────────────────────────────
 
 
+# ──────────────────────────────────────────────────────────────────────
+# nexusrecon-light — bright-environment / projector variant
+# ──────────────────────────────────────────────────────────────────────
+
+NEXUSRECON_LIGHT = Theme(
+    name="nexusrecon-light",
+    primary="#0a7d4b",       # forest green — readable on light surfaces
+    secondary="#1f6feb",     # cobalt holds up across themes
+    accent="#0a7d4b",
+    background="#fafafa",    # near-white but not pure (less eye strain)
+    surface="#f1f5f9",       # one tone deeper for elevated panels
+    panel="#f1f5f9",
+    foreground="#0f172a",    # near-black text
+    success="#10b981",       # emerald — passes AA on light bg
+    warning="#d97706",       # amber — passes AA
+    error="#dc2626",         # red — passes AA
+    dark=False,
+    variables={
+        "nx-bg-detail": "#e2e8f0",      # deeper grey for detail panes
+        "nx-text-muted": "#64748b",     # slate — secondary text
+        "nx-text-dim": "#94a3b8",       # lighter slate — disabled/dim
+        "nx-border-muted": "#94a3b8",
+        **_SEVERITY,
+    },
+)
+
+
 #: Themes the app registers on startup, keyed by name.
 THEMES: dict[str, Theme] = {
     NEXUSRECON_DARK.name: NEXUSRECON_DARK,
     NEXUSRECON_HICONTRAST.name: NEXUSRECON_HICONTRAST,
+    NEXUSRECON_LIGHT.name: NEXUSRECON_LIGHT,
 }
 
 #: Theme used when no operator preference is set.

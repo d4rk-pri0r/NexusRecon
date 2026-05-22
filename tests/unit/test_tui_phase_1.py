@@ -29,8 +29,11 @@ from unittest.mock import MagicMock, patch
 
 class TestThemes:
     def test_both_themes_registered(self):
+        """TUI-1 shipped the dark + hicontrast variants; TUI-6 added
+        the light variant. All three must register."""
         from nexusrecon.tui.themes import THEMES
-        assert {"nexusrecon-dark", "nexusrecon-hicontrast"} == set(THEMES.keys())
+        assert {"nexusrecon-dark", "nexusrecon-hicontrast",
+                "nexusrecon-light"} == set(THEMES.keys())
 
     def test_default_theme_is_dark(self):
         from nexusrecon.tui.themes import DEFAULT_THEME
@@ -48,11 +51,17 @@ class TestThemes:
 
     def test_both_themes_define_custom_variables(self):
         """Every TUI screen references $nx-text-muted, $nx-text-dim,
-        $nx-border-muted, and $nx-bg-detail. Both themes must define
-        all four or a screen breaks when the theme switches."""
-        from nexusrecon.tui.themes import NEXUSRECON_DARK, NEXUSRECON_HICONTRAST
+        $nx-border-muted, and $nx-bg-detail. ALL THREE themes must
+        define all four or a screen breaks when the theme switches.
+
+        TUI-6: extended to cover NEXUSRECON_LIGHT as well."""
+        from nexusrecon.tui.themes import (
+            NEXUSRECON_DARK,
+            NEXUSRECON_HICONTRAST,
+            NEXUSRECON_LIGHT,
+        )
         required = {"nx-text-muted", "nx-text-dim", "nx-border-muted", "nx-bg-detail"}
-        for theme in (NEXUSRECON_DARK, NEXUSRECON_HICONTRAST):
+        for theme in (NEXUSRECON_DARK, NEXUSRECON_HICONTRAST, NEXUSRECON_LIGHT):
             missing = required - set(theme.variables.keys())
             assert not missing, (
                 f"theme {theme.name} missing custom variables: {missing}"
@@ -60,8 +69,14 @@ class TestThemes:
 
     def test_severity_palette_consistent_across_themes(self):
         """Severity tints intentionally don't change with the theme ──
-        an operator's "red = critical" mental mapping must hold."""
-        from nexusrecon.tui.themes import NEXUSRECON_DARK, NEXUSRECON_HICONTRAST
+        an operator's "red = critical" mental mapping must hold.
+
+        TUI-6: extended to cover NEXUSRECON_LIGHT."""
+        from nexusrecon.tui.themes import (
+            NEXUSRECON_DARK,
+            NEXUSRECON_HICONTRAST,
+            NEXUSRECON_LIGHT,
+        )
         sev_keys = (
             "severity-critical",
             "severity-high",
@@ -70,7 +85,11 @@ class TestThemes:
             "severity-info",
         )
         for k in sev_keys:
-            assert NEXUSRECON_DARK.variables[k] == NEXUSRECON_HICONTRAST.variables[k]
+            assert (
+                NEXUSRECON_DARK.variables[k]
+                == NEXUSRECON_HICONTRAST.variables[k]
+                == NEXUSRECON_LIGHT.variables[k]
+            )
 
 
 # ──────────────────────────────────────────────────────────────────────
