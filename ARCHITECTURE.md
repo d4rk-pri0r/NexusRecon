@@ -591,3 +591,570 @@ The codebase itself is organised so each component is in one place:
 - `nexusrecon/core/`, campaign manager, scoring engine, credential harvester, audit log
 - `nexusrecon/reports/`, the report engine + phishing draft generator
 - `nexusrecon/models/`, pydantic data models for scope, findings, entities
+
+Post-0.5 layers (sections 13-22 below describe each):
+
+- `nexusrecon/strategy/`, Strategy package — Strategy dataclass,
+  DispatchPolicy interface, simulation, bounded agency, planner
+  orchestration.
+- `nexusrecon/verification/`, Continuous Confidence Engine —
+  orchestrator, corroboration, contradiction, propagation,
+  adversarial self-check.
+- `nexusrecon/packs/`, Recon Pack format — manifest schema,
+  loader, registry, git distribution, marketplace.
+- `nexusrecon/sdk/`, Contribution SDK — prompt versioning,
+  citation guardrails, agent / tool / policy scaffolders.
+- `nexusrecon/intent/`, Intent-driven entry — NL → Strategy
+  orchestrator.
+- `nexusrecon/export/`, STIX 2.1 export + downstream-consumer
+  emitters (Jira / Nuclei / Cobalt Strike).
+- `nexusrecon/ingest/`, Bidirectional import — STIX, Nessus,
+  Nuclei, generic CSV.
+- `nexusrecon/watch/`, Watch Mode — sensors, severity
+  classifier, tiered action policy.
+- `nexusrecon/crypto/`, Ed25519 signing — keypair lifecycle,
+  bundle signing, verification.
+- `nexusrecon/adversarial/`, Platform self-defense — poisoned
+  data, tool patterns, inconsistency, prompt injection
+  detectors.
+- `nexusrecon/vision/`, Multi-modal pipeline — backend protocol,
+  preprocessing, extractor, cost gate.
+- `packs/burp/`, First-party Burp Suite XML handoff pack.
+- `scripts/nexusrecon-verify.py`, Standalone single-file
+  verifier for signed STIX bundles.
+
+---
+
+# Post-0.5 Architecture Additions
+
+Sections 13-22 cover the major layers added in 0.6.x / 0.7.x against
+the [METASPLOIT_OSINT implementation plan](docs/IMPLEMENTATION_PLAN_METASPLOIT_OSINT.md).
+They each follow the same shape: *what problem it solves, the
+public surface, the invariants it preserves, what's deliberately
+out of scope.*
+
+---
+
+## 13. Living Intelligence Graph (Phase 0)
+
+**Problem.** The original `EntityGraph` carried domain / subdomain /
+IP entities and a handful of relationships, but most intelligence
+still lived in flat dictionaries (`subdomain_intel`, `cloud_intel`,
+`findings`). Agents reasoned over the dicts; the graph was a
+sidecar. That left no first-class place for hypotheses, leads, open
+questions, provenance per claim, or path-finding queries an
+adversary would actually trace.
+
+**What landed.** `EntityGraph` (still in
+`nexusrecon/core/entity_graph.py`) became the canonical reasoning
+substrate. The Phase D / E IdentityGraph + RelationshipGraph were
+collapsed into it. A `LivingGraph` alias documents the architectural
+intent.
+
+Concretely:
+
+- **17+ entity types** — domain, subdomain, IP, ASN, certificate,
+  email, person, organization, cloud asset, repository, secret,
+  technology, CVE, social account, username, URL, file artifact,
+  plus three reasoning-artifact types: `HYPOTHESIS`, `LEAD`,
+  `OPEN_QUESTION`.
+- **Per-source provenance.** Every entity carries a list of
+  `ProvenanceRecord{source, timestamp, evidence_hash, tool_name}`.
+  Joins to the hash-chained audit log via `evidence_hash`.
+- **Relationship vocabulary.** Standard recon edges (`resolves_to`,
+  `has_subdomain`, `owns`, `belongs_to`, `has_cve`, …) plus
+  reasoning edges: `CITES` (hypothesis / lead → evidence),
+  `BLOCKS` (open question → downstream lead), and identity-graph
+  rollups (`KNOWS`, `COLLABORATES_WITH`, `FOLLOWS`,
+  `FEDERATED_WITH`).
+- **Query surface.** `find_paths`, `get_neighbors_filtered`,
+  `get_attack_surface_nodes`, plus a per-phase `GraphContext`
+  wrapper (`nexusrecon.core.graph_context`) that lets each agent
+  see a scoped slice of the graph (`PHASE_FOCUS_TYPES` +
+  `most_cited_entities`).
+- **Mutation events.** `register_mutation_listener(cb)` lets
+  downstream code react to `entity_added` / `entity_merged` /
+  `relationship_added` / `confidence_changed` /
+  `sticky_field_conflict` / `exclusive_rel_conflict`. The
+  verification orchestrator (§14) is the primary consumer.
+- **Confidence as a managed property.** `set_confidence(entity_id,
+  value, *, reason, source)` is the single seam — emits a
+  `confidence_changed` event the propagator listens for.
+- **Backward compatibility.** `EntityGraph.from_state(state)`
+  tolerates the old truncated `{"subdomains": […], "emails": […]}`
+  shape; `scripts/migrate_state_to_living_graph.py` eagerly
+  upgrades old `state.json` files.
+
+**Invariants preserved.**
+
+- Evidence hashes remain immutable references into the audit log.
+- The flat state buckets still exist as materialized views, so the
+  TUI + reports + older tests keep working.
+- `state["entity_graph"]` round-trips through `to_dict()` /
+  `from_dict()`; schema version pinned in `GRAPH_SCHEMA_VERSION`.
+
+**Out of scope.** Versioning / time-travel (deferred per the
+architecture lock-in during Phase 0.1); a graph database backend
+(NetworkX in-memory still covers the campaign sizes operators see).
+
+---
+
+## 14. Continuous Confidence Engine (Phase 2)
+
+**Problem.** Confidence on entities was hand-set by tool wrappers
+and never re-evaluated. New corroborating evidence didn't lift
+confidence; contradictions didn't lower it; a downgraded asset's
+dependent leads stayed "high" until the operator noticed.
+
+**What landed.** `nexusrecon/verification/` ships an
+**orchestrator** that subscribes to the graph's mutation events
+and fans them out to registered verifiers. Four verifiers ship:
+
+1. **`CorroborationEngine`** — maps source identifiers
+   (`subfinder`, `crtsh`, `naabu`, `h8mail`, …) to **independence
+   classes** (`passive_dns`, `certificate`, `active_probe`,
+   `breach_corpus`, …). When N ≥ 2 distinct classes vouch for the
+   same entity, confidence rises:
+   `new = old + (CAP - old) × (1 - DECAY^(n-1))` with
+   `CAP = 0.99`, `DECAY = 0.5`. Two classes lifts 0.5 → 0.745;
+   three to 0.871; four to 0.934.
+2. **`ContradictionDetector`** — fires on
+   `sticky_field_conflict` (merge-time scalar disagreement on
+   fields like `cloud_provider`, `platform`, `parent_domain`) and
+   `exclusive_rel_conflict` (a second `belongs_to` / `owns` /
+   `part_of` edge from the same source). Severity grades off the
+   existing claim's confidence; medium+ findings are queued in
+   `state["contradictions"]`, low findings just downgrade
+   silently. Downgrade factor 0.6, floor 0.05.
+3. **`ConfidencePropagator`** — listens to `confidence_changed`
+   events and cascades downgrades through edges with reliance
+   semantics (`cites`, `belongs_to`, `part_of`, `hosted_on`,
+   `registered_by`, `blocks`). Decay per depth = 0.5; max depth
+   3; cycle-safe via a visited set + `source="propagation"`
+   short-circuit so its own writes don't re-enter. Upgrades
+   aren't propagated (one-way ratchet).
+4. **`AdversarialSelfCheck`** — on-demand graph audit producing
+   four `WeakLink` kinds: `single_source_high_confidence`,
+   `citation_cycle`, `disconnected_island`, `source_monoculture`.
+   Heuristic-driven, runs in O(n+e). Writes to
+   `state["weak_links"]` and the audit log.
+
+**Health surface.** `compute_verification_health(graph, state)`
+gives a per-campaign snapshot — corroboration coverage,
+contradiction density, low-confidence entity count, weak-link
+severity counts. The Phase 1 planner reads this snapshot from
+state and biases toward verification tools when coverage is low.
+
+**Invariants preserved.**
+
+- Verifier exceptions are caught at three layers (graph emit,
+  verifier body, orchestrator dispatch) — a broken verifier
+  never breaks a campaign.
+- Audit chain remains hash-chained; verdicts ride the existing
+  `log_agent_action` event type.
+- All confidence writes go through `set_confidence` so the
+  propagator observes them.
+
+**Out of scope.** LLM-driven semantic contradiction detection,
+adversarial confidence-poisoning by a co-resident pack (packs
+run unsandboxed per the locked-in trust model).
+
+---
+
+## 15. Strategic Reasoning Engine (Phase 1)
+
+**Problem.** Phase selection, dispatch policy, and follow-up
+budgets were hardcoded in `nodes.py`. The dispatcher's caps
+(`MAX_PER_CYCLE=5`, `MAX_TOTAL=30`) were module-level constants.
+Adding a new dispatch posture meant editing the dispatcher itself;
+auditing "why did we pick this strategy" required reading the
+code.
+
+**What landed.** `nexusrecon/strategy/` is the home of the
+strategic engine.
+
+- **`Strategy` dataclass.** Declarative campaign plan: `name`,
+  `phases[]`, `dispatch_policy_name`, `tool_budgets{}`,
+  `success_criteria[]`, `kill_criteria[]`, `metadata{}`.
+  Round-trips through `to_dict()` / `from_dict()` with default
+  restoration on missing keys.
+- **`DispatchPolicy` interface** + three bundled policies.
+  `LitePolicy` (caps 5/cycle, 30/total; eligible after phases
+  1, 4, 7 — preserves pre-0.6 behavior byte-for-byte),
+  `FullPolicy` (5/cycle, 50/total, every phase),
+  `OffPolicy` (zero). `register_policy(name, cls)` lets
+  community packs ship custom policies (e.g. `aggressive`,
+  `conservative`, `corp_red_team`).
+- **`CampaignPlannerAgent`** is now operational. The previously
+  dormant agent runs through a `plan_campaign(sentence|inputs)`
+  orchestrator that calls the LLM with a strict-JSON prompt,
+  parses the response, validates phase identifiers, and falls
+  back to `Strategy.default()` on any failure (tagged
+  `metadata.planner_response_kind="fallback"` so the audit trail
+  shows when the planner couldn't help).
+- **`--plan-only` CLI flag** + interactive walk-through.
+  Operator previews the proposed scope.yaml + Strategy before
+  any tool fires. Confirmation gates every disk write.
+- **Simulation.** `simulate_dispatch_plan(plan, state)` runs
+  between validate and execute on every dispatcher call.
+  Forecasts cost (sum of per-tool `cost_per_run_usd`), expected
+  new graph entities (per-category heuristic), and scope-creep
+  flags (tier > scope ceiling, pivot to entity not yet in
+  graph). Recommendation `proceed` / `warn` / `abort`. Opt-in
+  gating via `state["simulation_gating"]`.
+- **Bounded agency.** `route_plan_items(plan, default_policy)`
+  splits a validated dispatch plan into execute / deep-pivot /
+  human-approval routes. Deep-pivot items
+  (`deep_pivot: "full"` on a plan item) get a per-item policy
+  override that REFUSES to narrow agency. Human-approval items
+  (`requires_human_approval: true`) land in
+  `state["pending_approvals"]` with `queue_for_approval()`;
+  the operator resolves via `resolve_approval()` which appends
+  to `state["approval_log"]`.
+- **Strategic audit.** Seven new `AuditLog.log_*` methods —
+  `log_strategy_generated`, `log_strategy_replan`,
+  `log_dispatch_policy_resolved`, `log_simulation`,
+  `log_deep_pivot_grant`, `log_human_approval_queued`,
+  `log_human_approval_decision`. Each rides the existing hash
+  chain.
+
+**State surface.** `state["strategy"]`,
+`state["strategy_history"]`, `state["dispatch_policy_name"]`,
+`state["pending_approvals"]`, `state["approval_log"]`,
+`state["simulation_log"]`.
+
+**Invariants preserved.**
+
+- Default behavior on a campaign that doesn't author a Strategy
+  matches pre-0.6 (`Strategy.default()` returns the lite-equivalent
+  shape).
+- Policy resolution precedence in the dispatcher:
+  `state["dispatch_policy_name"]` → legacy
+  `state["dispatch_mode"]` → `lite` default.
+- The hash chain remains unbroken; new event types share
+  `_compute_entry_hash`.
+
+---
+
+## 16. Intent-Driven Entry (Phase 4 PR A)
+
+**Problem.** The structured Strategy is the right entry surface
+for operators who already know what they want — but a senior
+operator on a new engagement wants to type *"find leaked
+credentials at acme.com, passive only"* and get a scope.yaml +
+Strategy out the other side.
+
+**What landed.** `nexusrecon/intent/` provides a two-path NL →
+Strategy translation.
+
+- **LLM path** — strict-JSON prompt extracts targets, intent
+  categories (`credentials`, `subdomains`, `cloud`, `identity`,
+  `pretext`, `vulnerabilities`, `executives`, `supply_chain`),
+  tier ceiling, stealth profile, and operator-supplied
+  constraints (`max_llm_cost_usd`, `allow_paid_apis`, …).
+- **Regex fallback** — deterministic patterns for the common
+  cases. Always available. Tagged `confidence="medium"` when
+  anything actionable matches, `"low"` otherwise. Air-gapped
+  operators + CI use this via `--no-llm`.
+- **Scope builder** — `build_scope_stub(intent)` produces a
+  scope.yaml-shaped dict. REFUSES to invent authorization
+  markers (client name, authorized_by, SOW hash) — placeholders
+  left as `REPLACE_ME`.
+- **Phase + policy mapping** — `_PHASES_BY_INTENT` maps each
+  intent category to the canonical phase set
+  (`credentials` → 1, 2, 3, 4, 8, 9; `cloud` adds 5; `pretext`
+  adds 6, 7, 7_5, 7_7).
+
+**CLI surface.** `nexusrecon plan "<sentence>"` (one-shot) and
+`nexusrecon plan` (interactive Rich walk-through). Both gate
+disk writes behind operator confirmation per the Auditability
+First principle.
+
+**What's NOT here.** TUI tab (deferred — same orchestrator backs
+all surfaces, the tab is mechanical follow-up).
+
+---
+
+## 17. Recon Pack format + Contribution SDK (Phase 3)
+
+**Problem.** Adding a new tool was straightforward (subclass
+`OSINTTool`, decorate with `@register_tool`). Adding a new
+agent, dispatch policy, or report template required forking the
+repo. There was no community contribution surface.
+
+**What landed.** Two packages.
+
+### Pack format (`nexusrecon/packs/`)
+
+- **Directory layout.** `~/.nexusrecon/packs/<pack-name>/`
+  (overridable via `NEXUSRECON_PACK_DIR`). Required:
+  `manifest.yaml` at the root.
+- **Manifest schema v1** (Pydantic):
+
+  ```yaml
+  name: corp-red-team
+  version: 1.0.0
+  schema_version: 1
+  description: …
+  author: …
+  license: MIT
+  manifest_hash: sha256:…   # optional; loader warns on mismatch
+  contributes:
+    tools:    [{module: corp_tools.x}]
+    agents:   [{module: …, class_name: …, registry_name: …}]
+    policies: [{module: …, class_name: …, name: …}]
+    report_templates: [{name: …, path: …}]
+    entity_types:     [{name: BUSINESS_PARTNER, value: business_partner}]
+    relationship_types: [{name: SUPPLY_CHAINS_TO, value: supply_chains_to}]
+  ```
+
+- **Loader.** `load_packs(pack_dir, audit_log)` walks the packs
+  root, parses each manifest, imports declared modules, binds
+  agents into `AGENT_REGISTRY`, registers policies + custom
+  entity / rel types. Per-pack + per-contribution failure
+  isolation: one broken tool import doesn't sink the rest of
+  the pack; a broken manifest goes to `failed` status without
+  raising.
+- **Trust model.** Unsigned + manifest_hash. Loader recomputes
+  the hash and warns on mismatch. Operators inspect before
+  activating. No execution gate (trusting by inspection is the
+  v1 locked-in decision).
+- **Distribution.** `nexusrecon packs install gh:owner/repo[@ref]`
+  (shallow clone), `packs update`, `packs uninstall`,
+  `packs search` against a configurable marketplace JSON index
+  (`NEXUSRECON_MARKETPLACE_URL`).
+- **Custom types coexist with the StrEnum built-ins.** The
+  runtime extension registry (`_CUSTOM_ENTITY_TYPES` /
+  `_CUSTOM_REL_TYPES`) carries pack-contributed type values;
+  `is_known_entity_type(value)` checks both built-in + custom in
+  one call.
+
+### Contribution SDK (`nexusrecon/sdk/`)
+
+- **Prompt versioning.** `register_prompt(name, version, body)`
+  stores a process-wide record. Re-registering the same body is
+  idempotent; a silent hot-edit (same name+version, different
+  body) raises `PromptVersionMismatch`. Optional `expected_hash`
+  pin for plugin authors.
+- **Citation guardrails.** `validate_citations(text, graph)`
+  extracts `[[citation]]` inline markers, verifies each against
+  the graph by id and by value, grades violations
+  (`error` missing / `warning` type mismatch / `info`
+  claim-without-citation), returns a structured
+  `CitationReport`.
+- **Three scaffolders** — each writes a Python module +
+  manifest entry (new or existing pack) + smoke test:
+  - `nexusrecon agent new` — agent module with
+    `register_prompt(…)` + a `review_citations(…)` method.
+  - `nexusrecon tool new` — interactive picker for category ×
+    tier × target_types, generates an `@register_tool`
+    decorated stub.
+  - `nexusrecon policy new` — interactive picker for eligible
+    phases + caps, generates a `DispatchPolicy` subclass.
+
+### First-party reference pack
+
+`packs/burp/` ships an in-tree pack as a dogfooding example.
+Loads via the same `load_packs()` path community packs use.
+Provides:
+
+- `BurpXmlImporter` tool (Burp Suite site map XML → entities,
+  dedup by (host, port, path), tolerant of malformed items).
+- `render_scope_to_burp_xml()` + `export_campaign_scope_to_burp()`
+  helpers for exporting the campaign's in-scope domains as a
+  Burp-importable scope XML.
+
+---
+
+## 18. Watch Mode (Phase 5 PR A)
+
+**Problem.** A campaign is a single run. Real engagements need a
+continuous posture — alert me when a new subdomain appears, when
+an existing finding's confidence shifts materially, when a new
+vuln-source entity lands.
+
+**What landed.** `nexusrecon/watch/` provides sensors + severity
+classifier + tiered action policy + per-watch persistence.
+
+- **Three sensor types.**
+  - `EntitySensor` — watches one entity by id. Fingerprint hashes
+    confidence + sources + tags + edge degrees; any change fires.
+  - `ScopeSensor` — watches every entity matching an
+    `entity_type` / `parent_domain` / `value_contains` filter
+    (AND semantics). Refuses construction with no filters so
+    operators can't accidentally watch the whole graph.
+  - `TimedSensor` — fires on a cadence regardless of graph state
+    (re-running a passive recon footprint every N hours).
+- **Severity classifier** — rules cascade in priority:
+  vuln-source addition → HIGH, new high-confidence entity →
+  HIGH, new CITES edge into a Lead / Hypothesis → HIGH,
+  in-place change on near-high-confidence entity → MEDIUM, any
+  addition / removal → MEDIUM, else LOW.
+- **Tiered action policy** (locked in by the architecture
+  choice):
+  - LOW → `alerts.jsonl` append.
+  - MEDIUM → above + `notifications.jsonl` append.
+  - HIGH → above + `micro_campaigns.jsonl` queue with seed
+    entities + suggested phases. v1 does NOT auto-execute;
+    operators review + dispatch.
+- **Persistence under** `~/.nexusrecon/watch/<watch-id>/`:
+  `config.yaml`, `fingerprints/<sensor-id>.json`,
+  `alerts.jsonl`, `notifications.jsonl`,
+  `micro_campaigns.jsonl`, `tick.log`.
+- **CLI.** `nexusrecon watch create / list / tick / alerts /
+  remove`. `tick` is synchronous + one-shot; production
+  deployments wrap it in cron or systemd-timer.
+
+---
+
+## 19. Provenance Cryptography (Phase 5 PR B)
+
+**Problem.** The audit chain is tamper-evident WITHIN a campaign,
+but an auditor with only the exported STIX bundle has no way to
+prove it came from a specific NexusRecon instance at a specific
+time. Hot-patching a prompt three weeks after delivery silently
+breaks the meaning of archived findings' provenance.
+
+**What landed.** `nexusrecon/crypto/` provides Ed25519 keypair
+lifecycle + bundle signing + verification + a standalone
+single-file verifier.
+
+- **`generate_keypair(key_id, passphrase, label=…)`** writes
+  three files under `~/.nexusrecon/keys/<key-id>/`:
+  `private.pem` (PKCS8 + passphrase-encrypted via
+  `BestAvailableEncryption`), `public.pem` (plain),
+  `metadata.json`. Directory mode 0o700, private key file mode
+  0o600 (best-effort on Windows).
+- **`sign_bundle(path, keypair)`** writes a sidecar
+  `<bundle>.receipt.json`. Receipt v1.0 schema:
+
+  ```json
+  {
+    "version": "1.0",
+    "signed_at": "2026-05-27T...",
+    "signer": {"key_id": "...", "fingerprint": "sha256:..."},
+    "bundle": {"filename": "...", "hash_algorithm": "sha256",
+               "hash": "sha256:..."},
+    "signature_algorithm": "ed25519",
+    "signature": "<base64url>"
+  }
+  ```
+
+- **Signed message.** `"ed25519|<bundle_hash>"` — the algorithm
+  tag in the payload defeats algorithm-substitution attacks in
+  future multi-algorithm verifiers.
+- **`verify_bundle(bundle, receipt, public_key)`** walks four
+  checks (algorithm support, public-key fingerprint match,
+  bundle hash match, signature verify). Optional
+  `expected_key_id` + `expected_fingerprint` pins fail loudly
+  when an auditor's known-good signer doesn't match.
+- **Standalone verifier** — `scripts/nexusrecon-verify.py` is a
+  ~250-line single file that depends ONLY on `cryptography`.
+  Auditors download one file + verify; no NexusRecon install
+  required.
+- **CLI.** `nexusrecon keys generate / list / export-public`,
+  `nexusrecon sign`, `nexusrecon verify`.
+
+---
+
+## 20. Adversarial Platform Self-Defense (Phase 5 PR C)
+
+**Problem.** Phase 2 defends against tampering with NexusRecon's
+own outputs. PR C defends against the inverse threat: upstream
+data sources actively feeding NexusRecon misleading or hostile
+content meant to inflate attack surface, derail the dispatcher,
+fabricate findings, or hijack agent prompts.
+
+**What landed.** `nexusrecon/adversarial/` ships four detectors
+that produce findings into `state["adversarial_findings"]` and
+apply a tiered confidence downgrade (medium ×0.7, high ×0.5,
+floor 0.05). Downgrades route through `set_confidence` so the
+Phase 2 propagator cascades them naturally.
+
+1. **`PoisonedDataDetector`** — sinkhole IPs (reserved + test-net
+   + loopback ranges), wildcard DNS (≥N subdomains resolving to
+   one IP), uniform fabrication clusters (subdomains sharing
+   parent + single source + identical confidence).
+2. **`ToolPatternAnalyzer`** — sweeps
+   `state["dynamic_dispatch_log"]` for rapid pivots (≥N distinct
+   target_types in a W-call window), low-yield bursts, repeat
+   hits (same (tool, target) ≥ N times), tier escalation
+   attempts (dispatches above
+   `scope.constraints.max_tier`).
+3. **`EvidenceInconsistencyDetector`** — timing impossibility
+   (`first_seen` < earliest provenance timestamp), repository
+   platform mismatch (`github` platform with gitlab URL), cloud
+   provider mismatch (AWS-tagged with azure value pattern),
+   email / org domain disagreement.
+4. **`PromptInjectionScanner`** — regex+structural mode
+   (default): ~10 known jailbreak phrases + structural anomalies
+   (long single lines, long base64 blobs, hidden HTML
+   instruction comments, `<|im_start|>` markers). Opt-in
+   LLM-classifier mode via `state["adversarial_use_llm"]` for
+   high-spend campaigns. Cache by content hash so identical tool
+   output pays the LLM cost once.
+
+**CLI.** `nexusrecon adversarial scan` runs all four detectors
+against a campaign's graph; `adversarial show` prints the
+findings log; `adversarial scan-text` runs the prompt-injection
+scanner on a single text file or stdin.
+
+---
+
+## 21. Vision Pipeline (Phase 5 PR D)
+
+**Problem.** Campaigns routinely involve visual artifacts —
+screenshots of login portals + dashboards + slide decks, leaked
+PDFs, brand logos, QR codes embedded in posters. Today none of
+those flowed into the graph.
+
+**What landed.** `nexusrecon/vision/` ships a backend protocol +
+default langchain-driven implementation, image / PDF / QR
+preprocessing helpers, a cost gate keyed to the Phase 1
+Strategy's `tool_budgets["vision_calls"]`, and the extractor
+that orchestrates the whole pipeline.
+
+- **`VisionBackend` Protocol.** Minimal contract: `describe_image`
+  + `describe_text` + a `name`. Default
+  `LangChainVisionBackend` picks up whichever model the
+  operator's config selected, so Anthropic / OpenAI / any
+  provider with langchain vision support works unchanged.
+  `NoopVisionBackend` returns an empty JSON shape for `--noop`
+  plumbing verification and tests.
+- **Preprocessing** — `extract_pdf_pages` (pypdf optional dep,
+  graceful skip), `decode_qr_codes` (pyzbar optional dep,
+  graceful skip). Operators on stripped-down systems still get
+  the screenshot path.
+- **Strict-JSON prompt contract.** Two top-level keys:
+  `description` (1-3 sentence narrative) + `entities` (urls /
+  emails / persons / organizations / brands / technologies /
+  domains). "Surface only things you can actually see — no
+  speculation."
+- **Graph integration.** Structured entities flow through the
+  standard graph builders with `imported_from:vision` source tag
+  + a narrative `HypothesisEntity` citing the extracted entities
+  (CITES edges). QR-decoded URLs ALWAYS flow (no LLM cost).
+- **Cost control.** `CostGate` consults
+  `state["strategy"]["tool_budgets"]["vision_calls"]` (no key
+  set → budget 0 → skip). Defaults are opt-in only.
+- **CLI.** `nexusrecon vision scan` (one artifact) and
+  `vision scan-dir` (directory walk). `--noop` runs the pipeline
+  without paying for the LLM call.
+
+---
+
+## 22. Glossary additions (post-0.5)
+
+| Term | Definition |
+|------|------------|
+| **Living Graph** | The post-0.5 evolution of `EntityGraph` — first-class hypothesis / lead / open-question nodes, provenance per claim, mutation events the verification engine subscribes to. |
+| **Strategy** | A declarative campaign plan (phases, dispatch policy, success / kill criteria, tool budgets, metadata). Authored by the operator or synthesised by the planner. |
+| **DispatchPolicy** | Pluggable rules for "when does the dispatcher fire and how much can it do?". `LitePolicy` / `FullPolicy` / `OffPolicy` ship; community packs add more. |
+| **Verifier** | A component that subscribes to graph-mutation events and produces verdicts (corroboration / contradiction / propagation / adversarial). Verdicts land in `state["verification_log"]` + the audit chain. |
+| **Corroboration class** | Independence class for source signals (`passive_dns`, `certificate`, `active_probe`, `breach_corpus`, `code_intel`, `cloud_enum`, `social`, `scope`, `manual`). Same-class sources collapse to one signal. |
+| **Recon pack** | Community-contributed bundle of tools / agents / policies / report templates / custom entity-and-rel types. Lives at `~/.nexusrecon/packs/<name>/manifest.yaml`. |
+| **Bounded agency** | Per-item dispatch escalation: deep-pivot (per-item policy override that refuses to narrow) + human-approval queue (high-tier items wait for operator). |
+| **Watch sensor** | A configured monitor (Entity / Scope / Timed) that fires when its fingerprint changes or its cadence elapses; tiered actions follow. |
+| **Receipt** | The sidecar JSON file produced by `sign_bundle` — carries algorithm tags, bundle hash, signer fingerprint, base64url signature. v1.0 schema. |
+| **Adversarial finding** | A detector verdict (poisoned data / tool pattern / inconsistency / prompt injection) with severity + downgrade record. |
+| **Vision call** | One backend-driven multi-modal LLM invocation. Counted against `Strategy.tool_budgets["vision_calls"]`. |

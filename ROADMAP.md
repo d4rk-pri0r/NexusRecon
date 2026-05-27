@@ -5,38 +5,132 @@ welcome; prioritisation is set by the maintainer.
 
 ---
 
-## Current state: `0.5.0` (pre-beta)
+## Current state: `0.7.0` (beta)
+
+The four core bets of the
+[METASPLOIT_OSINT implementation plan](docs/IMPLEMENTATION_PLAN_METASPLOIT_OSINT.md)
+plus four of five Phase 5 moonshots ship in this release.
+**Test suite: 590/590 passing.**
 
 What works today:
 
-- 9-phase reconnaissance pipeline + credential harvest (phase 7.5).
-- Tool registry with scope-gated execution (run `nexusrecon tools` for
-  the live count).
-- LLM-driven dynamic dispatcher (lite / full / off).
-- Audit chain (hash-chained JSONL), cost tracker, rate limiter.
-- 17 deliverable report types (master narrative, top threads,
+- **12-phase reconnaissance pipeline** + credential harvest
+  (phase 7.5) + pretext intelligence (phase 7.7).
+- **Living Intelligence Graph** — 17+ entity types, per-source
+  provenance, confidence, traversable relationships, first-class
+  hypotheses / leads / open questions, mutation events.
+- **Strategic Reasoning Engine** — Strategy dataclass, pluggable
+  DispatchPolicy (lite / full / off + community-extensible),
+  simulation, bounded agency (deep-pivot + human-approval queue).
+- **Continuous Confidence Engine** — corroboration (lifts on
+  multi-class agreement), contradiction (downgrades on conflicts),
+  propagation (cascades downgrades), adversarial self-check (graph
+  audit).
+- **Recon Pack format** — community-authored bundles contribute
+  tools / agents / dispatch policies / report templates / custom
+  entity-and-rel types. Git URL install, marketplace search.
+- **Contribution SDK** — `nexusrecon agent new` / `tool new` /
+  `policy new` scaffolders with prompt versioning + citation
+  guardrails wired in.
+- **Intent-driven entry** — `nexusrecon plan "<sentence>"`
+  synthesizes scope.yaml + Strategy from natural language.
+- **STIX 2.1 export + bidirectional import** — STIX bundles,
+  Nessus XML, Nuclei JSON-lines, generic CSV.
+- **Downstream emitters** — Jira NDJSON, Nuclei target lists,
+  Cobalt Strike Malleable C2 profile stubs.
+- **Watch Mode** — continuous monitoring with three sensor types
+  and tiered actions (alert / notification / queued micro-campaign).
+- **Provenance cryptography** — Ed25519 signed STIX bundles +
+  standalone single-file verifier auditors can run without
+  NexusRecon installed.
+- **Adversarial platform self-defense** — four detectors (poisoned
+  data, tool patterns, evidence inconsistency, prompt injection).
+- **Multi-modal vision pipeline** — screenshots, PDFs, QR codes;
+  multi-provider via langchain; strategy-budgeted.
+- Tool registry with scope-gated execution; LLM-driven dynamic
+  dispatcher; hash-chained audit log; cost tracker; rate limiter.
+- 17+ deliverable report types (master narrative, top threads,
   asset inventory, phishing package, attack-surface matrix, vuln
-  correlation, harvested credentials, etc.).
+  correlation, harvested credentials, STIX bundles, spear-phishing
+  intelligence, etc.).
 - TUI front door (welcome screen, new-campaign wizard, runner with
   live structlog stream, results browser, masked .env editor).
-- 351 integration tests + 32 live opt-in tests, run in ~5 seconds.
 
-What's still pre-beta about it:
+What's still beta-status about it:
 
-- No real-target end-to-end demo committed to the repo yet.
-- OPSEC features (rate limiter / proxy / UA rotation) declared in
-  config but not verified at the wire level.
-- Several integration paths (BloodHound, Burp Suite) not yet built.
-- Some tools still flagged `(stubbed)` in their descriptions
-  (gowitness, parts of `gcp_recon`).
+- TUI surfaces for the new Watch / Intent / Vision flows not yet
+  built. Capabilities are CLI-first; TUI tabs land as community
+  pull warrants.
+- Auto-dispatch of high-severity Watch Mode micro-campaigns is
+  deferred behind an opt-in flag
+  (`auto_dispatch_micro_campaigns` in the watch config) but not
+  yet wired through to the campaign runner.
+- Curated marketplace content — index format + search ship;
+  canonical hosted content is operator / community curated.
+- Some niche tools still flagged `[STUB]` in their descriptions
+  (gowitness; awaiting subprocess wrapper).
+- Fresh-VM install across all platforms (M-series macOS,
+  Linux x86_64, Linux arm64) needs documented coverage matrix.
 
 ---
 
-## Path to `0.6.0`: beta launch
+## Path to `1.0.0`: GA launch
 
-These are the items that have to land before the project goes out to
-"thousands of well-trained eyes." Prioritised in execution order;
-each is independently testable.
+The remaining work between today and `1.0.0` is mostly polish +
+documentation + the one outstanding Phase 5 moonshot. None of it
+gates correctness; all of it gates the "I'd recommend this to my
+peer" bar.
+
+### Outstanding from the Phase 5 moonshots
+
+- [ ] **Fleet-Level Learning (privacy-preserving)** — the last of
+      the five Phase 5+ moonshots. Cross-campaign pattern
+      extraction to improve default strategies without leaking
+      per-campaign data. Needs a privacy model decision
+      (differential privacy vs. federated aggregates vs.
+      operator-controlled opt-in) before scoping.
+
+### TUI co-evolution
+
+- [ ] **Intent Planner tab** — same `plan_from_intent`
+      orchestrator backing CLI, but with a live-preview pane
+      that updates as the operator types.
+- [ ] **Watch dashboard** — list of active watches, per-sensor
+      fingerprint history, alert + notification + micro-campaign
+      tabs.
+- [ ] **Adversarial findings tab** — surface
+      `state["adversarial_findings"]` with severity filters +
+      resolve actions.
+- [ ] **Pack browser** — `nexusrecon packs list` rendered in the
+      TUI with install / update / uninstall actions.
+
+### Watch Mode follow-ups
+
+- [ ] **Auto-dispatch of high-severity micro-campaigns** — wire
+      the existing `auto_dispatch_micro_campaigns` config flag
+      through to the campaign runner.
+- [ ] **Live notification channels** — Slack / webhook / email
+      sinks subscribed to `notifications.jsonl`.
+
+### Vision pipeline follow-ups
+
+- [ ] **PDF rasterization fallback** for image-only pages.
+      Requires the `pdf2image` / `poppler` dep; operators
+      pre-export images for now.
+
+### Distribution
+
+- [ ] **Fresh-VM install verification.** Test `./install.sh` on
+      M-series macOS, Linux x86_64, Linux arm64. Document any
+      platform-specific failures. Confirm `pipx install nexusrecon`
+
+---
+
+## Historical: beta-launch checklist (substantially shipped in 0.6.x / 0.7.0)
+
+These were the items called out before the v0.7.0 release. Most are
+done; the unchecked ones moved into the GA-launch section above or
+are documented as deferred.
 
 ### Beta blockers (must ship before public beta)
 
@@ -116,17 +210,18 @@ each is independently testable.
 
 ---
 
-## Path to `1.0.0`: production-ready
+## Additional 1.0.0 work-streams (post-beta cycles)
 
-Once the beta has run for a meaningful number of cycles and the
-beta-blocker work above has shaken out:
+Once the beta has run for a meaningful number of cycles:
 
 ### Toolchain integration
 
-- [ ] **Burp Suite project file export.** Discovered URLs + findings
-      → an importable `.burp` file.
+- [x] **Burp Suite bidirectional XML.** Shipped in 0.7.0 as the
+      first-party `packs/burp/` reference pack — site map XML
+      import + Burp-compatible scope XML export.
+      [`ARCHITECTURE.md §17`](ARCHITECTURE.md#17-recon-pack-format--contribution-sdk-phase-3).
 - [ ] **BloodHound CE JSON.** Azure / M365 federation findings →
-      BloodHound graph ingest.
+      BloodHound graph ingest. Natural follow-up pack.
 - [x] **Obsidian-friendly master report.** `--obsidian` emits
       `master_report.obsidian.md` alongside the standard report:
       YAML frontmatter (campaign_id / target / scope_hash / version
@@ -152,13 +247,20 @@ beta-blocker work above has shaken out:
 
 ### Plugin SDK
 
-- [ ] **Out-of-tree tool plugins.** `plugins/example` already exists;
-      formalise the discovery protocol so contributors can ship a
-      tool as a separate `pip install nexusrecon-plugin-X` package
-      and have it register without modifying the core.
-- [ ] **Plugin signing.** Optional, but: signed manifests so
-      operators can choose to load only verified plugins for
-      sensitive engagements.
+- [x] **Out-of-tree contributions.** Shipped in 0.7.0 as the
+      Recon Pack format
+      ([`ARCHITECTURE.md §17`](ARCHITECTURE.md#17-recon-pack-format--contribution-sdk-phase-3)).
+      Contributors ship a directory + `manifest.yaml` that
+      contributes tools, agents, dispatch policies, report
+      templates, and custom entity / relationship types.
+      `nexusrecon packs install gh:owner/repo` for git
+      distribution. Three SDK scaffolders
+      (`agent new` / `tool new` / `policy new`) generate working
+      boilerplate.
+- [x] **Pack trust model.** Manifest_hash (computed + warned on
+      mismatch by the loader). Operators inspect before activating.
+      A future PR may layer Ed25519 signing on top using the same
+      keypair infrastructure as Phase 5 PR B's signed STIX bundles.
 
 ### Operator experience
 

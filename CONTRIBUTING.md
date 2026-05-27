@@ -73,11 +73,63 @@ tests/
 
 ---
 
+## How to extend NexusRecon
+
+There are two paths now, both supported and both first-class:
+
+1. **In-tree contributions** — open a PR against this repo. The
+   right path for fixes, new built-in tools, refactors, and changes
+   to the core abstractions. The "Adding a new OSINT tool" section
+   below describes the conventions.
+2. **Out-of-tree recon packs** (added in 0.7.0). Ship a directory +
+   `manifest.yaml` outside this repo. The pack format supports
+   tools, agents, dispatch policies, report templates, and custom
+   entity / relationship types. Three scaffolders bootstrap the
+   boilerplate.
+
+If you're authoring something the wider community will use, **the
+recon pack path is now the default** — it lets you ship without
+forking the repo and lets operators install your work with
+`nexusrecon packs install gh:you/your-pack`. See
+[`ARCHITECTURE.md §17`](ARCHITECTURE.md#17-recon-pack-format--contribution-sdk-phase-3)
+for the design rationale.
+
+### Quick path: scaffolders
+
+```bash
+# Spit out a new agent module + tests + manifest entry. Walks you
+# through role / goal / backstory via Rich prompts.
+nexusrecon agent new
+
+# Spit out a new tool module + tests + manifest entry. Interactive
+# capability picker for category × tier × target_types.
+nexusrecon tool new
+
+# Spit out a new DispatchPolicy module. Interactive picker for
+# eligible phases + caps.
+nexusrecon policy new
+```
+
+Each scaffolder accepts `--pack new` (create a fresh pack) or
+`--pack <existing-dir>` (extend an existing pack). The generated
+agent module ships with `register_prompt()` for prompt versioning
+and a `review_citations()` method backed by the citation guardrails
+— so contributors don't have to remember those wiring steps.
+
+---
+
 ## Adding a new OSINT tool
 
 Every tool inherits from either ``OSINTTool`` or its HTTP-API
 specialisation ``BaseHTTPTool`` (both in ``nexusrecon/tools/base.py``)
 and is wired into the registry with ``@register_tool``.
+
+> If your tool is community-facing rather than a fix to a
+> built-in, prefer the **recon pack path**: run `nexusrecon tool
+> new --pack new`, follow the prompts, and the scaffolder
+> generates the equivalent boilerplate inside a fresh pack
+> directory. The conventions below still apply to the generated
+> code — the scaffolder just saves typing.
 
 **If your tool hits a JSON HTTP API**, use ``BaseHTTPTool``. The base
 class provides ``classify_response()`` which converts the common
@@ -254,6 +306,79 @@ Black-compatible at line-length 100 (see ``[tool.ruff]`` in
 ``pyproject.toml``). Run ``ruff check`` if you want to match house
 style; it'll catch the import-order and unused-import nits that
 otherwise get flagged in review.
+
+---
+
+## Authoring a recon pack (out-of-tree)
+
+A recon pack is a directory + `manifest.yaml` that contributes
+tools, agents, dispatch policies, report templates, and / or
+custom entity / relationship types to a NexusRecon install. The
+format is documented in
+[`ARCHITECTURE.md §17`](ARCHITECTURE.md#17-recon-pack-format--contribution-sdk-phase-3);
+the operator-facing distribution surface
+(`nexusrecon packs install gh:owner/repo`) is documented in the
+README.
+
+### Bootstrap
+
+```bash
+# Create a fresh pack with an agent inside it.
+nexusrecon agent new --pack new
+#   → ~/.nexusrecon/packs/<your-pack-name>/
+#   → manifest.yaml + my_agent.py + tests/test_my_agent.py
+
+# Add a tool to the same pack.
+nexusrecon tool new --pack ~/.nexusrecon/packs/<your-pack-name>
+
+# Add a dispatch policy.
+nexusrecon policy new --pack ~/.nexusrecon/packs/<your-pack-name>
+
+# Confirm everything loads.
+nexusrecon packs list
+nexusrecon packs validate ~/.nexusrecon/packs/<your-pack-name>
+```
+
+### Distribution
+
+When the pack is ready, push it to a git host. Operators install
+via:
+
+```bash
+nexusrecon packs install gh:you/your-pack
+# or:
+nexusrecon packs install https://gitlab.com/you/your-pack.git
+# or with a pinned ref:
+nexusrecon packs install gh:you/your-pack@v1.2.0
+```
+
+### Trust posture
+
+- v1 trust model is **unsigned + manifest hash**. The loader
+  recomputes the hash declared in your `manifest.yaml`'s
+  `manifest_hash` field and warns the operator on mismatch.
+- Operators **inspect packs before activating** — pack code runs
+  in the same Python process as the rest of NexusRecon.
+- A future PR may layer Ed25519 signing (using the same keypair
+  infrastructure as the STIX-bundle signer) on top.
+
+### Pack-author checklist
+
+- [ ] Pack name is kebab-case, 2-64 chars, starting with a letter.
+- [ ] `version` follows SemVer (`1.0.0` or `1.0.0-rc.1`).
+- [ ] Each declared module imports cleanly when the pack is
+      loaded.
+- [ ] Tools, agents, and policies declared in the manifest match
+      class names that actually exist in the modules.
+- [ ] Custom entity / relationship type names are
+      `UPPER_SNAKE_CASE` and values are `lower_snake_case`.
+- [ ] Generated tests pass (`pytest tests/`).
+- [ ] Any community-facing prompts pin
+      `register_prompt(name, version, body, expected_hash=…)` so a
+      casual hot-edit fails the build.
+- [ ] LICENSE file in the pack root (Apache 2.0 / MIT / etc.). The
+      NexusRecon core is Apache 2.0; community packs choose their
+      own.
 
 ---
 
