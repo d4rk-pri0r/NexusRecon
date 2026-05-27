@@ -65,12 +65,22 @@ from nexusrecon.verification.orchestrator import (
     VerificationOrchestrator,
     Verifier,
 )
+from nexusrecon.verification.propagation import (
+    ConfidencePropagator,
+    PROPAGATING_REL_TYPES,
+    PropagationStep,
+    PropagationVerdict,
+)
 
 __all__ = [
+    "ConfidencePropagator",
     "ContradictionDetector",
     "ContradictionVerdict",
     "CorroborationEngine",
     "CorroborationVerdict",
+    "PROPAGATING_REL_TYPES",
+    "PropagationStep",
+    "PropagationVerdict",
     "SOURCE_INDEPENDENCE_CLASSES",
     "VerificationOrchestrator",
     "Verifier",

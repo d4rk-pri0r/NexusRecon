@@ -186,7 +186,14 @@ class ContradictionDetector:
         )
         conf_before = float(node_data.get("confidence", 0.0))
         conf_after = max(self.floor, conf_before * self.downgrade_factor)
-        node_data["confidence"] = conf_after
+        # Phase 2 PR C: route through ``set_confidence`` so the
+        # downgrade emits a ``confidence_changed`` event the
+        # :class:`ConfidencePropagator` listens for.
+        graph.set_confidence(
+            entity_id, conf_after,
+            reason="contradiction downgrade (sticky)",
+            source="contradiction",
+        )
 
         queued = self._maybe_queue(
             entity_id=entity_id, severity=severity,
@@ -245,7 +252,14 @@ class ContradictionDetector:
         )
         conf_before = float(node_data.get("confidence", 0.0))
         conf_after = max(self.floor, conf_before * self.downgrade_factor)
-        node_data["confidence"] = conf_after
+        # Phase 2 PR C: route through ``set_confidence`` so the
+        # downgrade emits a ``confidence_changed`` event the
+        # :class:`ConfidencePropagator` listens for.
+        graph.set_confidence(
+            source_id, conf_after,
+            reason="contradiction downgrade (rel)",
+            source="contradiction",
+        )
 
         queued = self._maybe_queue(
             entity_id=source_id, severity=severity,

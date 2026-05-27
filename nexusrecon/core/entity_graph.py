@@ -124,6 +124,48 @@ class EntityGraph:
         tests + tear-down between campaigns."""
         self._mutation_listeners = []
 
+    def set_confidence(
+        self,
+        entity_id: str,
+        new_confidence: float,
+        *,
+        reason: str = "",
+        source: str = "",
+    ) -> bool:
+        """Phase 2 PR C: single setter for entity confidence.
+
+        Verifiers should call this rather than mutating
+        ``self.graph.nodes[entity_id]["confidence"]`` directly,
+        so the change emits a discoverable
+        ``confidence_changed`` event the
+        :class:`ConfidencePropagator` listens for. Returns
+        ``True`` when the write happened, ``False`` when the
+        entity is unknown or the new value equals the old.
+
+        ``reason`` and ``source`` flow into the event payload
+        verbatim so the propagator can attribute the change
+        (and to avoid recursive cycles when the propagator
+        itself updates confidence — we filter on
+        ``source="propagation"``)."""
+        node_data = self.graph.nodes.get(entity_id)
+        if node_data is None:
+            return False
+        old = float(node_data.get("confidence", 0.0))
+        new = float(new_confidence)
+        if new == old:
+            return False
+        node_data["confidence"] = new
+        self._emit_mutation({
+            "kind": "confidence_changed",
+            "entity_id": entity_id,
+            "old_confidence": old,
+            "new_confidence": new,
+            "delta": new - old,
+            "reason": reason,
+            "source": source,
+        })
+        return True
+
     def _emit_mutation(self, event: dict[str, Any]) -> None:
         """Internal: fire ``event`` to every listener. Defensive
         — any listener exception is logged at debug and

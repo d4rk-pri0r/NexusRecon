@@ -291,7 +291,14 @@ class CorroborationEngine:
                 metadata={"sources": sources},
             )
 
-        node_data["confidence"] = new_conf
+        # Phase 2 PR C: route through ``set_confidence`` so the
+        # change emits a discoverable ``confidence_changed``
+        # event the :class:`ConfidencePropagator` listens for.
+        graph.set_confidence(
+            entity_id, new_conf,
+            reason=f"corroboration: {len(classes)} independence classes",
+            source="corroboration",
+        )
         return CorroborationVerdict(
             entity_id=entity_id,
             entity_type=str(node_data.get("entity_type", "")),
