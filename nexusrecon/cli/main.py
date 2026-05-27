@@ -2519,6 +2519,144 @@ def verify_cmd(
     )
 
 
+# ── Phase 5 PR C: Adversarial self-defense ───────────────────────────
+
+
+adversarial_app = typer.Typer(
+    help=(
+        "Detect poisoned data, suspicious dispatcher "
+        "patterns, evidence inconsistencies, and prompt-"
+        "injection attempts in a campaign."
+    ),
+)
+app.add_typer(adversarial_app, name="adversarial")
+
+
+@adversarial_app.command("scan")
+def adversarial_scan(
+    campaign_id: str = typer.Argument(...),
+    use_llm: bool = typer.Option(
+        False, "--use-llm",
+        help=(
+            "Enable LLM-based prompt-injection classifier "
+            "(costs $$$; default off)."
+        ),
+    ),
+) -> None:
+    """Run all four detectors against a campaign."""
+    from nexusrecon.adversarial import (
+        EvidenceInconsistencyDetector,
+        PoisonedDataDetector,
+        ToolPatternAnalyzer,
+        finding_summary,
+    )
+    from nexusrecon.core.entity_graph import EntityGraph
+
+    state_path = _resolve_campaign_state_path(campaign_id)
+    data = json.loads(state_path.read_text(encoding="utf-8"))
+    graph = EntityGraph.from_state(
+        data,
+        campaign_id=data.get("campaign_id", ""),
+        engagement_id=data.get("engagement_id", ""),
+    )
+    if use_llm:
+        data["adversarial_use_llm"] = True
+
+    PoisonedDataDetector().scan(graph, data)
+    EvidenceInconsistencyDetector().scan(graph, data)
+    ToolPatternAnalyzer().scan(data)
+
+    summary = finding_summary(data)
+    _persist_graph_to_state_path(state_path, graph, data)
+
+    console.print(
+        Panel(
+            (
+                f"[bold green]Adversarial scan complete.[/bold green]\n"
+                f"  high:   [red]{summary['high']}[/red]\n"
+                f"  medium: [yellow]{summary['medium']}[/yellow]\n"
+                f"  low:    [cyan]{summary['low']}[/cyan]\n"
+                f"  total:  [cyan]{summary['total']}[/cyan]\n\n"
+                f"Details:\n"
+                f"  [bold]nexusrecon adversarial show {campaign_id}[/bold]"
+            ),
+            title="✓ adversarial scan",
+            border_style=(
+                "red" if summary["high"]
+                else "yellow" if summary["medium"]
+                else "green"
+            ),
+        )
+    )
+
+
+@adversarial_app.command("show")
+def adversarial_show(
+    campaign_id: str = typer.Argument(...),
+    limit: int = typer.Option(20, "--limit", "-n"),
+    severity: str | None = typer.Option(
+        None, "--severity",
+        help="Filter: low|medium|high.",
+    ),
+) -> None:
+    """Print the campaign's adversarial findings log."""
+    state_path = _resolve_campaign_state_path(campaign_id)
+    data = json.loads(state_path.read_text(encoding="utf-8"))
+    findings = data.get("adversarial_findings") or []
+    if severity:
+        findings = [f for f in findings if f.get("severity") == severity]
+    if not findings:
+        console.print("[yellow]No findings.[/yellow]")
+        return
+    for record in findings[-limit:]:
+        sev = record.get("severity", "?")
+        color = (
+            "red" if sev == "high"
+            else "yellow" if sev == "medium" else "cyan"
+        )
+        console.print(
+            f"[{color}]{sev:<6}[/{color}] "
+            f"detector=[cyan]{record.get('detector', '')}[/cyan] "
+            f"{record.get('rationale', '')}"
+        )
+
+
+@adversarial_app.command("scan-text")
+def adversarial_scan_text(
+    path: str | None = typer.Argument(
+        None, help="Path to a text file. Reads stdin if omitted.",
+    ),
+    use_llm: bool = typer.Option(False, "--use-llm"),
+) -> None:
+    """Run the prompt-injection scanner on a single text
+    file (or stdin). Useful for piping suspicious tool
+    output through the scanner."""
+    from nexusrecon.adversarial import scan_text
+
+    if path is None:
+        body = sys.stdin.read()
+    else:
+        body = Path(path).expanduser().read_text(encoding="utf-8")
+    mode = "regex_structural_llm" if use_llm else "regex_structural"
+    report = scan_text(body, mode=mode)
+    color = (
+        "red" if report.severity == "high"
+        else "yellow" if report.severity == "medium" else "green"
+    )
+    console.print(
+        f"[{color}]severity:[/{color}] {report.severity}  "
+        f"matches=[cyan]{len(report.matches)}[/cyan]"
+        + (
+            f"  llm_score=[cyan]{report.llm_score}[/cyan]"
+            if report.llm_score is not None else ""
+        )
+    )
+    for m in report.matches:
+        console.print(f"  ⚠  [yellow]{m.kind}[/yellow] — {m.description}")
+        if m.snippet:
+            console.print(f"     [dim]{m.snippet}[/dim]")
+
+
 def main() -> None:
     """Entry point for the nexusrecon CLI."""
     app()
