@@ -84,6 +84,43 @@ class EntityGraph:
         self.engagement_id = engagement_id
         self.graph = nx.DiGraph()
         self._value_index: dict[tuple[str, str], str] = {}  # (type, value) -> entity_id
+        # Phase 2 PR A: mutation listeners. Each callable receives
+        # one event dict per mutation: ``{"kind": "entity_added" |
+        # "entity_merged" | "relationship_added", "entity_id":
+        # ..., "entity_type": ..., "rel_type": ..., ...}``.
+        # Listener exceptions are swallowed + logged so a broken
+        # verifier can't break a campaign.
+        self._mutation_listeners: list[Any] = []
+
+    def register_mutation_listener(self, callback: Any) -> None:
+        """Register a callable invoked once per add_entity /
+        add_relationship call.
+
+        Phase 2 PR A introduces this seam so the verification
+        orchestrator can react to graph mutations. Listeners
+        are append-only; ``clear_mutation_listeners`` resets the
+        list (tests use this to keep the graph singleton
+        clean across cases)."""
+        self._mutation_listeners.append(callback)
+
+    def clear_mutation_listeners(self) -> None:
+        """Remove every registered mutation listener. Mainly for
+        tests + tear-down between campaigns."""
+        self._mutation_listeners = []
+
+    def _emit_mutation(self, event: dict[str, Any]) -> None:
+        """Internal: fire ``event`` to every listener. Defensive
+        — any listener exception is logged at debug and
+        swallowed; a broken verifier MUST NOT take down the
+        campaign that's writing to the graph."""
+        for cb in list(self._mutation_listeners):
+            try:
+                cb(event)
+            except Exception as exc:
+                log.debug(
+                    "Mutation listener raised — swallowing",
+                    error=str(exc),
+                )
 
     # ── Entity management ─────────────────────────────────────────────────────
 
@@ -121,6 +158,13 @@ class EntityGraph:
                     if v and not existing_data.get(k):
                         existing_data[k] = v
             log.debug("Merged entity", entity_type=entity.entity_type, value=entity.value)
+            self._emit_mutation({
+                "kind": "entity_merged",
+                "entity_id": existing_id,
+                "entity_type": entity.entity_type.value,
+                "value": entity.value,
+                "new_sources": list(entity.sources),
+            })
             return existing_id
 
         # New entity
@@ -133,6 +177,13 @@ class EntityGraph:
         self.graph.add_node(entity_id, **data)
         self._value_index[idx_key] = entity_id
         log.debug("Added entity", entity_type=entity.entity_type.value, value=entity.value)
+        self._emit_mutation({
+            "kind": "entity_added",
+            "entity_id": entity_id,
+            "entity_type": entity.entity_type.value,
+            "value": entity.value,
+            "sources": list(entity.sources),
+        })
         return entity_id
 
     def get_entity_id(self, entity_type: EntityType, value: str) -> str | None:
@@ -182,6 +233,13 @@ class EntityGraph:
             **rel.metadata,
         }
         self.graph.add_edge(rel.source_id, rel.target_id, **data)
+        self._emit_mutation({
+            "kind": "relationship_added",
+            "source_id": rel.source_id,
+            "target_id": rel.target_id,
+            "rel_type": rel.rel_type.value,
+            "confidence": rel.confidence,
+        })
         return rel.rel_id
 
     def relate(
