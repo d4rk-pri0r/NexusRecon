@@ -1,13 +1,40 @@
 """
-NexusRecon entity graph — the central intelligence accumulator.
+NexusRecon Living Intelligence Graph — the central reasoning substrate.
 
-Backed by NetworkX DiGraph.  All entities are nodes, all relationships
-are directed edges.  The graph is serialized to JSON for state persistence
-and to pyvis HTML for reporting.
+(Previously known as the "Entity Graph"; ``LivingGraph`` is the alias
+the METASPLOIT_PLAN document uses for the same class. The
+``EntityGraph`` name survives as the canonical export so the rest
+of the codebase doesn't churn on a rename; new code is encouraged to
+import ``LivingGraph`` to signal architectural intent.)
+
+Backed by NetworkX DiGraph. All entities are nodes, all relationships
+are directed edges. The graph is serialized to JSON for state
+persistence and to pyvis HTML for reporting.
 
 Entity resolution: when two tools report the same logical entity
 (e.g., same domain from WHOIS and from crt.sh), they are merged into
 a single node with combined sources and metadata.
+
+What the graph carries after Phase 0.1
+- **Infrastructure entities** (the original surface): domains,
+  subdomains, IPs, certs, cloud assets, code repositories,
+  secrets, technologies, CVEs, URLs.
+- **Identity entities** (Phase 0.1 PR B unification): people
+  ingested from the Phase D :class:`IdentityGraph`, with their
+  identifiers (emails, handles) as their own typed entities +
+  HAS_ACCOUNT edges back to the person.
+- **Reasoning artifacts** (Phase 0.0): hypotheses, leads,
+  open-questions surfaced by the correlation phase, with
+  CITES / BLOCKS edges back to the entities they're based on.
+- **Human-to-human edges** (Phase 0.1 PR B): Phase E
+  RelationshipEdges translated to typed edges
+  (COLLABORATES_WITH, FOLLOWS, KNOWS, FEDERATED_WITH) between
+  person nodes.
+
+What's still TODO per ``IMPLEMENTATION_PLAN_METASPLOIT_OSINT.md``
+- Confidence propagation (Phase 2 verification engine).
+- Time-travel / versioning (explicitly deferred — owner
+  decision in audit §9.3).
 """
 
 from __future__ import annotations
@@ -1011,3 +1038,34 @@ class EntityGraph:
                 writer.writerows(rows)
 
         return str(output_path)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Public alias for the METASPLOIT_PLAN's preferred name
+# ──────────────────────────────────────────────────────────────────────
+
+#: Architectural alias matching the language used in
+#: ``IMPLEMENTATION_PLAN_METASPLOIT_OSINT.md``. New code should
+#: import :class:`LivingGraph` to signal "this is the central
+#: reasoning substrate, not just an entity store." The
+#: ``EntityGraph`` name survives as the canonical class so the
+#: existing codebase doesn't churn on a rename.
+#:
+#: Migration path: when a forcing function appears (e.g. an
+#: API-breaking refactor of the class itself), rename the
+#: class in-place and the alias here flips so ``EntityGraph``
+#: becomes the deprecated name.
+LivingGraph = EntityGraph
+
+#: Schema version of the serialised graph dict. Bumps every
+#: time ``EntityGraph.to_dict`` adds a new top-level key or
+#: changes the shape of an existing one. The migration script
+#: at ``scripts/migrate_state_to_living_graph.py`` reads this
+#: to decide whether an on-disk graph dict needs upgrading.
+GRAPH_SCHEMA_VERSION: str = "0.1"
+
+__all__ = [
+    "EntityGraph",
+    "LivingGraph",
+    "GRAPH_SCHEMA_VERSION",
+]
