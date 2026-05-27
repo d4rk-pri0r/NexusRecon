@@ -162,6 +162,15 @@ def run(
     validate_creds: bool = typer.Option(False, "--validate-creds", help="Validate harvested credentials via read-only API calls (AWS sts, GitHub /user, etc.). Off by default."),
     generate_phishing: bool = typer.Option(False, "--generate-phishing", help="Generate per-target phishing email drafts. Authorized engagements only."),
     dispatch_mode: str = typer.Option("lite", "--dispatch-mode", help="Dynamic dispatch mode: lite (default), full, or off."),
+    plan_only: bool = typer.Option(
+        False, "--plan-only",
+        help=(
+            "Phase 1 PR B: invoke the CampaignPlannerAgent and print "
+            "the resulting Strategy, then exit without running any "
+            "tools. Use this to preview what a planner-driven "
+            "campaign would do before committing to LLM/tool spend."
+        ),
+    ),
     pretext_targets: str | None = typer.Option(None, "--pretext-targets", help="Comma-separated identity IDs to score pretexts for (Phase 7.7). Default: all identities."),
     obsidian: bool = typer.Option(
         False, "--obsidian",
@@ -254,6 +263,86 @@ def run(
         console.print(scope_model.summary())
         return
 
+    # Phase 1 PR B: planner orchestration. ``--plan-only`` runs
+    # the planner, writes the strategy to disk + prints it, then
+    # exits before any campaign tools fire. Normal runs invoke
+    # the planner too (so the resulting Strategy is what the
+    # reflection node consults) but proceed into execution.
+    from nexusrecon.strategy import plan_campaign
+
+    seed_list_for_planner = (
+        seed_list if seed_list
+        else list(scope_model.scope.in_scope.domains)
+    )
+    try:
+        strategy = asyncio.run(plan_campaign(
+            scope_summary=scope_model.summary(),
+            seeds=seed_list_for_planner,
+            mode=mode,
+            dispatch_policy_name=dispatch_mode,
+            max_llm_cost_usd=getattr(
+                scope_model.constraints, "max_llm_cost_usd", 10.0,
+            ),
+        ))
+    except Exception as exc:
+        console.print(
+            f"[yellow]Planner failed ({exc}); falling back to "
+            f"default strategy.[/yellow]"
+        )
+        from nexusrecon.strategy import Strategy as _Strategy
+        strategy = _Strategy.default()
+
+    if plan_only:
+        import json as _json
+        strategy_dict = strategy.to_dict()
+        plan_path = campaign.campaign_dir / "strategy.json"
+        try:
+            plan_path.write_text(
+                _json.dumps(strategy_dict, indent=2, default=str),
+                encoding="utf-8",
+            )
+        except Exception as exc:
+            console.print(
+                f"[yellow]Could not write {plan_path}: {exc}[/yellow]"
+            )
+        console.print("\n[bold green]Campaign Strategy (planner output)[/bold green]")
+        console.print(f"Name:                 [cyan]{strategy.name}[/cyan]")
+        console.print(
+            f"Dispatch policy:      "
+            f"[cyan]{strategy.dispatch_policy_name}[/cyan]"
+        )
+        console.print(
+            f"Phases ({len(strategy.phases)}):           "
+            f"[cyan]{', '.join(strategy.phases)}[/cyan]"
+        )
+        if strategy.tool_budgets:
+            console.print(
+                f"Tool budgets:         [cyan]{strategy.tool_budgets}[/cyan]"
+            )
+        if strategy.success_criteria:
+            console.print(
+                f"Success criteria ({len(strategy.success_criteria)}):"
+            )
+            for sc in strategy.success_criteria:
+                console.print(
+                    f"  • {sc.metric} {sc.op} {sc.threshold}"
+                    f"  [dim]{sc.description}[/dim]"
+                )
+        if strategy.kill_criteria:
+            console.print(
+                f"Kill criteria ({len(strategy.kill_criteria)}):"
+            )
+            for kc in strategy.kill_criteria:
+                console.print(
+                    f"  • {kc.metric} {kc.op} {kc.threshold} → {kc.action}"
+                    f"  [dim]{kc.description}[/dim]"
+                )
+        rationale = strategy.metadata.get("planner_rationale")
+        if rationale:
+            console.print(f"\n[dim]Rationale:[/dim] {rationale}")
+        console.print(f"\nWritten to: [cyan]{plan_path}[/cyan]")
+        return
+
     # Run the campaign
     console.print(f"\n[bold green]Launching campaign[/bold green] [cyan]{campaign.campaign_id}[/cyan]")
     console.print(f"Mode: [yellow]{mode}[/yellow] | Tier: [yellow]{scope_model.constraints.max_tier}[/yellow]\n")
@@ -280,6 +369,14 @@ def run(
         "validate_credentials": validate_creds,
         "generate_phishing_drafts": generate_phishing,
         "dispatch_mode": dispatch_mode if dispatch_mode in ("lite", "full", "off") else "lite",
+        # Phase 1 PR B: persist the planner-generated strategy
+        # into state so the reflection node + audit trail can
+        # consult it. ``dispatch_policy_name`` shadows the
+        # legacy ``dispatch_mode`` and is what
+        # ``_resolve_policy`` reads first.
+        "strategy": strategy.to_dict(),
+        "dispatch_policy_name": strategy.dispatch_policy_name,
+        "strategy_history": [],
         "pretext_targets": (
             [t.strip() for t in pretext_targets.split(",") if t.strip()]
             if pretext_targets else []

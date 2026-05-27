@@ -40,6 +40,7 @@ explicitly pick a policy get the same behavior they had before
 eligibility). Phase 1 is additive; nothing breaks.
 """
 from nexusrecon.strategy.plan import Strategy
+from nexusrecon.strategy.planner import plan_campaign, replan
 from nexusrecon.strategy.policy import (
     DispatchPolicy,
     FullPolicy,
@@ -55,4 +56,6 @@ __all__ = [
     "OffPolicy",
     "Strategy",
     "get_policy",
+    "plan_campaign",
+    "replan",
 ]
