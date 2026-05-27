@@ -5,6 +5,7 @@ from typing import Any
 
 import httpx
 
+from nexusrecon.opsec.useragent import random_ua
 from nexusrecon.tools.base import BaseHTTPTool, Category, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
 
@@ -27,7 +28,7 @@ class GreyNoiseTool(BaseHTTPTool):
         try:
             async with httpx.AsyncClient(
                 base_url="https://api.greynoise.io",
-                headers={"key": key},
+                headers={"key": key, "User-Agent": random_ua()},
                 timeout=15.0,
                 **self._proxy_kwargs(),
             ) as client:

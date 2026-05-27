@@ -6,6 +6,7 @@ from typing import Any
 
 import httpx
 
+from nexusrecon.opsec.useragent import random_ua
 from nexusrecon.tools.base import BaseHTTPTool, Category, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
 
@@ -29,7 +30,7 @@ class VirusTotalTool(BaseHTTPTool):
         try:
             async with httpx.AsyncClient(
                 base_url="https://www.virustotal.com/api/v3",
-                headers={"x-apikey": key},
+                headers={"x-apikey": key, "User-Agent": random_ua()},
                 timeout=15.0,
                 **self._proxy_kwargs(),
             ) as client:

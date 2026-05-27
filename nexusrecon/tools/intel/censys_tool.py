@@ -5,6 +5,7 @@ from typing import Any
 
 import httpx
 
+from nexusrecon.opsec.useragent import random_ua
 from nexusrecon.tools.base import BaseHTTPTool, Category, Tier, ToolResult
 from nexusrecon.tools.registry import register_tool
 
@@ -30,6 +31,7 @@ class CensysTool(BaseHTTPTool):
             async with httpx.AsyncClient(
                 base_url="https://search.censys.io/api/v2",
                 auth=(api_id, api_secret),
+                headers={"User-Agent": random_ua()},
                 timeout=15.0,
                 **self._proxy_kwargs(),
             ) as client:

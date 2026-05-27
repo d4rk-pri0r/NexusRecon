@@ -8,8 +8,10 @@ The registry validates tier, scope, and availability before execution.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
+import random
 import time
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any
@@ -202,6 +204,19 @@ class ToolRegistry:
         # Paranoid profile produces ~0.1 req/s per source; loud is unbounded.
         if self._rate_limiter is not None:
             await self._rate_limiter.wait(tool_name)
+
+        # ── OPSEC: stealth-profile jitter ─────────────────────────────────────
+        # The rate limiter handles per-source pacing (token bucket); this
+        # adds a uniform random delay on top so the cadence between any
+        # two tool invocations isn't deterministically spaced. Paranoid
+        # promises 3-10s jitter; the previous registry never read these
+        # fields, so the promise was a config-time fiction. ``delay_max=0``
+        # (loud profile, or no profile bound) short-circuits.
+        if self._stealth_profile is not None:
+            dmin = float(getattr(self._stealth_profile, "request_delay_min", 0.0) or 0.0)
+            dmax = float(getattr(self._stealth_profile, "request_delay_max", 0.0) or 0.0)
+            if dmax > 0.0 and dmax >= dmin:
+                await asyncio.sleep(random.uniform(dmin, dmax))
 
         # ── Audit: tool start ──────────────────────────────────────────────────
         if self._audit_log:

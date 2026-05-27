@@ -533,3 +533,279 @@ class TestProxySupportStructural:
             "they'll silently bypass the campaign proxy:\n"
             + "\n".join(f"  {name}  ({src})" for name, src in violators)
         )
+
+    def test_every_basehttp_tool_sets_user_agent(self):
+        """Mirror of the proxy structural check, for User-Agent.
+
+        Until this guard landed, four BaseHTTPTool subclasses
+        (shodan, virustotal, greynoise, censys) shipped with
+        httpx's default ``python-httpx/<version>`` header ── a
+        perfect fingerprint signal for any provider running WAF
+        rules against scripted clients, and a flat contradiction
+        of the OPSEC docs' "User-Agent rotation per request"
+        promise. Pin the invariant so future subclasses can't
+        regress."""
+        from inspect import getsourcefile
+        from pathlib import Path
+
+        import nexusrecon.tools.intel.censys_tool  # noqa: F401
+        import nexusrecon.tools.intel.fullhunt_tool  # noqa: F401
+        import nexusrecon.tools.intel.greynoise_tool  # noqa: F401
+        import nexusrecon.tools.intel.shodan_tool  # noqa: F401
+        import nexusrecon.tools.intel.virustotal_tool  # noqa: F401
+        from nexusrecon.tools.base import BaseHTTPTool
+
+        violators = []
+        for cls in BaseHTTPTool.__subclasses__():
+            if cls.__name__.startswith("_"):
+                continue
+            src_file = getsourcefile(cls)
+            if not src_file or "/tests/" in src_file:
+                continue
+            src = Path(src_file).read_text()
+            # Accept either the helper invocation OR a literal UA
+            # header (some tools build headers from a constant).
+            if "random_ua" not in src and "User-Agent" not in src:
+                violators.append((cls.__name__, src_file))
+
+        assert not violators, (
+            "These BaseHTTPTool subclasses ship with the default "
+            "httpx User-Agent ── they leak `python-httpx/<ver>` "
+            "to every provider, contradicting the rotating-UA "
+            "OPSEC promise:\n"
+            + "\n".join(f"  {name}  ({src})" for name, src in violators)
+        )
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Stealth-profile jitter at execute() time
+# ──────────────────────────────────────────────────────────────────────────
+
+
+from dataclasses import replace as _dc_replace  # noqa: E402
+
+from nexusrecon.opsec.profiles import get_profile  # noqa: E402
+
+
+class TestStealthProfileJitterOnWire:
+    """The :class:`StealthProfile` declares ``request_delay_min`` and
+    ``request_delay_max`` but until the registry was wired to read
+    them they were config-time fiction. Paranoid promised 3-10s
+    jitter; the wire stayed deterministic at the rate-limiter's
+    spacing.
+
+    These tests pin the actual wire behavior:
+
+      - When a profile with non-zero ``request_delay_*`` is bound,
+        :meth:`ToolRegistry.execute` sleeps in that range BEFORE
+        calling ``tool.run()``.
+      - When no profile is bound (or ``loud`` with
+        ``request_delay_max=0``), no jitter applies.
+      - The jitter is applied IN ADDITION to the rate-limiter
+        spacing (token bucket + jitter compose).
+    """
+
+    @patch("nexusrecon.core.config.NexusConfig.get_secret", return_value="fake-key")
+    async def test_synthetic_profile_jitter_observable(self, _secret):
+        """A synthetic profile with delay_min=0.15s, delay_max=0.25s
+        must add ~150-250ms per execute() call. Using small values
+        keeps the test fast while still demonstrating the wire-
+        level effect."""
+        profile = _dc_replace(
+            get_profile("normal"),
+            request_delay_min=0.15,
+            request_delay_max=0.25,
+            source_rates={"default": 1000.0, "shodan": 1000.0},
+            burst_detection_enabled=False,
+        )
+        registry = _build_registry_with_tool(
+            ShodanTool(),
+            stealth_profile=profile,
+            rate_limiter=SourceRateLimiter(
+                source_rates=profile.source_rates,
+                burst_detection_enabled=False,
+            ),
+        )
+        with respx.mock:
+            respx.get(url__startswith="https://api.shodan.io").mock(
+                return_value=Response(200, json={"matches": [], "total": 0}),
+            )
+            t0 = time.monotonic()
+            await registry.execute("shodan", "example.com", "domain")
+            elapsed = time.monotonic() - t0
+
+        # Floor is the declared min minus a small slack for scheduler
+        # noise; ceiling is the declared max plus slack for the tool
+        # body itself (with respx mocked the body is sub-ms).
+        assert 0.1 <= elapsed <= 1.0, (
+            f"jitter outside declared range: elapsed={elapsed:.3f}s "
+            f"(expected ~0.15-0.25s + tool body)"
+        )
+
+    @patch("nexusrecon.core.config.NexusConfig.get_secret", return_value="fake-key")
+    async def test_loud_profile_does_not_add_jitter(self, _secret):
+        """The loud profile sets ``request_delay_max=0``. The registry
+        must short-circuit and add no delay ── operators who pick
+        loud explicitly opted out of stealth latency."""
+        profile = get_profile("loud")
+        registry = _build_registry_with_tool(
+            ShodanTool(),
+            stealth_profile=profile,
+        )
+        with respx.mock:
+            respx.get(url__startswith="https://api.shodan.io").mock(
+                return_value=Response(200, json={"matches": [], "total": 0}),
+            )
+            t0 = time.monotonic()
+            await registry.execute("shodan", "example.com", "domain")
+            elapsed = time.monotonic() - t0
+
+        # No rate limiter, no jitter, mocked tool body → instant.
+        assert elapsed < 0.2, (
+            f"loud profile added unexpected delay: {elapsed:.3f}s"
+        )
+
+    @patch("nexusrecon.core.config.NexusConfig.get_secret", return_value="fake-key")
+    async def test_no_profile_means_no_jitter(self, _secret):
+        """When the registry has no stealth profile bound (test
+        harness default), execute() must NOT introduce jitter. Pin
+        this so a future "always-jitter" default doesn't sneak in."""
+        registry = _build_registry_with_tool(ShodanTool())  # no opsec
+        with respx.mock:
+            respx.get(url__startswith="https://api.shodan.io").mock(
+                return_value=Response(200, json={"matches": [], "total": 0}),
+            )
+            t0 = time.monotonic()
+            await registry.execute("shodan", "example.com", "domain")
+            elapsed = time.monotonic() - t0
+
+        assert elapsed < 0.2, (
+            f"no-profile path added unexpected delay: {elapsed:.3f}s"
+        )
+
+    async def test_paranoid_profile_jitter_range_documented(self):
+        """The paranoid profile's promised range is 3-10s. This pins
+        the declaration (the prior test runs a synthetic profile so
+        unit-test wall-clock stays low; this confirms the SHIPPED
+        profile keeps the documented range)."""
+        profile = get_profile("paranoid")
+        assert profile.request_delay_min == 3.0
+        assert profile.request_delay_max == 10.0
+
+    async def test_zero_min_zero_max_is_safe(self):
+        """``random.uniform(0, 0)`` returns 0.0 ── verify the
+        registry's check tolerates a zero-zero range without
+        adding spurious work."""
+        profile = _dc_replace(
+            get_profile("normal"),
+            request_delay_min=0.0,
+            request_delay_max=0.0,
+        )
+        registry = _build_registry_with_tool(
+            ShodanTool(), stealth_profile=profile,
+        )
+        with respx.mock, patch(
+            "nexusrecon.core.config.NexusConfig.get_secret",
+            return_value="fake-key",
+        ):
+            respx.get(url__startswith="https://api.shodan.io").mock(
+                return_value=Response(200, json={"matches": [], "total": 0}),
+            )
+            t0 = time.monotonic()
+            await registry.execute("shodan", "example.com", "domain")
+            elapsed = time.monotonic() - t0
+        assert elapsed < 0.2
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# OPSEC manifest — single integration assertion across primitives
+# ──────────────────────────────────────────────────────────────────────────
+
+
+class TestOpsecManifest:
+    """Single end-to-end test verifying that when paranoid is bound
+    to the registry, the wire reflects ALL of:
+
+      - Proxy URL injected into the httpx client.
+      - User-Agent rotates across calls.
+      - Rate limiter spaces calls per source.
+      - Profile jitter adds non-zero per-call delay.
+
+    The other test classes pin each primitive in isolation. This
+    one pins the composition ── the assertion is that none of them
+    bypass each other when stacked. Uses a synthetic-rate profile
+    to keep wall-clock manageable."""
+
+    @patch("nexusrecon.core.config.NexusConfig.get_secret", return_value="fake-key")
+    async def test_all_primitives_take_effect_in_one_run(self, _secret):
+        profile = _dc_replace(
+            get_profile("paranoid"),
+            # Compress the wall-clock so the test runs in <1s.
+            request_delay_min=0.05,
+            request_delay_max=0.10,
+            source_rates={"default": 1000.0, "shodan": 1000.0},
+            burst_detection_enabled=False,
+        )
+        proxy_mgr = ProxyManager(
+            proxy_url="http://127.0.0.1:18080",
+        )
+        rate_limiter = SourceRateLimiter(
+            source_rates=profile.source_rates,
+            burst_detection_enabled=False,
+        )
+        registry = _build_registry_with_tool(
+            ShodanTool(),
+            stealth_profile=profile,
+            rate_limiter=rate_limiter,
+            proxy_manager=proxy_mgr,
+        )
+
+        # Capture the proxy kwarg at client init + UA header at
+        # request-time (the two live in different layers — proxy is
+        # an AsyncClient construction kwarg, UA is a per-request
+        # header — so we hook both).
+        seen_proxies: list[str | None] = []
+        seen_uas: set[str] = set()
+
+        real_init = httpx.AsyncClient.__init__
+
+        def _record_init(self, *args, **kwargs):
+            seen_proxies.append(kwargs.get("proxy"))
+            return real_init(self, *args, **kwargs)
+
+        def _record_request(request: httpx.Request):
+            ua = request.headers.get("User-Agent", "")
+            if ua:
+                seen_uas.add(ua)
+            return Response(200, json={"matches": [], "total": 0})
+
+        N = 4
+        with respx.mock, patch.object(
+            httpx.AsyncClient, "__init__", _record_init,
+        ):
+            respx.get(url__startswith="https://api.shodan.io").mock(
+                side_effect=_record_request,
+            )
+            t0 = time.monotonic()
+            for _ in range(N):
+                await registry.execute("shodan", "example.com", "domain")
+            elapsed = time.monotonic() - t0
+
+        # Proxy: every call carried the manager's URL.
+        assert all(p == "http://127.0.0.1:18080" for p in seen_proxies), (
+            f"some calls bypassed the proxy: {seen_proxies}"
+        )
+        # UA: at least 2 distinct values across 4 calls. Random
+        # sampling could theoretically collide on a tiny pool, but
+        # the default pool is 14+ entries so 4 picks with collision
+        # are vanishingly rare.
+        assert len(seen_uas) >= 2, (
+            f"UA rotation absent across {N} calls: only saw {seen_uas}"
+        )
+        # Jitter: N calls × 0.05s floor = ~0.2s floor. We can't
+        # tighten the ceiling without flakiness, but the floor is
+        # the load-bearing assertion ── if jitter is silently
+        # disabled, elapsed collapses to <0.1s.
+        assert elapsed >= 0.15, (
+            f"jitter not observed across {N} calls: elapsed={elapsed:.3f}s"
+        )
