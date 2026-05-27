@@ -13,6 +13,9 @@ langchain-ollama>=0.2.0
 pydantic>=2.7.0
 pydantic-settings>=2.3.0
 
+# ── Cryptography (Ed25519 signed bundles) ───────────────────────────────────
+cryptography>=42.0.0
+
 # ── CLI / TUI ───────────────────────────────────────────────────────────────
 typer[all]>=0.12.0
 rich>=13.7.0

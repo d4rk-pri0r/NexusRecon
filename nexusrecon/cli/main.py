@@ -2292,6 +2292,233 @@ def watch_remove(
         console.print(f"[red]✗[/red] could not remove {watch_id}")
 
 
+# ── Phase 5 PR B: Provenance cryptography ────────────────────────────
+
+
+keys_app = typer.Typer(
+    help=(
+        "Manage Ed25519 keypairs used to sign STIX bundles + "
+        "verify provenance receipts."
+    ),
+)
+app.add_typer(keys_app, name="keys")
+
+
+@keys_app.command("generate")
+def keys_generate(
+    key_id: str = typer.Argument(..., help="Stable id for this key (e.g. corp-red-team-2026)."),
+    label: str = typer.Option("", "--label", help="Free-form label shown in `keys list`."),
+    overwrite: bool = typer.Option(False, "--overwrite", help="Replace an existing key with this id."),
+) -> None:
+    """Generate a new Ed25519 keypair. Prompts for the
+    passphrase that encrypts the private key on disk."""
+    from rich.prompt import Prompt
+
+    from nexusrecon.crypto import generate_keypair
+
+    passphrase = Prompt.ask(
+        "[bold cyan]Passphrase[/bold cyan] for the new private key",
+        password=True,
+    )
+    confirm = Prompt.ask(
+        "[bold cyan]Confirm passphrase[/bold cyan]",
+        password=True,
+    )
+    if passphrase != confirm:
+        console.print("[red]Passphrases do not match.[/red]")
+        raise typer.Exit(1)
+
+    try:
+        keypair = generate_keypair(
+            key_id, passphrase, label=label, overwrite=overwrite,
+        )
+    except (ValueError, FileExistsError) as exc:
+        console.print(f"[red]Key generation failed:[/red] {exc}")
+        raise typer.Exit(1)
+
+    console.print(
+        Panel(
+            (
+                f"[bold green]Keypair generated.[/bold green]\n"
+                f"  key_id:       [cyan]{keypair.metadata.key_id}[/cyan]\n"
+                f"  fingerprint:  [cyan]{keypair.metadata.fingerprint}[/cyan]\n"
+                f"  label:        [cyan]{keypair.metadata.label or '(none)'}[/cyan]\n"
+                f"  created_at:   [cyan]{keypair.metadata.created_at}[/cyan]\n\n"
+                f"Sign a bundle:\n"
+                f"  [bold]nexusrecon sign <campaign-id> --key-id {key_id}[/bold]"
+            ),
+            title="✓ keys generate",
+            border_style="green",
+        )
+    )
+
+
+@keys_app.command("list")
+def keys_list() -> None:
+    """Enumerate keypairs (metadata only — private keys
+    stay encrypted)."""
+    from nexusrecon.crypto import list_keypairs
+
+    keys = list_keypairs()
+    if not keys:
+        console.print("[yellow]No keypairs configured.[/yellow]")
+        return
+    for k in keys:
+        console.print(
+            f"[cyan]{k.key_id}[/cyan]  "
+            f"fp={k.fingerprint[:24]}…  "
+            f"created={k.created_at[:10]}"
+            + (f"  — {k.label}" if k.label else "")
+        )
+
+
+@keys_app.command("export-public")
+def keys_export_public(
+    key_id: str = typer.Argument(...),
+    output: str = typer.Option(
+        None, "--output", "-o",
+        help="Where to write the public PEM. Defaults to ./<key_id>.pub.pem",
+    ),
+) -> None:
+    """Export the public PEM for distribution to verifiers."""
+    from nexusrecon.crypto.keys import resolve_key_dir
+
+    root = resolve_key_dir()
+    source = root / key_id / "public.pem"
+    if not source.exists():
+        console.print(f"[red]No public key for {key_id!r}.[/red]")
+        raise typer.Exit(1)
+    dest = Path(output) if output else Path.cwd() / f"{key_id}.pub.pem"
+    dest.write_bytes(source.read_bytes())
+    console.print(f"[green]✓ wrote[/green] [cyan]{dest}[/cyan]")
+
+
+@app.command("sign")
+def sign_cmd(
+    campaign_id: str = typer.Argument(
+        ..., help="Campaign id whose STIX bundle to sign.",
+    ),
+    key_id: str = typer.Option(
+        ..., "--key-id",
+        help="Signing keypair (must already exist).",
+    ),
+    bundle_path: str | None = typer.Option(
+        None, "--bundle",
+        help=(
+            "Path to the STIX bundle to sign. Defaults to "
+            "the campaign's stix2-bundle.json."
+        ),
+    ),
+) -> None:
+    """Sign a STIX bundle with an Ed25519 keypair."""
+    from rich.prompt import Prompt
+
+    from nexusrecon.crypto import load_keypair, sign_bundle
+
+    # Resolve the bundle path.
+    config = get_config()
+    output_dir = Path(config.output_dir)
+    if bundle_path:
+        bundle = Path(bundle_path).expanduser().resolve()
+    else:
+        bundle = None
+        for candidate in output_dir.rglob(campaign_id):
+            if candidate.is_dir():
+                bp = candidate / "stix2-bundle.json"
+                if bp.exists():
+                    bundle = bp
+                    break
+        if bundle is None:
+            console.print(
+                f"[red]No stix2-bundle.json found for campaign "
+                f"{campaign_id!r}. Run `nexusrecon export "
+                f"{campaign_id} --format stix2` first or pass "
+                f"--bundle.[/red]"
+            )
+            raise typer.Exit(1)
+
+    passphrase = Prompt.ask(
+        f"[bold cyan]Passphrase[/bold cyan] for key "
+        f"[cyan]{key_id}[/cyan]",
+        password=True,
+    )
+    try:
+        keypair = load_keypair(key_id, passphrase)
+    except (FileNotFoundError, ValueError) as exc:
+        console.print(f"[red]Key load failed:[/red] {exc}")
+        raise typer.Exit(1)
+
+    try:
+        receipt = sign_bundle(bundle, keypair)
+    except Exception as exc:
+        console.print(f"[red]Sign failed:[/red] {exc}")
+        raise typer.Exit(1)
+
+    receipt_path = bundle.with_name(bundle.name + ".receipt.json")
+    console.print(
+        Panel(
+            (
+                f"[bold green]Signed.[/bold green]\n"
+                f"  bundle:       [cyan]{bundle}[/cyan]\n"
+                f"  receipt:      [cyan]{receipt_path}[/cyan]\n"
+                f"  bundle hash:  [cyan]{receipt.bundle_hash}[/cyan]\n"
+                f"  signer:       [cyan]{receipt.signer_key_id}[/cyan]\n"
+                f"  fingerprint:  [cyan]{receipt.signer_fingerprint}[/cyan]\n\n"
+                f"Verify: [bold]nexusrecon verify {bundle} "
+                f"{receipt_path} <public-key.pem>[/bold]"
+            ),
+            title="✓ sign",
+            border_style="green",
+        )
+    )
+
+
+@app.command("verify")
+def verify_cmd(
+    bundle_path: str = typer.Argument(..., help="Path to the signed bundle."),
+    receipt_path: str = typer.Argument(..., help="Path to the .receipt.json."),
+    public_key_path: str = typer.Argument(..., help="Path to the signer's public PEM."),
+    expected_key_id: str | None = typer.Option(
+        None, "--expected-key-id",
+        help="Fail if the receipt's signer key_id differs.",
+    ),
+    expected_fingerprint: str | None = typer.Option(
+        None, "--expected-fingerprint",
+        help="Fail if the supplied key's fingerprint differs.",
+    ),
+) -> None:
+    """Verify a signed STIX bundle. Exit code 0 on success,
+    1 on any verification failure."""
+    from nexusrecon.crypto import VerificationError, verify_bundle
+
+    try:
+        receipt = verify_bundle(
+            bundle_path, receipt_path, public_key_path,
+            expected_key_id=expected_key_id,
+            expected_fingerprint=expected_fingerprint,
+        )
+    except FileNotFoundError as exc:
+        console.print(f"[red]✗ verify:[/red] {exc}")
+        raise typer.Exit(1)
+    except VerificationError as exc:
+        console.print(f"[red]✗ verify:[/red] {exc}")
+        raise typer.Exit(1)
+
+    console.print(
+        Panel(
+            (
+                f"[bold green]OK — signature verifies.[/bold green]\n"
+                f"  signer:       [cyan]{receipt.signer_key_id}[/cyan]\n"
+                f"  fingerprint:  [cyan]{receipt.signer_fingerprint}[/cyan]\n"
+                f"  signed_at:    [cyan]{receipt.signed_at}[/cyan]\n"
+                f"  bundle hash:  [cyan]{receipt.bundle_hash}[/cyan]"
+            ),
+            title="✓ verify",
+            border_style="green",
+        )
+    )
+
+
 def main() -> None:
     """Entry point for the nexusrecon CLI."""
     app()
