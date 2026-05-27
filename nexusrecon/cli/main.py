@@ -10,6 +10,7 @@ from pathlib import Path
 
 import structlog
 import typer
+import yaml
 from rich.console import Console
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
@@ -1670,6 +1671,169 @@ def policy_new(
                 f"  [bold]nexusrecon run --dispatch-mode {name} ...[/bold]"
             ),
             title="✓ policy new",
+            border_style="green",
+        )
+    )
+
+
+# ── Phase 4 PR A: NL campaign planner ────────────────────────────────
+
+
+@app.command()
+def plan(
+    sentence: str | None = typer.Argument(
+        None,
+        help=(
+            "Natural-language description of the campaign. "
+            "When omitted, runs an interactive walk-through."
+        ),
+    ),
+    output_dir: str | None = typer.Option(
+        None, "--output-dir", "-o",
+        help=(
+            "Directory to write scope.yaml + strategy.json. "
+            "Omit to print only."
+        ),
+    ),
+    no_llm: bool = typer.Option(
+        False, "--no-llm",
+        help=(
+            "Force the deterministic regex extractor (no LLM "
+            "round-trip). Useful in air-gapped runs + tests."
+        ),
+    ),
+    interactive: bool = typer.Option(
+        False, "--interactive", "-i",
+        help=(
+            "Force the interactive walk-through even when a "
+            "sentence is provided."
+        ),
+    ),
+) -> None:
+    """Convert a natural-language goal into a scope.yaml +
+    Strategy. Operator confirmation is REQUIRED before any
+    files are written.
+    """
+    from rich.prompt import Confirm, Prompt
+
+    from nexusrecon.intent import plan_from_intent
+
+    # Acquire the sentence — interactive when not supplied.
+    if sentence is None or interactive:
+        if sentence is None:
+            console.print(
+                "[bold cyan]Intent Planner[/bold cyan] — "
+                "describe what you want this campaign to do."
+            )
+            sentence = Prompt.ask(
+                "[bold]Intent[/bold]",
+                default=sentence or "",
+            )
+        if not sentence.strip():
+            console.print("[red]No intent provided.[/red]")
+            raise typer.Exit(1)
+
+    result = plan_from_intent(
+        sentence, prefer_fallback=no_llm,
+    )
+
+    # Render the proposed plan + warnings.
+    intent = result.intent
+    console.print(Panel(
+        (
+            f"[bold]Confidence:[/bold] [cyan]{intent.confidence}[/cyan]\n"
+            f"[bold]Targets:[/bold] "
+            f"[cyan]{', '.join(intent.targets) or '(none)'}[/cyan]\n"
+            f"[bold]Intent categories:[/bold] "
+            f"[cyan]{', '.join(intent.intent_categories) or '(none)'}[/cyan]\n"
+            f"[bold]Tier ceiling:[/bold] [cyan]{intent.max_tier}[/cyan]\n"
+            f"[bold]Stealth profile:[/bold] [cyan]{intent.stealth_profile}[/cyan]\n"
+            f"[bold]Dispatch policy:[/bold] [cyan]{intent.dispatch_policy_name}[/cyan]\n"
+            f"[bold]Strategy phases:[/bold] "
+            f"[cyan]{', '.join(result.strategy.phases)}[/cyan]\n"
+            + (f"\n[dim]Rationale:[/dim] {intent.rationale}"
+               if intent.rationale else "")
+        ),
+        title="✓ Parsed intent",
+        border_style="cyan",
+    ))
+
+    if result.warnings:
+        console.print("[yellow]Warnings:[/yellow]")
+        for w in result.warnings:
+            console.print(f"  ⚠  {w}")
+
+    # Interactive refinements: only ask in interactive mode
+    # or when explicitly invoked without a sentence.
+    if (sentence and not interactive) and (
+        # One-shot mode with a sentence + no output dir: just
+        # print.
+        not output_dir
+    ):
+        return
+
+    if output_dir is None:
+        if not Confirm.ask(
+            "Write scope.yaml + strategy.json?",
+            default=False,
+        ):
+            console.print("[dim]Not written.[/dim]")
+            return
+        output_dir = Prompt.ask(
+            "Output directory",
+            default=str(Path.cwd() / "campaigns" / "intent-draft"),
+        )
+
+    out_path = Path(output_dir).expanduser().resolve()
+    out_path.mkdir(parents=True, exist_ok=True)
+
+    # Final confirmation prompt — Auditability First. Never
+    # auto-write from a single LLM-extracted record.
+    if not Confirm.ask(
+        f"Write to [cyan]{out_path}[/cyan]?", default=True,
+    ):
+        console.print("[dim]Not written.[/dim]")
+        return
+
+    import json as _json
+    scope_path = out_path / "scope.yaml"
+    strategy_path = out_path / "strategy.json"
+
+    # Strip the meta fields from the scope dict before YAML
+    # serialisation, surface them as comments instead.
+    scope_dict = dict(result.scope_stub)
+    meta_header_lines: list[str] = []
+    for meta_key in (
+        "_generated_by", "_intent_rationale",
+        "_intent_confidence", "_intent_raw",
+    ):
+        value = scope_dict.pop(meta_key, None)
+        if value:
+            meta_header_lines.append(f"# {meta_key[1:]}: {value}")
+
+    header = "\n".join(meta_header_lines) + "\n\n" if meta_header_lines else ""
+    scope_path.write_text(
+        header + yaml.safe_dump(scope_dict, sort_keys=False, default_flow_style=False),
+        encoding="utf-8",
+    )
+    strategy_path.write_text(
+        _json.dumps(result.strategy.to_dict(), indent=2, default=str),
+        encoding="utf-8",
+    )
+
+    console.print(
+        Panel(
+            (
+                f"[bold green]Plan written.[/bold green]\n"
+                f"  scope:     [cyan]{scope_path}[/cyan]\n"
+                f"  strategy:  [cyan]{strategy_path}[/cyan]\n\n"
+                f"Next:\n"
+                f"  1. Review [cyan]{scope_path.name}[/cyan] — "
+                f"replace REPLACE_ME placeholders.\n"
+                f"  2. Launch: [bold]nexusrecon run "
+                f"--scope {scope_path}[/bold]"
+            ),
+            title="✓ nexusrecon plan",
             border_style="green",
         )
     )
