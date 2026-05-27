@@ -1,0 +1,179 @@
+"""Jira ticket emitter.
+
+The Jira REST API accepts ``POST /rest/api/2/issue`` with a
+body shape like::
+
+    {
+      "fields": {
+        "project": {"key": "SEC"},
+        "summary": "...",
+        "description": "...",
+        "issuetype": {"name": "Bug"},
+        "priority": {"name": "High"},
+        "labels": ["recon", "nexusrecon"]
+      }
+    }
+
+We emit a NDJSON file (one JSON object per line) so the
+operator can stream it into Jira via curl::
+
+    while IFS= read -r line; do
+      curl -X POST ... -d "$line"
+    done < jira-tickets.ndjson
+
+Or feed it into a SOAR playbook.
+
+Field mapping
+- ``summary`` ← finding title (truncated to 255 chars for
+  Jira limits).
+- ``description`` ← multi-line block with confidence,
+  severity, affected assets, source, and the description
+  body.
+- ``priority`` ← finding severity, mapped through Jira's
+  canonical priority names (Highest/High/Medium/Low/Lowest).
+- ``labels`` ← finding category (sanitised) + ``nexusrecon``.
+- ``project.key`` ← operator-supplied (CLI flag).
+"""
+from __future__ import annotations
+
+import json
+import re
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+
+# Jira canonical priority names. NexusRecon severity strings
+# map onto these so the emitted body lands cleanly.
+_SEVERITY_TO_PRIORITY: dict[str, str] = {
+    "critical": "Highest",
+    "high":     "High",
+    "medium":   "Medium",
+    "low":      "Low",
+    "info":     "Lowest",
+}
+
+
+_SUMMARY_MAX = 255  # Jira's field limit
+_LABEL_PATTERN = re.compile(r"[^a-zA-Z0-9_-]+")
+
+
+def _sanitize_label(s: str) -> str:
+    """Jira labels can't contain spaces or punctuation.
+    Replace runs of non-allowed characters with underscores
+    and trim leading / trailing underscores."""
+    cleaned = _LABEL_PATTERN.sub("_", s.strip())
+    return cleaned.strip("_") or "uncategorised"
+
+
+@dataclass
+class JiraIssue:
+    """One ticket-shaped record. Equivalent to the body of a
+    Jira ``POST /rest/api/2/issue`` call."""
+
+    summary: str
+    description: str
+    priority: str
+    labels: list[str]
+    project_key: str
+    issue_type: str = "Bug"
+
+    extra_fields: dict[str, Any] = field(default_factory=dict)
+    """Operator overrides — e.g. ``{"customfield_10001": "..."}``
+    for orgs that pipe NexusRecon findings into a custom
+    field. Merged into ``fields`` last so they win on key
+    collision."""
+
+    def to_jira_body(self) -> dict[str, Any]:
+        """The exact shape Jira's REST API expects."""
+        fields: dict[str, Any] = {
+            "project": {"key": self.project_key},
+            "summary": self.summary,
+            "description": self.description,
+            "issuetype": {"name": self.issue_type},
+            "priority": {"name": self.priority},
+            "labels": list(self.labels),
+        }
+        fields.update(self.extra_fields)
+        return {"fields": fields}
+
+
+@dataclass
+class JiraTicketEmitter:
+    """Convert a campaign's findings → Jira-shaped JSON."""
+
+    project_key: str
+    """Operator-supplied. We don't try to autodetect."""
+
+    issue_type: str = "Bug"
+    extra_labels: list[str] = field(default_factory=list)
+    """Constant labels appended to every emitted issue."""
+
+    def issues_from_findings(
+        self,
+        findings: list[dict[str, Any]],
+    ) -> list[JiraIssue]:
+        """Convert a state['findings'] list into JiraIssue
+        instances. Skips entries that can't be parsed as
+        dicts."""
+        issues: list[JiraIssue] = []
+        for finding in findings:
+            if not isinstance(finding, dict):
+                continue
+            issues.append(self._issue_from_finding(finding))
+        return issues
+
+    def _issue_from_finding(self, finding: dict[str, Any]) -> JiraIssue:
+        title = (finding.get("title") or "Untitled finding")[:_SUMMARY_MAX]
+        severity = str(finding.get("severity") or "info").lower()
+        priority = _SEVERITY_TO_PRIORITY.get(severity, "Medium")
+        category = str(finding.get("category") or "")
+        labels = ["nexusrecon"]
+        if category:
+            labels.append(_sanitize_label(category))
+        labels.extend(_sanitize_label(l) for l in self.extra_labels)
+
+        # Multi-line Jira description.
+        assets = ", ".join(finding.get("affected_assets") or []) or "(none)"
+        mitre = ", ".join(finding.get("mitre_techniques") or []) or ""
+        confidence = float(finding.get("confidence") or 0.0)
+        body_lines = [
+            f"*Severity:* {severity.upper()}",
+            f"*Confidence:* {confidence:.0%}",
+            f"*Category:* {category or '(none)'}",
+            f"*Source:* {finding.get('source') or '(unknown)'}",
+            f"*Affected assets:* {assets}",
+        ]
+        if mitre:
+            body_lines.append(f"*MITRE ATT&CK:* {mitre}")
+        body_lines.extend([
+            "",
+            "*Description*",
+            str(finding.get("description") or "(no description)"),
+            "",
+            "_Generated by NexusRecon — review before remediation._",
+        ])
+        description = "\n".join(body_lines)
+        return JiraIssue(
+            summary=title,
+            description=description,
+            priority=priority,
+            labels=labels,
+            project_key=self.project_key,
+            issue_type=self.issue_type,
+        )
+
+    def write_ndjson(
+        self,
+        findings: list[dict[str, Any]],
+        out_path: Path | str,
+    ) -> Path:
+        """Write one Jira issue body per line. Returns the
+        resolved path."""
+        out = Path(out_path).expanduser()
+        out.parent.mkdir(parents=True, exist_ok=True)
+        issues = self.issues_from_findings(findings)
+        with open(out, "w", encoding="utf-8") as f:
+            for issue in issues:
+                f.write(json.dumps(issue.to_jira_body()) + "\n")
+        return out

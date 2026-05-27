@@ -908,7 +908,11 @@ def tools_check() -> None:
 @app.command()
 def export(
     campaign_id: str = typer.Argument(..., help="Campaign ID to export"),
-    fmt: str = typer.Option("csv", "--format", "-f", help="Export format: csv, json, markdown, stix2"),
+    fmt: str = typer.Option("csv", "--format", "-f", help="Export format: csv, json, markdown, stix2, jira, nuclei-targets, cobaltstrike-profile"),
+    jira_project: str = typer.Option(
+        "SEC", "--jira-project",
+        help="Jira project key for --format jira.",
+    ),
     output: str | None = typer.Option(None, "--output", "-o", help="Output file path"),
 ) -> None:
     """Export campaign findings to CSV, JSON, or Markdown."""
@@ -954,6 +958,50 @@ def export(
                 ])
     elif fmt == "json":
         out_path.write_text(json.dumps(findings, indent=2, default=str), encoding="utf-8")
+    elif fmt == "jira":
+        from nexusrecon.export.downstream import JiraTicketEmitter
+        emitter = JiraTicketEmitter(project_key=jira_project)
+        emitter.write_ndjson(findings, out_path)
+        console.print(
+            f"[green]✓ Jira NDJSON:[/green] [cyan]{out_path}[/cyan]\n"
+            f"  issues: [cyan]{len(findings)}[/cyan]\n"
+            f"  project key: [cyan]{jira_project}[/cyan]\n"
+            f"  next: stream into Jira with curl per line."
+        )
+        return
+    elif fmt == "nuclei-targets":
+        from nexusrecon.core.entity_graph import EntityGraph
+        from nexusrecon.export.downstream import emit_nuclei_targets
+        graph = EntityGraph.from_state(
+            data,
+            campaign_id=data.get("campaign_id", ""),
+            engagement_id=data.get("engagement_id", ""),
+        )
+        out, targets = emit_nuclei_targets(graph, out_path)
+        console.print(
+            f"[green]✓ Nuclei target list:[/green] [cyan]{out}[/cyan]\n"
+            f"  targets: [cyan]{len(targets)}[/cyan]\n"
+            f"  next: [bold]nuclei -list {out} -t cves/[/bold]"
+        )
+        return
+    elif fmt == "cobaltstrike-profile":
+        from nexusrecon.core.entity_graph import EntityGraph
+        from nexusrecon.export.downstream import (
+            emit_cobaltstrike_profile_stub,
+        )
+        graph = EntityGraph.from_state(
+            data,
+            campaign_id=data.get("campaign_id", ""),
+            engagement_id=data.get("engagement_id", ""),
+        )
+        out = emit_cobaltstrike_profile_stub(graph, out_path)
+        console.print(
+            f"[green]✓ Cobalt Strike profile stub:[/green] "
+            f"[cyan]{out}[/cyan]\n"
+            f"  [yellow]Review + tune tradecraft fields "
+            f"before deploying.[/yellow]"
+        )
+        return
     elif fmt == "stix2":
         # Phase 4 PR B: STIX 2.1 Bundle export. Rebuilds the
         # EntityGraph from state["entity_graph"] (Phase 0
