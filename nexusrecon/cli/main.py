@@ -908,7 +908,7 @@ def tools_check() -> None:
 @app.command()
 def export(
     campaign_id: str = typer.Argument(..., help="Campaign ID to export"),
-    fmt: str = typer.Option("csv", "--format", "-f", help="Export format: csv, json, markdown"),
+    fmt: str = typer.Option("csv", "--format", "-f", help="Export format: csv, json, markdown, stix2"),
     output: str | None = typer.Option(None, "--output", "-o", help="Output file path"),
 ) -> None:
     """Export campaign findings to CSV, JSON, or Markdown."""
@@ -954,6 +954,36 @@ def export(
                 ])
     elif fmt == "json":
         out_path.write_text(json.dumps(findings, indent=2, default=str), encoding="utf-8")
+    elif fmt == "stix2":
+        # Phase 4 PR B: STIX 2.1 Bundle export. Rebuilds the
+        # EntityGraph from state["entity_graph"] (Phase 0
+        # made this serialised round-trip a first-class
+        # capability) and runs it through the STIX
+        # serialiser.
+        from nexusrecon.core.entity_graph import EntityGraph
+        from nexusrecon.export import build_stix_bundle
+
+        graph = EntityGraph.from_state(
+            data,
+            campaign_id=data.get("campaign_id", ""),
+            engagement_id=data.get("engagement_id", ""),
+        )
+        bundle = build_stix_bundle(
+            graph,
+            scope_hash=data.get("scope_hash", ""),
+            campaign_id=data.get("campaign_id", campaign_id),
+        )
+        out_path.write_text(bundle.to_json(), encoding="utf-8")
+        console.print(
+            f"[green]✓ STIX 2.1 bundle:[/green] "
+            f"[cyan]{out_path}[/cyan]\n"
+            f"  objects: [cyan]{bundle.counts.get('total_objects', 0)}[/cyan]"
+        )
+        for kind, count in sorted(bundle.counts.items()):
+            if kind == "total_objects":
+                continue
+            console.print(f"  {kind}: [cyan]{count}[/cyan]")
+        return
     elif fmt == "markdown":
         lines = ["# Findings Export", "", f"**Campaign:** {campaign_id}", ""]
         for i, f_item in enumerate(findings, 1):
