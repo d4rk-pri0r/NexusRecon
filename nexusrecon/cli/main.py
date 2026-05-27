@@ -1442,6 +1442,239 @@ def agent_new(
     )
 
 
+# ── Phase 3 PR C2: Tool + policy scaffolders ─────────────────────────
+
+
+tool_app = typer.Typer(
+    help="Scaffold new OSINTTool subclasses inside a pack.",
+)
+app.add_typer(tool_app, name="tool")
+
+
+@tool_app.command("new")
+def tool_new(
+    name: str | None = typer.Option(None, "--name"),
+    description: str | None = typer.Option(None, "--description"),
+    category: str | None = typer.Option(None, "--category"),
+    tier: str | None = typer.Option(None, "--tier"),
+    target_types: str | None = typer.Option(
+        None, "--target-types",
+        help="Comma-separated, e.g. 'domain,subdomain'.",
+    ),
+    cost: float = typer.Option(0.0, "--cost"),
+    pack: str | None = typer.Option(None, "--pack"),
+    pack_name: str | None = typer.Option(None, "--pack-name"),
+) -> None:
+    """Generate a new tool. Interactive capability picker for
+    category / target_types / tier when flags are omitted."""
+    from rich.prompt import IntPrompt, Prompt
+
+    from nexusrecon.packs.loader import _resolve_pack_dir
+    from nexusrecon.sdk.tool_scaffolder import (
+        ToolScaffoldInputs,
+        scaffold_tool,
+        validate_tool_inputs,
+    )
+    from nexusrecon.tools.base import Category, Tier
+
+    # Pack target
+    pack_choice = pack
+    if pack_choice is None:
+        pack_choice = Prompt.ask(
+            "[bold cyan]Pack target[/bold cyan] — 'new' or "
+            "path to existing pack",
+            default="new",
+        )
+    if pack_choice == "new":
+        is_new_pack = True
+        pn = pack_name or Prompt.ask(
+            "[bold cyan]New pack name[/bold cyan] (kebab-case)",
+        )
+        target = _resolve_pack_dir(None) / pn
+        pack_slug = pn
+    else:
+        is_new_pack = False
+        target = Path(pack_choice).expanduser().resolve()
+        if not (target / "manifest.yaml").exists():
+            console.print(f"[red]No manifest.yaml at {target}.[/red]")
+            raise typer.Exit(1)
+        pack_slug = ""
+
+    # Tool identity + capabilities
+    if name is None:
+        name = Prompt.ask("[bold cyan]Tool slug[/bold cyan] (snake_case)")
+    if description is None:
+        description = Prompt.ask(
+            "[bold cyan]Description[/bold cyan] "
+            "(one-line capability summary)"
+        )
+
+    if category is None:
+        choices = sorted(c.value for c in Category)
+        console.print(
+            "[bold cyan]Category[/bold cyan] — pick one of: "
+            + ", ".join(choices)
+        )
+        category = Prompt.ask("category", choices=choices)
+    if tier is None:
+        tier = Prompt.ask(
+            "[bold cyan]Tier[/bold cyan] — invasiveness band",
+            choices=[t.value for t in Tier],
+            default="T0",
+        )
+    if target_types is None:
+        raw = Prompt.ask(
+            "[bold cyan]Target types[/bold cyan] "
+            "(comma-separated, e.g. 'domain,subdomain')",
+            default="domain",
+        )
+        targets = [t.strip() for t in raw.split(",") if t.strip()]
+    else:
+        targets = [t.strip() for t in target_types.split(",") if t.strip()]
+
+    inputs = ToolScaffoldInputs(
+        tool_name=name, description=description,
+        category=category, tier=tier,
+        target_types=targets, cost_per_run_usd=cost,
+        pack_target=target, is_new_pack=is_new_pack,
+        pack_name=pack_slug if is_new_pack else "",
+    )
+    try:
+        validate_tool_inputs(inputs)
+        result = scaffold_tool(inputs)
+    except (ValueError, FileExistsError, FileNotFoundError) as exc:
+        console.print(f"[red]Scaffolding failed:[/red] {exc}")
+        raise typer.Exit(1)
+
+    console.print(
+        Panel(
+            (
+                f"[bold green]Tool scaffolded.[/bold green]\n"
+                f"  module:    [cyan]{result.tool_module_path}[/cyan]\n"
+                f"  manifest:  [cyan]{result.manifest_path}[/cyan]\n"
+                + (
+                    f"  test:      [cyan]{result.test_path}[/cyan]\n"
+                    if result.test_path else ""
+                )
+                + "\nNext step: implement [bold].run()[/bold] in the "
+                "generated module."
+            ),
+            title="✓ tool new",
+            border_style="green",
+        )
+    )
+
+
+policy_app = typer.Typer(
+    help="Scaffold new DispatchPolicy subclasses inside a pack.",
+)
+app.add_typer(policy_app, name="policy")
+
+
+@policy_app.command("new")
+def policy_new(
+    name: str | None = typer.Option(None, "--name"),
+    description: str | None = typer.Option(None, "--description"),
+    max_per_cycle: int = typer.Option(5, "--max-per-cycle"),
+    max_total: int = typer.Option(30, "--max-total"),
+    eligible_phases: str | None = typer.Option(
+        None, "--eligible-phases",
+        help=(
+            "Comma-separated phase ids (empty list = all phases)."
+        ),
+    ),
+    pack: str | None = typer.Option(None, "--pack"),
+    pack_name: str | None = typer.Option(None, "--pack-name"),
+) -> None:
+    """Generate a new dispatch policy. Interactive picker for
+    eligible_phases when the flag is omitted."""
+    from rich.prompt import IntPrompt, Prompt
+
+    from nexusrecon.packs.loader import _resolve_pack_dir
+    from nexusrecon.sdk.policy_scaffolder import (
+        CANONICAL_PHASES,
+        PolicyScaffoldInputs,
+        scaffold_policy,
+        validate_policy_inputs,
+    )
+
+    pack_choice = pack
+    if pack_choice is None:
+        pack_choice = Prompt.ask(
+            "[bold cyan]Pack target[/bold cyan] — 'new' or "
+            "path to existing pack",
+            default="new",
+        )
+    if pack_choice == "new":
+        is_new_pack = True
+        pn = pack_name or Prompt.ask(
+            "[bold cyan]New pack name[/bold cyan] (kebab-case)",
+        )
+        target = _resolve_pack_dir(None) / pn
+        pack_slug = pn
+    else:
+        is_new_pack = False
+        target = Path(pack_choice).expanduser().resolve()
+        if not (target / "manifest.yaml").exists():
+            console.print(f"[red]No manifest.yaml at {target}.[/red]")
+            raise typer.Exit(1)
+        pack_slug = ""
+
+    if name is None:
+        name = Prompt.ask(
+            "[bold cyan]Policy slug[/bold cyan] (snake_case)",
+        )
+    if description is None:
+        description = Prompt.ask(
+            "[bold cyan]Description[/bold cyan] "
+            "(one-line policy summary)",
+        )
+
+    if eligible_phases is None:
+        console.print(
+            "[bold cyan]Eligible phases[/bold cyan] — comma-"
+            "separated subset of: "
+            + ", ".join(CANONICAL_PHASES)
+            + " (empty = every phase)"
+        )
+        raw = Prompt.ask("eligible_phases", default="")
+        phases = [p.strip() for p in raw.split(",") if p.strip()]
+    else:
+        phases = [p.strip() for p in eligible_phases.split(",") if p.strip()]
+
+    inputs = PolicyScaffoldInputs(
+        policy_name=name, description=description,
+        max_per_cycle=max_per_cycle, max_total=max_total,
+        eligible_phases=phases,
+        pack_target=target, is_new_pack=is_new_pack,
+        pack_name=pack_slug if is_new_pack else "",
+    )
+    try:
+        validate_policy_inputs(inputs)
+        result = scaffold_policy(inputs)
+    except (ValueError, FileExistsError, FileNotFoundError) as exc:
+        console.print(f"[red]Scaffolding failed:[/red] {exc}")
+        raise typer.Exit(1)
+
+    console.print(
+        Panel(
+            (
+                f"[bold green]Policy scaffolded.[/bold green]\n"
+                f"  module:    [cyan]{result.policy_module_path}[/cyan]\n"
+                f"  manifest:  [cyan]{result.manifest_path}[/cyan]\n"
+                + (
+                    f"  test:      [cyan]{result.test_path}[/cyan]\n"
+                    if result.test_path else ""
+                )
+                + f"\nSelect at runtime via:\n"
+                f"  [bold]nexusrecon run --dispatch-mode {name} ...[/bold]"
+            ),
+            title="✓ policy new",
+            border_style="green",
+        )
+    )
+
+
 def main() -> None:
     """Entry point for the nexusrecon CLI."""
     app()

@@ -49,6 +49,12 @@ from nexusrecon.sdk.citation_guard import (
     CitationViolation,
     validate_citations,
 )
+from nexusrecon.sdk.policy_scaffolder import (
+    PolicyScaffoldInputs,
+    PolicyScaffoldResult,
+    scaffold_policy,
+    validate_policy_inputs,
+)
 from nexusrecon.sdk.prompt_versioning import (
     PromptRecord,
     PromptVersionMismatch,
@@ -57,15 +63,29 @@ from nexusrecon.sdk.prompt_versioning import (
     list_registered_prompts,
     register_prompt,
 )
+from nexusrecon.sdk.tool_scaffolder import (
+    ToolScaffoldInputs,
+    ToolScaffoldResult,
+    scaffold_tool,
+    validate_tool_inputs,
+)
 
 __all__ = [
     "CitationReport",
     "CitationViolation",
+    "PolicyScaffoldInputs",
+    "PolicyScaffoldResult",
     "PromptRecord",
     "PromptVersionMismatch",
+    "ToolScaffoldInputs",
+    "ToolScaffoldResult",
     "compute_prompt_hash",
     "get_prompt_record",
     "list_registered_prompts",
     "register_prompt",
+    "scaffold_policy",
+    "scaffold_tool",
     "validate_citations",
+    "validate_policy_inputs",
+    "validate_tool_inputs",
 ]
