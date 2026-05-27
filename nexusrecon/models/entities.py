@@ -77,6 +77,56 @@ class RelationshipType(StrEnum):
     BLOCKS = "blocks"  # an open_question BLOCKS a downstream lead
 
 
+# ── Provenance (Phase 0.1) ───────────────────────────────────────────────────
+
+
+class ProvenanceRecord(BaseModel):
+    """One observation tying an entity to the tool that surfaced it.
+
+    Phase 0.1 of ``IMPLEMENTATION_PLAN_METASPLOIT_OSINT.md``:
+    the bare ``sources: list[str]`` was sufficient for the
+    Step 0.0 wire-up but loses the audit trail. With a typed
+    provenance record we can answer:
+
+      - "Which exact tool invocation surfaced this entity?"
+        (``tool_name`` + ``timestamp``)
+      - "What audit-log entry hashed the raw response?"
+        (``evidence_hash`` — links back to the hash-chained
+        audit log produced by ``audit.log_tool_result``)
+      - "How many independent sources corroborate this
+        entity?" (``len(provenance)`` with distinct
+        ``source`` values)
+
+    All fields except ``source`` are optional so legacy
+    code paths that only knew the tool name can still
+    record provenance without back-filling history.
+    """
+
+    source: str
+    """Short tool name / phase identifier — e.g. ``shodan``,
+    ``crtsh``, ``phase4_correlation``. Matches the
+    ``BaseEntity.sources`` legacy strings so the two surfaces
+    stay convertible."""
+
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    """When this source observed the entity. Distinct from
+    ``BaseEntity.first_seen`` (earliest across all sources)
+    and ``last_seen`` (most recent across all sources)."""
+
+    evidence_hash: str | None = None
+    """sha256 of the source's raw response — links back to the
+    audit log entry that hashed the same response. Used by
+    the verification engine in Phase 2 to detect when two
+    sources actually agreed on identical raw evidence vs.
+    independently arriving at the same conclusion."""
+
+    tool_name: str | None = None
+    """Tool class name when the source IS a tool (vs. an agent
+    or phase). For ``shodan`` source, ``tool_name`` would be
+    ``"ShodanTool"``. Phase / agent sources leave this
+    None."""
+
+
 # ── Base Entity ──────────────────────────────────────────────────────────────
 
 class BaseEntity(BaseModel):
@@ -90,14 +140,55 @@ class BaseEntity(BaseModel):
     first_seen: datetime = Field(default_factory=datetime.utcnow)
     last_seen: datetime = Field(default_factory=datetime.utcnow)
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+
+    # Phase 0.1: rich provenance ── one record per observation. The
+    # bare ``sources: list[str]`` survives as a derived view for the
+    # parts of the codebase that haven't migrated yet (most of it,
+    # at the time of this PR). Writers should prefer
+    # ``add_provenance(...)``; readers that only need source names
+    # can keep using ``sources``.
+    provenance: list[ProvenanceRecord] = Field(default_factory=list)
     sources: list[str] = Field(default_factory=list)
     engagement_id: str | None = None
+
+    # Phase 0.1: marker for entities the system INFERRED rather than
+    # observed directly. A ``possible_persona`` hypothesised by the
+    # personal-pivot tool is virtual; the real corp email it was
+    # derived from is not. Lets the verification engine treat them
+    # differently when computing corroboration scores.
+    is_virtual: bool = False
 
     def touch(self) -> None:
         """Update last_seen timestamp."""
         self.last_seen = datetime.utcnow()
 
     def add_source(self, source: str) -> None:
+        if source not in self.sources:
+            self.sources.append(source)
+        self.touch()
+
+    def add_provenance(
+        self,
+        source: str,
+        *,
+        timestamp: datetime | None = None,
+        evidence_hash: str | None = None,
+        tool_name: str | None = None,
+    ) -> None:
+        """Phase 0.1: add a typed provenance record.
+
+        Also mirrors ``source`` into the legacy ``sources``
+        list so old code paths that read ``sources`` see the
+        update — the two surfaces stay in sync without a full
+        migration of every reader.
+        """
+        record = ProvenanceRecord(
+            source=source,
+            timestamp=timestamp or datetime.utcnow(),
+            evidence_hash=evidence_hash,
+            tool_name=tool_name,
+        )
+        self.provenance.append(record)
         if source not in self.sources:
             self.sources.append(source)
         self.touch()

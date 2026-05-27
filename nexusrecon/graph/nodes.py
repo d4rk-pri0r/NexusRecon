@@ -630,12 +630,12 @@ async def phase4_correlation(state: CampaignGraphState) -> CampaignGraphState:
                 "email_count": len(emails),
                 "cloud_sources": list(cloud_intel.keys()),
                 "code_sources": list(code_intel.keys()),
-                # Step 0.0: graph-derived context. The agent sees
-                # counts, top-N per type, and the hypothesis /
-                # lead / open-question lists as graph summary —
-                # not just the bare strings from the flat
-                # state.
-                **graph_context.to_task_data(),
+                # Step 0.0 wired graph_summary into task_data;
+                # Phase 0.1 upgrades to ``for_phase`` so the
+                # summary subsets to entity types the
+                # correlation agent actually reasons over +
+                # adds the ``most_cited`` ranking.
+                **graph_context.for_phase("phase4_correlation"),
             },
             task_prompt="Correlate all intelligence findings. When using cloud intel, "
                         "check attribution_confidence — values below 0.5 indicate stem-match "
@@ -1600,7 +1600,11 @@ async def phase8_attack_surface(state: CampaignGraphState) -> CampaignGraphState
                 "total_scored": len(ranked_findings),
                 "confirmed_leads": state.get("confirmed_leads", []),
                 "enriched_cve_count": len(state.get("vuln_intel", {}).get("enriched_cves", {})),
-                **graph_context.to_task_data(),
+                # Phase 0.1: phase-aware subset for the risk
+                # analyst focuses on attack-surface entity
+                # types (subdomains, cloud assets, CVEs, URLs)
+                # rather than the full graph.
+                **graph_context.for_phase("phase8_attack_surface"),
             },
             task_prompt="You have been given the top 10 ranked attack threads produced by the scoring engine. "
                         "For each thread, provide: 1. The most likely exploitation path "

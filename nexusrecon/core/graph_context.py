@@ -135,6 +135,154 @@ class GraphContext:
 
     # ── Composite output for agents ─────────────────────────────
 
+    # ── Phase 0.1 phase-aware + most-cited summaries ────────────
+
+    def most_cited_entities(
+        self,
+        *,
+        limit: int = DEFAULT_TOP_N,
+        entity_types: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return entities ranked by inbound CITES + edge count.
+
+        "Most-cited" = how many hypotheses / leads / open-
+        questions point at this node, plus general inbound
+        edges from other entities. High values are the entities
+        the campaign's reasoning rests on the most ── the
+        single domain everyone keeps citing; the email that
+        five different tools surfaced.
+
+        Inverse of the existing ``top_entities()`` which sorts
+        by confidence — most-cited captures "what does the
+        campaign keep returning to," which a confidence
+        ranking misses (a low-confidence node many tools
+        cite is more interesting than a high-confidence
+        loner).
+
+        Args:
+            limit: Cap on returned entries.
+            entity_types: When provided, only nodes of these
+                types are considered (the citation counts
+                still include edges from any source type).
+        """
+        # Cheap inbound-degree count across all edge types.
+        # NetworkX's in_degree is O(1) per node.
+        scored: list[tuple[int, dict[str, Any]]] = []
+        for nid, data in self._g.graph.nodes(data=True):
+            if entity_types and data.get("entity_type") not in entity_types:
+                continue
+            in_deg = self._g.graph.in_degree(nid)
+            if in_deg == 0:
+                continue
+            scored.append((in_deg, dict(data)))
+        # Highest in-degree first; ties broken by confidence
+        # descending so a tie between a 1.0-confidence and a
+        # 0.5-confidence entity puts the operator-trustworthy
+        # one in front.
+        scored.sort(
+            key=lambda kv: (
+                -kv[0],
+                -float(kv[1].get("confidence", 0.0) or 0.0),
+            ),
+        )
+        return [data for _, data in scored[:limit]]
+
+    #: Per-phase entity-type focus. Maps a phase identifier to
+    #: the entity types whose top-N + most-cited lists are most
+    #: useful to that phase's agent. Phase 0.1 of the
+    #: METASPLOIT_PLAN: phase-specific subsets keep the prompt
+    #: budget under control on large campaigns ── the
+    #: correlation agent doesn't need every CVE the vuln phase
+    #: surfaced, just the entities and hypotheses to correlate.
+    PHASE_FOCUS_TYPES: dict[str, list[str]] = {
+        "phase4_correlation": [
+            "subdomain", "email", "person",
+            "cloud_asset", "repository",
+            "hypothesis", "lead", "open_question",
+        ],
+        "phase8_attack_surface": [
+            "subdomain", "cloud_asset", "secret", "cve",
+            "url", "technology",
+            "lead",
+        ],
+        "phase7_7_pretext_intelligence": [
+            "person", "email", "social_account", "username",
+            "organization",
+        ],
+        # Fallback for any phase not in the map: cover the high-
+        # signal types from to_task_data's defaults.
+        "default": [
+            "domain", "subdomain", "email", "person",
+            "cloud_asset", "repository", "secret",
+            "technology", "cve",
+        ],
+    }
+
+    def for_phase(
+        self, phase: str, *, top_n: int = DEFAULT_TOP_N,
+    ) -> dict[str, Any]:
+        """Phase-tailored summary for inclusion in an agent's
+        ``task_data``.
+
+        Builds the same shape as ``to_task_data()`` but
+        restricts ``top_entities`` + ``most_cited`` to the
+        types that phase actually reasons over (per
+        :data:`PHASE_FOCUS_TYPES`). Keeps the prompt budget
+        under control as the graph grows.
+
+        Schema (under ``graph_summary``):
+
+            {
+              "total_entities": int,
+              "total_relationships": int,
+              "by_type": {entity_type: count},
+              "top_entities": {entity_type: [values...]},
+              "most_cited": [{...node...}, ...],
+              "hypotheses": [...],
+              "leads": [...],
+              "open_questions": [...],
+              "phase": <phase identifier>,
+            }
+        """
+        focus = self.PHASE_FOCUS_TYPES.get(
+            phase, self.PHASE_FOCUS_TYPES["default"],
+        )
+        by_type = self.count_by_type()
+        top_per_type: dict[str, list[str]] = {}
+        for t in focus:
+            if t not in by_type:
+                continue
+            top_per_type[t] = [
+                str(r.get("value") or "")
+                for r in self.top_entities(t, limit=top_n)
+            ]
+        # Most-cited: cross-type ranking restricted to the
+        # focus types. Tells the agent which entities the
+        # current campaign keeps coming back to.
+        most_cited = [
+            {
+                "value": r.get("value"),
+                "entity_type": r.get("entity_type"),
+                "confidence": r.get("confidence"),
+            }
+            for r in self.most_cited_entities(
+                limit=top_n, entity_types=focus,
+            )
+        ]
+        return {
+            "graph_summary": {
+                "phase": phase,
+                "total_entities": self.total_entities(),
+                "total_relationships": self.total_relationships(),
+                "by_type": by_type,
+                "top_entities": top_per_type,
+                "most_cited": most_cited,
+                "hypotheses": self.hypotheses(limit=top_n),
+                "leads": self.leads(limit=top_n),
+                "open_questions": self.open_questions(limit=top_n),
+            },
+        }
+
     def to_task_data(self, *, top_n: int = DEFAULT_TOP_N) -> dict[str, Any]:
         """One-shot dict suitable for spreading into an agent's
         ``task_data``.

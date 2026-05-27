@@ -355,6 +355,156 @@ class EntityGraph:
         except nx.NetworkXNoPath:
             return None
 
+    # ── Phase 0.1 path-finding API ────────────────────────────────────────────
+
+    def find_paths(
+        self,
+        source_id: str,
+        target_id: str,
+        *,
+        max_length: int = 5,
+        relationship_types: list[RelationshipType] | None = None,
+        min_edge_confidence: float = 0.0,
+    ) -> list[list[str]]:
+        """Find ALL simple paths between two entities, with
+        filters.
+
+        The plan calls for ``graph.find_paths(from_entity,
+        to_entity, max_length=4, relationship_types=[
+        "controls", "owns"])``. This is that surface.
+
+        Args:
+            source_id: Starting entity id.
+            target_id: Destination entity id.
+            max_length: Cap on hops. Longer paths are pruned
+                during search so we don't enumerate the entire
+                graph for distant pairs.
+            relationship_types: When provided, only edges of
+                these types contribute to paths. ``None`` (the
+                default) accepts every edge type.
+            min_edge_confidence: Floor on edge confidence; edges
+                below the threshold are skipped. Useful for
+                "only show me paths through high-confidence
+                relationships".
+
+        Returns:
+            List of paths; each path is a list of entity_ids
+            in traversal order. Empty list when no qualifying
+            paths exist.
+        """
+        if source_id not in self.graph or target_id not in self.graph:
+            return []
+
+        # Build a view of the graph that drops edges failing the
+        # filter. NetworkX's ``subgraph_view`` is the canonical
+        # way to do this without copying nodes.
+        wanted_types: set[str] | None = None
+        if relationship_types:
+            wanted_types = {rt.value for rt in relationship_types}
+
+        def _edge_ok(u: str, v: str) -> bool:
+            data = self.graph.get_edge_data(u, v) or {}
+            if wanted_types is not None:
+                if data.get("rel_type") not in wanted_types:
+                    return False
+            if float(data.get("confidence", 1.0) or 0.0) < min_edge_confidence:
+                return False
+            return True
+
+        view = nx.subgraph_view(self.graph, filter_edge=_edge_ok)
+        try:
+            return list(
+                nx.all_simple_paths(
+                    view, source_id, target_id, cutoff=max_length,
+                ),
+            )
+        except (nx.NetworkXNoPath, nx.NodeNotFound):
+            return []
+
+    def get_attack_surface_nodes(
+        self,
+        *,
+        min_confidence: float = 0.6,
+        entity_types: list[EntityType] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return nodes that are candidates for the attack
+        surface ── high-confidence + (optionally) restricted
+        to attack-relevant types.
+
+        Default types when none provided: SUBDOMAIN, CLOUD_ASSET,
+        REPOSITORY, SECRET, CVE, URL — the entities a red-teamer
+        actively pivots into. Identity / Person / Hypothesis
+        are intentionally excluded; those are the WHO surface,
+        not the WHAT.
+        """
+        if entity_types is None:
+            entity_types = [
+                EntityType.SUBDOMAIN,
+                EntityType.CLOUD_ASSET,
+                EntityType.REPOSITORY,
+                EntityType.SECRET,
+                EntityType.CVE,
+                EntityType.URL,
+            ]
+        wanted = {t.value for t in entity_types}
+        out: list[dict[str, Any]] = []
+        for _, data in self.graph.nodes(data=True):
+            if data.get("entity_type") not in wanted:
+                continue
+            if float(data.get("confidence", 1.0) or 0.0) < min_confidence:
+                continue
+            out.append(dict(data))
+        return out
+
+    def get_neighbors_filtered(
+        self,
+        entity_id: str,
+        *,
+        edge_type: RelationshipType | None = None,
+        direction: str = "both",
+    ) -> list[dict[str, Any]]:
+        """Phase 0.1 surface from the plan:
+        ``graph.get_neighbors(entity_id, edge_type=
+        "has_credential", direction="out")``.
+
+        Args:
+            entity_id: Source/anchor entity.
+            edge_type: When provided, only neighbors reached via
+                this edge type are returned.
+            direction: ``"out"`` (successors), ``"in"``
+                (predecessors), or ``"both"``.
+        """
+        if entity_id not in self.graph:
+            return []
+        wanted_type: str | None = edge_type.value if edge_type else None
+        out: list[dict[str, Any]] = []
+        seen: set[str] = set()
+
+        def _walk(nodes_iter, get_data_for_edge) -> None:
+            for n in nodes_iter:
+                if n in seen:
+                    continue
+                if wanted_type:
+                    data = get_data_for_edge(n) or {}
+                    if data.get("rel_type") != wanted_type:
+                        continue
+                seen.add(n)
+                node_data = self.get_entity(n)
+                if node_data:
+                    out.append(node_data)
+
+        if direction in ("out", "both"):
+            _walk(
+                self.graph.successors(entity_id),
+                lambda n: self.graph.get_edge_data(entity_id, n),
+            )
+        if direction in ("in", "both"):
+            _walk(
+                self.graph.predecessors(entity_id),
+                lambda n: self.graph.get_edge_data(n, entity_id),
+            )
+        return out
+
     # ── Serialization ─────────────────────────────────────────────────────────
 
     def to_dict(self) -> dict[str, Any]:
