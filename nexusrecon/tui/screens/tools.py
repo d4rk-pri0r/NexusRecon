@@ -385,11 +385,64 @@ class ToolsScreen(Screen):
             "[dim]Requires:[/dim]",
             *self._render_requires_lines(tool),
         ]
+        # TUI-8: per-tool invocation history. Empty session adds
+        # nothing visible (renderer collapses); the section
+        # appears only once the tool has actually run.
+        history_lines = self._render_invocation_history(name)
+        if history_lines:
+            meta_lines.append("")
+            meta_lines.append("[dim]Recent invocations:[/dim]")
+            meta_lines.extend(history_lines)
+
         title_widget.update(f"[bold $primary]{name}[/bold $primary]")
         meta_widget.update("\n".join(meta_lines))
         desc_widget.update((tool.get("description") or "").strip())
         action_hint = self._action_hint_for(tool)
         actions_widget.update(action_hint)
+
+    def _render_invocation_history(self, tool_name: str) -> list[str]:
+        """TUI-8: per-tool invocation surface.
+
+        Reads the in-memory invocation history the registry
+        records on every ``execute()`` call. Renders an
+        aggregate summary line (count / avg duration / last
+        status / last error) — enough signal to triage a
+        "why isn't this tool working" question without
+        leaving the Tools browser.
+
+        Empty history returns an empty list so the section
+        collapses cleanly. Cache hits are counted as
+        invocations but excluded from the avg-duration
+        calculation (they're effectively instant)."""
+        try:
+            from nexusrecon.tools.registry import get_registry
+            summary = get_registry().invocation_summary(tool_name)
+        except Exception:
+            return []
+        if summary["count"] == 0:
+            return []
+        lines: list[str] = []
+        # Aggregate stats row.
+        avg_ms = summary["avg_runtime_ms"]
+        avg_str = f"{avg_ms} ms" if avg_ms < 1000 else f"{avg_ms / 1000:.1f} s"
+        last_status = summary["last_status"] or "?"
+        last_marker = (
+            "[$success]✓[/$success]"
+            if last_status == "success"
+            else "[$error]✗[/$error]"
+        )
+        lines.append(
+            f"  {last_marker} {summary['count']} call(s) this session   "
+            f"[dim]avg {avg_str}   last: {last_status}[/dim]",
+        )
+        if summary.get("last_error"):
+            err = str(summary["last_error"])
+            if len(err) > 90:
+                err = err[:87] + "…"
+            lines.append(
+                f"  [$error]last error:[/$error] [dim]{err}[/dim]",
+            )
+        return lines
 
     def _render_requires_lines(self, tool: dict[str, Any]) -> list[str]:
         """Per-requirement status lines for the detail pane.

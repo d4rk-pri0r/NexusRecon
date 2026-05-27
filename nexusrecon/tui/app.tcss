@@ -340,6 +340,26 @@ Footer {
 }
 #reports-filter.reports-filter-hidden { display: none; }
 
+/* TUI-8: crash-recovery banner. Sits at the top of the
+ * dashboard stack when an orphan session lock is detected.
+ * Loud border so the operator notices; dismissed with ``x``. */
+#dashboard-crash-banner {
+    width: 80%;
+    padding: 1 2;
+    margin: 1 0;
+    border: tall #ff3838;
+    background: $background;
+}
+
+/* TUI-8: "What's new" card — same styling as other dashboard-
+ * stat-card variants. The Vertical wrapper carries the card
+ * class; this rule scopes the inner Static for any future per-
+ * card overrides. */
+#dashboard-whats-new {
+    width: 100%;
+    height: auto;
+}
+
 #runner-activity-wrap {
     border: round $nx-border-muted;
     padding: 0 1;
@@ -406,6 +426,21 @@ PhaseStrip {
      * stylesheet level so future contributors searching the
      * TCSS for "PhaseStrip" find a hit. */
     height: 1;
+}
+
+/* TUI-8: focus-ring emphasis. The focused widget gets a bright
+ * accent border so the operator never loses track of which
+ * pane the keyboard targets. Inactive panes keep their muted
+ * border so they read as background context, not dead space.
+ * Mirrors lazygit's pane-focus discipline. Selectors are
+ * widget-name-scoped — Textual's TCSS parser doesn't accept
+ * a bare ``:focus``. */
+VerticalScroll:focus,
+DataTable:focus,
+ListView:focus,
+Input:focus,
+MarkdownViewer:focus {
+    border: tall $primary;
 }
 
 /* Configuration screen */

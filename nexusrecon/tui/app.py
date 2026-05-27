@@ -22,7 +22,7 @@ from nexusrecon.tui.command_palette import (
     ReportsSource,
     ToolsSource,
 )
-from nexusrecon.tui.themes import THEMES, resolve_theme_name
+from nexusrecon.tui.themes import all_themes, resolve_theme_name
 
 
 class NexusReconApp(App):
@@ -65,7 +65,17 @@ class NexusReconApp(App):
         # variables resolve in app.tcss. The active theme picks up
         # from the ``NEXUSRECON_TUI_THEME`` env var; unknown values
         # fall back to the default rather than crashing on launch.
-        for theme in THEMES.values():
+        #
+        # TUI-8: ``all_themes()`` merges any user-contributed themes
+        # from ``~/.nexusrecon/themes/*.toml`` on top of the shipped
+        # ones. A broken user theme file is logged + skipped — never
+        # blocks launch.
+        themes = all_themes()
+        # Build a name → theme list so resolve_theme_name sees the
+        # user contributions too.
+        from nexusrecon.tui.themes import THEMES as _shipped_themes
+        _shipped_themes.update(themes)
+        for theme in themes.values():
             try:
                 self.register_theme(theme)
             except Exception:
@@ -302,6 +312,49 @@ def _restore_logs(saved: dict) -> None:
     root.setLevel(saved.get("stdlib_root_level", logging.WARNING))
 
 
+def _session_lock_path() -> Path:
+    """Path to the per-launch session lock file.
+
+    TUI-8 crash-recovery: written on launch, deleted on CLEAN
+    exit (no exception, no kill -9). On the next launch the
+    dashboard reads this; if it exists, the previous session
+    didn't shut down cleanly and a banner offers to inspect the
+    orphaned log. Process kills (SIGKILL, OS crash, power loss)
+    skip the deletion path entirely, so the lock survives —
+    exactly the case we want to surface to the operator.
+    """
+    return Path.home() / ".nexusrecon" / ".tui_session_lock"
+
+
+def _write_session_lock(log_path: Path) -> None:
+    """Drop the per-launch lock file with the current PID + log
+    pointer + start timestamp. Best-effort; failures here must
+    NOT block launch."""
+    import json
+    import os
+    try:
+        path = _session_lock_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps({
+                "started": datetime.utcnow().isoformat() + "Z",
+                "pid": os.getpid(),
+                "log_path": str(log_path),
+            }),
+            encoding="utf-8",
+        )
+    except Exception:
+        pass
+
+
+def _clear_session_lock() -> None:
+    """Remove the lock file. Called only on CLEAN exit."""
+    try:
+        _session_lock_path().unlink(missing_ok=True)
+    except Exception:
+        pass
+
+
 def run_tui() -> None:
     """Public entry — launch the TUI if we have a TTY, fall back otherwise.
 
@@ -312,6 +365,11 @@ def run_tui() -> None:
     rendering output to fd 2, so any blanket redirect of that fd
     blanks the screen. See ``_route_logs_to_file`` for the surgical
     approach used instead.
+
+    TUI-8: writes a session lock at launch + deletes it on CLEAN
+    exit. If the previous session crashed (uncaught exception or
+    process kill), the lock survives and the dashboard's
+    crash-recovery banner picks it up.
     """
     if not (sys.stdin.isatty() and sys.stdout.isatty()):
         sys.stderr.write(
@@ -329,6 +387,7 @@ def run_tui() -> None:
     )
     sys.stderr.flush()
 
+    _write_session_lock(log_path)
     saved = _route_logs_to_file(log_file)
     log_file.write(
         f"---- NexusRecon TUI session start "
@@ -336,10 +395,14 @@ def run_tui() -> None:
     )
     log_file.flush()
 
+    clean_exit = False
     try:
         app = NexusReconApp()
         app.session_log_path = log_path
         app.run()
+        # No exception → this was a clean exit. Mark explicitly
+        # so finally only clears the lock on the happy path.
+        clean_exit = True
     finally:
         _restore_logs(saved)
         try:
@@ -347,6 +410,8 @@ def run_tui() -> None:
             log_file.close()
         except Exception:
             pass
+        if clean_exit:
+            _clear_session_lock()
         sys.stderr.write(
             f"[info] NexusRecon TUI exited — diagnostic log: {log_path}\n"
         )

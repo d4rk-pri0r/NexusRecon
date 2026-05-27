@@ -57,6 +57,17 @@ class ToolRegistry:
         self._stealth_profile: StealthProfile | None = None
         self._rate_limiter: RateLimiter | None = None
         self._proxy_manager: ProxyManager | None = None
+        # TUI-8: per-tool invocation history. Bounded deque per
+        # tool, keyed by tool name. Each entry is a dict with
+        # ``timestamp``, ``runtime_ms``, ``success``, ``error``,
+        # ``cached``. The Tools screen's detail pane reads this
+        # to show recent invocations + avg duration + last error
+        # without instrumenting the registry further.
+        from collections import deque
+        self._invocation_history: dict[str, deque[dict[str, Any]]] = {}
+        # Cap per-tool history at 50 entries. Cheap; the typical
+        # campaign fires each tool a handful of times.
+        self._invocation_history_cap: int = 50
 
     def set_campaign_context(
         self,
@@ -106,6 +117,83 @@ class ToolRegistry:
 
     def get(self, name: str) -> OSINTTool | None:
         return self._tools.get(name)
+
+    # ── TUI-8: invocation history ──────────────────────────────────────
+
+    def _record_invocation(
+        self,
+        *,
+        tool_name: str,
+        runtime_ms: int,
+        success: bool,
+        error: str | None,
+        target: str,
+        cached: bool,
+    ) -> None:
+        """Append one invocation record to the per-tool history.
+
+        Cheap (deque.append is O(1)); cap is enforced via the
+        deque's ``maxlen``. This is purely an in-memory surface —
+        durable provenance lives in the audit log."""
+        from collections import deque
+        from datetime import datetime, timezone
+        bucket = self._invocation_history.get(tool_name)
+        if bucket is None:
+            bucket = deque(maxlen=self._invocation_history_cap)
+            self._invocation_history[tool_name] = bucket
+        bucket.append({
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "runtime_ms": int(runtime_ms),
+            "success": bool(success),
+            "error": error,
+            "target": target,
+            "cached": bool(cached),
+        })
+
+    def invocations_for(self, tool_name: str) -> list[dict[str, Any]]:
+        """Return the in-memory invocation history for ``tool_name``
+        as a plain list, newest-last. Empty list if the tool was
+        never invoked this session."""
+        bucket = self._invocation_history.get(tool_name)
+        if bucket is None:
+            return []
+        return list(bucket)
+
+    def invocation_summary(self, tool_name: str) -> dict[str, Any]:
+        """Aggregate stats for the Tools detail pane.
+
+        Returns a dict with: ``count``, ``avg_runtime_ms``,
+        ``last_status``, ``last_error``, ``last_timestamp``.
+        Empty buckets return zeros / Nones so callers can render
+        the section unconditionally without if-checks everywhere.
+        """
+        records = self.invocations_for(tool_name)
+        if not records:
+            return {
+                "count": 0,
+                "avg_runtime_ms": 0,
+                "last_status": None,
+                "last_error": None,
+                "last_timestamp": None,
+            }
+        runtimes = [r["runtime_ms"] for r in records if not r["cached"]]
+        avg = int(sum(runtimes) / len(runtimes)) if runtimes else 0
+        last = records[-1]
+        # Surface the most-recent ERROR even if newer success calls
+        # have happened — operators want to know the last thing
+        # that went wrong, not just the last call's outcome.
+        last_error = None
+        for r in reversed(records):
+            if r.get("error"):
+                last_error = r["error"]
+                break
+        return {
+            "count": len(records),
+            "avg_runtime_ms": avg,
+            "last_status": "success" if last["success"] else "error",
+            "last_error": last_error,
+            "last_timestamp": last["timestamp"],
+        }
 
     def list_tools(self) -> list[dict[str, str]]:
         def _requires(tool: OSINTTool) -> str:
@@ -196,6 +284,16 @@ class ToolRegistry:
             if cached_data is not None:
                 if self._audit_log:
                     self._audit_log.log_tool_result(tool_name, target, "cached", 0, 0, cached=True)
+                # TUI-8: cache hits count as invocations for the
+                # tool's recent-activity surface.
+                self._record_invocation(
+                    tool_name=tool_name,
+                    runtime_ms=0,
+                    success=True,
+                    error=None,
+                    target=target,
+                    cached=True,
+                )
                 return ToolResult(success=True, source=tool_name, data=cached_data, cached=True)
 
         # ── OPSEC: rate-limit per source (token bucket + burst detector) ──────
@@ -234,6 +332,18 @@ class ToolRegistry:
             result = await tool.run(target, target_type=target_type, **kwargs)
         runtime_ms = int((time.monotonic() - t0) * 1000)
         result.runtime_ms = runtime_ms
+
+        # TUI-8: record into in-memory invocation history so the
+        # Tools detail pane can show "recent invocations / avg
+        # duration / last error" without re-reading the audit log.
+        self._record_invocation(
+            tool_name=tool_name,
+            runtime_ms=runtime_ms,
+            success=result.success,
+            error=result.error,
+            target=target,
+            cached=False,
+        )
 
         # ── Cache store ────────────────────────────────────────────────────────
         if self._cache is not None and result.success and result.data is not None:

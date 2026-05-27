@@ -181,6 +181,122 @@ def _next_step_hint() -> str:
         return ""
 
 
+def _detect_orphan_session() -> dict | None:
+    """Read the session lock file and return its metadata if
+    present, else None.
+
+    TUI-8 crash recovery: the lock is written at launch and
+    cleared on clean exit (see ``app.run_tui``). A surviving
+    lock at the next launch indicates the previous session
+    crashed or was killed; the dashboard surfaces this so the
+    operator can inspect the orphaned log.
+
+    Returns:
+        Dict with ``started`` / ``pid`` / ``log_path`` keys, or
+        ``None`` when no orphan lock exists. Failures are
+        swallowed (a broken lock file shouldn't break launch).
+    """
+    try:
+        import json
+        from nexusrecon.tui.app import _session_lock_path
+        path = _session_lock_path()
+        if not path.exists():
+            return None
+        data = json.loads(path.read_text(encoding="utf-8"))
+        # Filter out the lock for the CURRENT process. The
+        # current launch's lock won't exist yet when this is
+        # called (run_tui writes it AFTER printing the start
+        # banner but BEFORE app.run), but if there's any
+        # ambiguity the pid check is the deterministic answer.
+        import os
+        if data.get("pid") == os.getpid():
+            return None
+        return data
+    except Exception:
+        return None
+
+
+def _dismiss_orphan_session() -> None:
+    """Clear the orphan lock so the banner doesn't show again
+    on the next dashboard refresh."""
+    try:
+        from nexusrecon.tui.app import _clear_session_lock
+        _clear_session_lock()
+    except Exception:
+        pass
+
+
+def _whats_new(limit: int = 4) -> str:
+    """Return the top bullets from the most-recent CHANGELOG section.
+
+    TUI-8: pulls operator-facing "what changed since you last
+    launched" intel from ``CHANGELOG.md`` so they don't have to
+    leave the dashboard to discover new features.
+
+    Format: walk ``CHANGELOG.md``, find the first ``## [...]``
+    section heading (the most recent release / Unreleased
+    block), collect bullets from the body, and return up to
+    ``limit`` of them. Bold the bullet's leading phrase so the
+    visual scan picks up "what's the new thing" without reading
+    the full description.
+
+    Returns an empty string if the CHANGELOG file isn't present
+    (some installs ship without it).
+    """
+    try:
+        # Find CHANGELOG.md relative to the nexusrecon package.
+        # Two parents up: nexusrecon/tui/screens/dashboard.py ->
+        # nexusrecon/ -> repo root.
+        repo_root = Path(__file__).resolve().parents[3]
+        changelog = repo_root / "CHANGELOG.md"
+        if not changelog.exists():
+            return ""
+        text = changelog.read_text(encoding="utf-8")
+    except Exception:
+        return ""
+
+    # Find the first ``## `` heading; everything between it and
+    # the next ``## `` heading is the section body.
+    import re
+    headings = list(re.finditer(r"^## \[.*?\]", text, re.MULTILINE))
+    if not headings:
+        return ""
+    first = headings[0]
+    next_idx = headings[1].start() if len(headings) > 1 else len(text)
+    section = text[first.end():next_idx]
+
+    # Match top-level bullets. Skip indented sub-bullets to keep
+    # the dashboard digestible — the operator can read the full
+    # CHANGELOG if they want depth.
+    bullets: list[str] = []
+    for m in re.finditer(r"^- (.+)$", section, re.MULTILINE):
+        line = m.group(1).strip()
+        # Truncate at first sentence-end or 100 chars for one-
+        # line display. Operators want a scannable list.
+        for terminator in (". ", " — ", " - "):
+            idx = line.find(terminator)
+            if 30 < idx < 120:
+                line = line[:idx]
+                break
+        if len(line) > 110:
+            line = line[:107] + "…"
+        bullets.append(line)
+        if len(bullets) >= limit:
+            break
+
+    if not bullets:
+        return ""
+    # The heading itself goes above; this just returns the body.
+    section_label = first.group(0).removeprefix("## ").strip()
+    lines = [f"[dim]Latest:[/dim] [bold $primary]{section_label}[/bold $primary]"]
+    for b in bullets:
+        # Strip outer Markdown bold so Rich's [bold] doesn't fight
+        # with literal asterisks.
+        b = b.replace("**", "")
+        lines.append(f"  • {b}")
+    return "\n".join(lines)
+
+
 def _tool_breakdown() -> str:
     try:
         from nexusrecon.tools.registry import get_registry
@@ -346,6 +462,7 @@ class DashboardScreen(Screen):
         ("c", "menu_config", "Config"),
         ("t", "menu_tools", "Tools"),
         ("d", "dismiss_onboarding", "Dismiss nudge"),
+        ("x", "dismiss_crash_banner", "Dismiss crash banner"),
         ("close_bracket", "toggle_sidebar", "Toggle sidebar"),
         # Sidebar cursor — ↑/↓ move the highlight, Enter activates.
         # Letter shortcuts (n/p/c/t/?) still jump directly; the
@@ -368,6 +485,24 @@ class DashboardScreen(Screen):
             yield Sidebar(id="dashboard-sidebar")
             with Container(id="dashboard-main"):
                 with Vertical(id="dashboard-stack"):
+                    # TUI-8: crash-recovery banner — only renders
+                    # when the previous TUI session left a lock
+                    # file behind (i.e. crashed or was killed).
+                    # Sits at the top of the stack so the operator
+                    # sees it before reading any other dashboard
+                    # content. Dismissed by pressing ``x``.
+                    orphan = _detect_orphan_session()
+                    if orphan:
+                        log_path = orphan.get("log_path", "?")
+                        started = orphan.get("started", "?")
+                        with Center():
+                            yield Static(
+                                f"⚠  [bold $error]Previous session may have crashed[/bold $error]\n"
+                                f"  [dim]Started:[/dim] {started}\n"
+                                f"  [dim]Log:[/dim] {log_path}\n"
+                                f"  [dim]Press [bold]x[/bold] to dismiss.[/dim]",
+                                id="dashboard-crash-banner",
+                            )
                     with Center():
                         yield Static(render_banner(), id="dashboard-banner")
                     version_text = render_version()
@@ -446,6 +581,23 @@ class DashboardScreen(Screen):
                                 _next_step_hint(),
                                 id="dashboard-next-step",
                             )
+                        # TUI-8: "What's new" card pulls operator-
+                        # facing intel from CHANGELOG.md so the
+                        # operator sees recent additions without
+                        # leaving the dashboard. Skipped silently
+                        # when no CHANGELOG.md ships with the
+                        # install.
+                        whats_new_text = _whats_new()
+                        if whats_new_text:
+                            with Vertical(classes="dashboard-stat-card"):
+                                yield Static(
+                                    "[bold $primary]What's new[/bold $primary]",
+                                    classes="dashboard-card-title",
+                                )
+                                yield Static(
+                                    whats_new_text,
+                                    id="dashboard-whats-new",
+                                )
                     if _should_show_onboarding():
                         with Center():
                             yield Static(
@@ -576,6 +728,15 @@ class DashboardScreen(Screen):
         _persist_onboarding_dismissal()
         try:
             self.query_one("#dashboard-onboarding", Static).update("")
+        except Exception:
+            pass
+
+    def action_dismiss_crash_banner(self) -> None:
+        """``x`` — acknowledge the crash banner, clear the lock
+        so it doesn't reappear, and hide the banner widget."""
+        _dismiss_orphan_session()
+        try:
+            self.query_one("#dashboard-crash-banner", Static).update("")
         except Exception:
             pass
 

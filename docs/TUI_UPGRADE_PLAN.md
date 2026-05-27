@@ -364,6 +364,68 @@ lazygit pane focus model.
 - New shared filter mixin or behavior if it fits Textual patterns cleanly.
 
 ### Phase TUI-8: "Delight & Extensibility"
+
+> **Status: SHIPPED (most items).** What landed:
+>
+>   - **Focus-ring emphasis CSS** — focused
+>     ``VerticalScroll`` / ``DataTable`` / ``ListView`` /
+>     ``Input`` / ``MarkdownViewer`` carry a bright accent
+>     border so the operator never loses track of which pane
+>     the keyboard targets.
+>   - **What's new panel** — dashboard parses the latest
+>     ``## [...]`` section of ``CHANGELOG.md`` and renders up
+>     to 4 bullets as a third stat-card alongside Tool Health
+>     and What's Next. Skipped silently if no CHANGELOG ships.
+>   - **Crash-recovery banner** — session lock at
+>     ``~/.nexusrecon/.tui_session_lock`` written on launch +
+>     cleared on CLEAN exit. Survives uncaught exceptions and
+>     process kills. Next launch's dashboard detects it (
+>     filtering out the current PID for safety) and shows a
+>     loud-red banner with the orphan log path; ``x`` dismisses
+>     + clears.
+>   - **Theme contribution system** — ``~/.nexusrecon/themes/
+>     *.toml`` files parse into :class:`textual.theme.Theme`
+>     instances. Missing fields fall back to the shipped dark
+>     theme; severity tints are always inherited. Broken files
+>     log a warning and are skipped — never block launch. User
+>     themes merge on top of shipped ones via
+>     ``themes.all_themes()``.
+>   - **Tools invocation history** — registry now records every
+>     ``execute()`` call into a 50-entry-per-tool bounded
+>     deque. The Tools detail pane reads the aggregated
+>     summary (count / avg runtime / last status / last error)
+>     via ``registry.invocation_summary()`` and renders a
+>     "Recent invocations" subsection per tool. Cache hits
+>     count toward call count but are excluded from the avg.
+>
+> Explicit deferrals (intentional, documented):
+>   - **Sidebar entry registration decorator for plugins** —
+>     blocks on Phase 2 of ``TOOLCHAIN_AND_PLUGIN_SDK_PLAN.md``
+>     (Plugin SDK). Once the SDK ships, a one-line
+>     ``@nexusrecon.plugin_sdk.sidebar_entry`` decorator wires
+>     a plugin into the sidebar catalog the way the existing
+>     letter-shortcut + arrow-nav already supports.
+>   - **Kitty/sixel image previews** — terminal-specific
+>     infrastructure. Detection + fallback chain alone is a
+>     bigger PR than the rest of TUI-8 combined. Re-evaluate
+>     once at least 50% of operators have moved to image-
+>     protocol-capable terminals (Kitty, WezTerm, Ghostty,
+>     iTerm2).
+>   - **Two-press inline confirmation pattern as a general
+>     mechanism** — the runner's abort path already uses it
+>     (``q`` primes, second ``q`` within 3s aborts). Other
+>     modal-style confirms in the TUI (config save, etc.) are
+>     already inline single-keypress with toast feedback;
+>     formalising a shared helper is bookkeeping with no
+>     visible user impact.
+>   - **Skeleton loaders** — the TUI's data loads are
+>     synchronous and fast (<5 ms perceived). A skeleton flash
+>     would only render for a few milliseconds. Deferred until
+>     a load path with perceptible latency lands (e.g. an
+>     async report-resolver, or live-API browsing).
+>
+> 21 new TUI-8 tests + 194 prior TUI tests pass (215 total).
+
 **Goal:** The "wow" features + plugin surface.
 
 **Possible items (lower priority):**

@@ -156,3 +156,132 @@ def resolve_theme_name(requested: str | None) -> str:
     if requested and requested in THEMES:
         return requested
     return DEFAULT_THEME
+
+
+# ──────────────────────────────────────────────────────────────────────
+# User-contributed themes (TUI-8)
+# ──────────────────────────────────────────────────────────────────────
+
+
+USER_THEMES_DIR = "~/.nexusrecon/themes"
+
+
+def _parse_user_theme(path) -> Theme | None:
+    """Build a :class:`Theme` from a TOML file at ``path``.
+
+    Expected schema:
+
+    .. code-block:: toml
+
+        name      = "my-theme"
+        primary   = "#00ff9c"
+        secondary = "#1f6feb"
+        accent    = "#00ff9c"
+        background = "#0a0e1a"
+        surface   = "#11151f"   # optional
+        panel     = "#11151f"   # optional
+        foreground = "#c9d1d9"
+        success   = "#00ff9c"
+        warning   = "#f1c40f"
+        error     = "#ff5555"
+        dark      = true
+
+        [variables]
+        nx-bg-detail     = "#07090f"
+        nx-text-muted    = "#7f8c8d"
+        nx-text-dim      = "#4a5568"
+        nx-border-muted  = "#7f8c8d"
+
+    Missing optional fields fall back to the shipped-dark equivalents so
+    operators don't have to repeat the entire palette to tweak one
+    color. Severity tints (severity-critical, etc.) are always inherited
+    from ``_SEVERITY`` — operators don't customize these because they
+    carry semantic meaning across the app.
+
+    Returns ``None`` (and logs to stderr) on parse failure so a broken
+    theme file can't tank app startup.
+    """
+    import sys
+    import tomllib
+    from pathlib import Path
+
+    p = Path(path)
+    try:
+        data = tomllib.loads(p.read_text(encoding="utf-8"))
+    except Exception as exc:
+        sys.stderr.write(
+            f"[warn] Skipping user theme {p.name}: parse failed ── {exc}\n",
+        )
+        return None
+
+    name = data.get("name")
+    if not name or not isinstance(name, str):
+        sys.stderr.write(
+            f"[warn] Skipping user theme {p.name}: missing 'name' field\n",
+        )
+        return None
+
+    # Merge user variables on top of the severity baseline so users
+    # can override nx-* without re-specifying severity tints.
+    user_vars = data.get("variables") or {}
+    if not isinstance(user_vars, dict):
+        user_vars = {}
+    merged_vars = {**_SEVERITY, **user_vars}
+
+    try:
+        return Theme(
+            name=name,
+            primary=data.get("primary", NEXUSRECON_DARK.primary),
+            secondary=data.get("secondary", NEXUSRECON_DARK.secondary),
+            accent=data.get("accent", data.get("primary", NEXUSRECON_DARK.accent)),
+            background=data.get("background", NEXUSRECON_DARK.background),
+            surface=data.get("surface", data.get("background", NEXUSRECON_DARK.surface)),
+            panel=data.get("panel", data.get("surface", NEXUSRECON_DARK.panel)),
+            foreground=data.get("foreground", NEXUSRECON_DARK.foreground),
+            success=data.get("success", NEXUSRECON_DARK.success),
+            warning=data.get("warning", NEXUSRECON_DARK.warning),
+            error=data.get("error", NEXUSRECON_DARK.error),
+            dark=bool(data.get("dark", True)),
+            variables=merged_vars,
+        )
+    except Exception as exc:
+        sys.stderr.write(
+            f"[warn] Skipping user theme {p.name}: Theme() ── {exc}\n",
+        )
+        return None
+
+
+def load_user_themes(
+    themes_dir: str | None = None,
+) -> dict[str, Theme]:
+    """Discover and parse every ``*.toml`` file under
+    ``~/.nexusrecon/themes/`` (or ``themes_dir`` when supplied
+    for testing).
+
+    Returns a dict keyed by theme name. Failures on individual
+    files do NOT raise — they log to stderr and the loader keeps
+    going. The shipped themes always remain available; user
+    themes are additive.
+    """
+    import os
+    from pathlib import Path
+
+    base = Path(os.path.expanduser(themes_dir or USER_THEMES_DIR))
+    out: dict[str, Theme] = {}
+    if not base.exists():
+        return out
+    for path in sorted(base.glob("*.toml")):
+        theme = _parse_user_theme(path)
+        if theme is not None:
+            out[theme.name] = theme
+    return out
+
+
+def all_themes() -> dict[str, Theme]:
+    """Return the shipped themes merged with any user themes
+    discovered on disk. User themes can OVERRIDE a shipped name
+    (operator's choice — if they want their own
+    ``nexusrecon-dark``, they get it)."""
+    out = dict(THEMES)
+    out.update(load_user_themes())
+    return out
