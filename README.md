@@ -22,7 +22,7 @@
 
 You hand it a scope file (or a single English sentence) and a seed
 domain. ~30-60 minutes later it hands you back a ranked, prioritized,
-citation-backed attack-surface report — every finding traced to the
+citation-backed attack-surface report. Every finding traced to the
 tool that produced it, every tool invocation validated against the
 signed scope and written to a hash-chained audit log, the whole
 campaign exportable as a cryptographically signed STIX 2.1 bundle that
@@ -40,34 +40,34 @@ consume directly.
 
 Running the tools is the easy part. The hard part is **deciding which
 tool to run next, on what target, in response to what the previous
-tool just told you** — and proving the resulting findings are still
+tool just told you**. And proving the resulting findings are still
 true six weeks later when legal asks.
 
 NexusRecon is built around five durable capabilities:
 
-1. **Living Intelligence Graph** — every entity (subdomain, IP, email,
+1. **Living Intelligence Graph**: every entity (subdomain, IP, email,
    person, cloud asset, vulnerability, hypothesis, lead, open
    question) is a first-class node with provenance, confidence,
    citations, and traversable relationships. Agents reason over the
    graph instead of flat dictionaries.
-2. **Strategic Reasoning Engine** — operator-authored or
+2. **Strategic Reasoning Engine**: operator-authored or
    planner-generated `Strategy` objects drive phase selection,
    dispatch policy, success / kill criteria, and tool budgets. Cost
    simulation runs before every LLM dispatch; bounded-agency
    primitives let high-tier items queue for human approval instead
    of auto-firing.
-3. **Continuous Confidence Engine** — every graph mutation flows
+3. **Continuous Confidence Engine**: every graph mutation flows
    through an orchestrator that runs corroboration, contradiction
    detection, propagation, and adversarial self-check verifiers.
    Confidence rises when multi-source independent agreement appears
-   and falls when contradictions land — both bounded, both
+   and falls when contradictions land. Both bounded, both
    audit-logged.
-4. **First-class extensibility** — community recon packs (a
+4. **First-class extensibility**: community recon packs (a
    directory + `manifest.yaml`) contribute tools, agents, dispatch
    policies, report templates, and custom entity / relationship
    types. Three scaffolders (`agent new` / `tool new` /
    `policy new`) generate working boilerplate in seconds.
-5. **Cryptographically signed handoff** — STIX 2.1 bundle export +
+5. **Cryptographically signed handoff**: STIX 2.1 bundle export +
    Ed25519 signed receipts + a standalone single-file Python
    verifier downstream consumers can run without installing
    NexusRecon. Plus bidirectional import from Nessus, Nuclei,
@@ -93,7 +93,7 @@ laptop with default API keys configured, typical 30-60 min run:
 | **Adversarial scan** | `nexusrecon adversarial scan` finds 2 subdomains lockstep-fabricated by an upstream wildcard DNS server → confidence halved + queued for review. |
 | **Phase 8** · attack-surface rank | Top thread: "KEV-listed VPN CVE on `vpn.acme.com` + 3 breached employees in scope for credential reuse". |
 | **Phase 9** · reports | `master_reporter` writes the narrative. STIX 2.1 export + Ed25519 signed receipt produced for downstream consumers. |
-| **Watch** | `nexusrecon watch create acme-watch <campaign> --parent-domain acme.com --interval-hours 6` keeps a sensor running — any new subdomain or KEV-listed CVE triggers a tiered alert + a queued micro-campaign. |
+| **Watch** | `nexusrecon watch create acme-watch <campaign> --parent-domain acme.com --interval-hours 6` keeps a sensor running. Any new subdomain or KEV-listed CVE triggers a tiered alert + a queued micro-campaign. |
 
 **Output**: a `campaigns/acme/<engagement>/<id>/reports/` directory
 with the master report + ranked threads + STIX bundle + signed receipt
@@ -193,7 +193,7 @@ From the TUI you can:
   required + optional key status, and a `c`-shortcut that pops a
   masked edit modal right where the missing key lives
 - **Configure** application-wide settings (LLM, OPSEC, storage, debug)
-  in the Configuration screen — tool API keys live in the Tools
+  in the Configuration screen. Tool API keys live in the Tools
   surface
 - **Resume** or **diff** prior campaigns
 - See the **top-impact missing API keys** ranked by how many tools
@@ -424,13 +424,13 @@ Recommended:
 
 Optional environment variables for the post-0.5 features:
 
-- `NEXUSRECON_PACK_DIR` — override the recon-pack root (default
+- `NEXUSRECON_PACK_DIR`. Override the recon-pack root (default
   `~/.nexusrecon/packs/`).
-- `NEXUSRECON_KEY_DIR` — override the signing-key root (default
+- `NEXUSRECON_KEY_DIR`. Override the signing-key root (default
   `~/.nexusrecon/keys/`).
-- `NEXUSRECON_WATCH_DIR` — override the watch state root (default
+- `NEXUSRECON_WATCH_DIR`. Override the watch state root (default
   `~/.nexusrecon/watch/`).
-- `NEXUSRECON_MARKETPLACE_URL` — URL of a marketplace JSON index for
+- `NEXUSRECON_MARKETPLACE_URL`. URL of a marketplace JSON index for
   `nexusrecon packs search`.
 
 Per-key tool-unlock matrix:
@@ -466,7 +466,7 @@ Confidence Engine, Contribution & Pack format) and all of Phase 4
 (intent-driven entry, STIX export/import, downstream emitters) ship
 in this release. Four of five Phase 5 moonshots are in place (Watch
 Mode, Signed Bundles, Adversarial Defense, Vision). The remaining
-moonshot — Fleet-Level Learning — is open for design discussion.
+moonshot. Fleet-Level Learning. Is open for design discussion.
 
 **Test suite: 590/590 passing.**
 
@@ -514,7 +514,7 @@ to test.** Full responsible-use policy in
 [`DISCLAIMER.md`](DISCLAIMER.md). Third-party components and the
 authorized-use rider in [`NOTICE`](NOTICE).
 
-Scope enforcement is built into the framework — every tool invocation
+Scope enforcement is built into the framework. Every tool invocation
 is checked against the signed scope before execution, tagged with the
 scope hash, and written to a hash-chained audit log. This is a
 backstop, not a substitute for operator judgment.

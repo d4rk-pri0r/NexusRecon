@@ -77,7 +77,7 @@ tests/
 
 There are two paths now, both supported and both first-class:
 
-1. **In-tree contributions** — open a PR against this repo. The
+1. **In-tree contributions**: open a PR against this repo. The
    right path for fixes, new built-in tools, refactors, and changes
    to the core abstractions. The "Adding a new OSINT tool" section
    below describes the conventions.
@@ -88,7 +88,7 @@ There are two paths now, both supported and both first-class:
    boilerplate.
 
 If you're authoring something the wider community will use, **the
-recon pack path is now the default** — it lets you ship without
+recon pack path is now the default**. It lets you ship without
 forking the repo and lets operators install your work with
 `nexusrecon packs install gh:you/your-pack`. See
 [`ARCHITECTURE.md §17`](ARCHITECTURE.md#17-recon-pack-format--contribution-sdk-phase-3)
@@ -113,8 +113,7 @@ nexusrecon policy new
 Each scaffolder accepts `--pack new` (create a fresh pack) or
 `--pack <existing-dir>` (extend an existing pack). The generated
 agent module ships with `register_prompt()` for prompt versioning
-and a `review_citations()` method backed by the citation guardrails
-— so contributors don't have to remember those wiring steps.
+and a `review_citations()` method backed by the citation guardrails. so contributors don't have to remember those wiring steps.
 
 ---
 
@@ -129,7 +128,7 @@ and is wired into the registry with ``@register_tool``.
 > new --pack new`, follow the prompts, and the scaffolder
 > generates the equivalent boilerplate inside a fresh pack
 > directory. The conventions below still apply to the generated
-> code — the scaffolder just saves typing.
+> code. The scaffolder just saves typing.
 
 **If your tool hits a JSON HTTP API**, use ``BaseHTTPTool``. The base
 class provides ``classify_response()`` which converts the common
@@ -357,7 +356,7 @@ nexusrecon packs install gh:you/your-pack@v1.2.0
 - v1 trust model is **unsigned + manifest hash**. The loader
   recomputes the hash declared in your `manifest.yaml`'s
   `manifest_hash` field and warns the operator on mismatch.
-- Operators **inspect packs before activating** — pack code runs
+- Operators **inspect packs before activating**: pack code runs
   in the same Python process as the rest of NexusRecon.
 - A future PR may layer Ed25519 signing (using the same keypair
   infrastructure as the STIX-bundle signer) on top.
