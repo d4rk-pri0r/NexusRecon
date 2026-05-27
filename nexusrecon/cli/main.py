@@ -191,6 +191,30 @@ def run(
     # NOTE: ROE banner is displayed by campaign.setup() → _display_roe_banner().
     # Do NOT add a second console.print(ROE_BANNER) here — it would print twice.
 
+    # Phase 3 PR A: load recon packs BEFORE scope so any
+    # pack-contributed tools / agents / policies are
+    # registered by the time downstream code looks them up.
+    # Failures are non-fatal (skip + warn).
+    try:
+        from nexusrecon.packs import load_packs
+        pack_results = load_packs()
+        for pr in pack_results:
+            if pr.status.value == "loaded":
+                console.print(
+                    f"[dim]pack loaded:[/dim] "
+                    f"[cyan]{pr.manifest.name}[/cyan] "
+                    f"({pr.manifest.version})"
+                )
+            elif pr.status.value == "failed":
+                console.print(
+                    f"[yellow]pack failed:[/yellow] "
+                    f"{pr.pack_dir.name} — {pr.error}"
+                )
+    except Exception as exc:
+        console.print(
+            f"[yellow]Pack loading raised: {exc}; continuing without packs.[/yellow]"
+        )
+
     # Load scope
     try:
         scope_model = ScopeModel.from_yaml(scope)
@@ -1017,6 +1041,110 @@ def tui() -> None:
     """Launch the interactive Textual UI (default when no subcommand given)."""
     from nexusrecon.tui.app import run_tui
     run_tui()
+
+
+# ── Phase 3 PR A: Recon Pack management ──────────────────────────────
+
+packs_app = typer.Typer(
+    help=(
+        "Manage recon packs — community-authored bundles of "
+        "tools, agents, dispatch policies, and report templates."
+    ),
+)
+app.add_typer(packs_app, name="packs")
+
+
+@packs_app.command("list")
+def packs_list(
+    pack_dir: str | None = typer.Option(
+        None, "--pack-dir",
+        help=(
+            "Override the pack directory (default: "
+            "$NEXUSRECON_PACK_DIR or ~/.nexusrecon/packs)."
+        ),
+    ),
+) -> None:
+    """List installed recon packs + their load status."""
+    from nexusrecon.packs import discover_packs, load_packs
+
+    candidates = discover_packs(pack_dir)
+    if not candidates:
+        console.print(
+            "[yellow]No packs found.[/yellow] "
+            "Drop a pack directory into "
+            "[cyan]~/.nexusrecon/packs/[/cyan] and re-run."
+        )
+        return
+
+    results = load_packs(pack_dir)
+    table_lines = [
+        f"[bold]{'NAME':<24} {'VERSION':<12} {'STATUS':<10} CONTRIBUTIONS[/bold]",
+    ]
+    for r in results:
+        name = (r.manifest.name if r.manifest else r.pack_dir.name)
+        version = r.manifest.version if r.manifest else "-"
+        status = r.status.value
+        contribs = ", ".join(
+            f"{k}:{v}" for k, v in r.contributions_loaded.items() if v
+        ) or "(none)"
+        color = (
+            "green" if status == "loaded"
+            else "red" if status == "failed"
+            else "yellow"
+        )
+        table_lines.append(
+            f"{name:<24} {version:<12} "
+            f"[{color}]{status:<10}[/{color}] {contribs}"
+        )
+        if r.warnings:
+            for w in r.warnings:
+                table_lines.append(f"    [yellow]⚠[/yellow] {w}")
+        if r.error:
+            table_lines.append(f"    [red]✗[/red] {r.error}")
+
+    console.print("\n".join(table_lines))
+
+
+@packs_app.command("validate")
+def packs_validate(
+    pack_path: str = typer.Argument(
+        ..., help="Path to a pack directory (containing manifest.yaml).",
+    ),
+) -> None:
+    """Validate a pack's manifest without loading it."""
+    from nexusrecon.packs import compute_manifest_hash, parse_manifest
+
+    path = Path(pack_path).expanduser().resolve()
+    manifest_path = path / "manifest.yaml"
+    if not manifest_path.exists():
+        console.print(f"[red]No manifest.yaml at {path}[/red]")
+        raise typer.Exit(1)
+    try:
+        manifest = parse_manifest(manifest_path)
+    except Exception as exc:
+        console.print(f"[red]Validation failed:[/red] {exc}")
+        raise typer.Exit(1)
+
+    actual_hash = compute_manifest_hash(manifest)
+    console.print(
+        f"[green]OK[/green]  {manifest.name} {manifest.version}\n"
+        f"  description:    {manifest.description or '(none)'}\n"
+        f"  author:         {manifest.author or '(none)'}\n"
+        f"  license:        {manifest.license or '(none)'}\n"
+        f"  contributions:  {manifest.contributes.total()}\n"
+        f"    tools:        {len(manifest.contributes.tools)}\n"
+        f"    agents:       {len(manifest.contributes.agents)}\n"
+        f"    policies:     {len(manifest.contributes.policies)}\n"
+        f"    templates:    {len(manifest.contributes.report_templates)}\n"
+        f"    entity_types: {len(manifest.contributes.entity_types)}\n"
+        f"    rel_types:    {len(manifest.contributes.relationship_types)}\n"
+        f"  computed_hash:  {actual_hash}"
+    )
+    if manifest.manifest_hash and manifest.manifest_hash != actual_hash:
+        console.print(
+            f"  [yellow]⚠  declared hash differs: "
+            f"{manifest.manifest_hash}[/yellow]"
+        )
 
 
 def main() -> None:
