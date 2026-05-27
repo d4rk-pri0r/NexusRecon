@@ -309,6 +309,37 @@ Footer {
     display: none;
 }
 
+/* TUI-7: Campaigns + Reports filter inputs. Same hide-via-class
+ * pattern as the runner's filter (TUI-6b). Each screen has its
+ * own class so other CSS can target one without the other. */
+
+#campaigns-filter {
+    width: 100%;
+    height: 1;
+    margin: 0 2;
+}
+#campaigns-filter.campaigns-filter-hidden { display: none; }
+
+#campaigns-preview-wrap {
+    height: auto;
+    margin: 1 2 0 2;
+    padding: 0 1;
+    border: round $nx-border-muted;
+    background: $background;
+}
+#campaigns-preview {
+    width: 100%;
+    height: auto;
+    padding: 0 1;
+}
+
+#reports-filter {
+    width: 100%;
+    height: 1;
+    margin: 0 1;
+}
+#reports-filter.reports-filter-hidden { display: none; }
+
 #runner-activity-wrap {
     border: round $nx-border-muted;
     padding: 0 1;

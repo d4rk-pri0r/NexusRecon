@@ -286,6 +286,53 @@ evaluate after TUI-7.
 lazygit pane focus model.
 
 ### Phase TUI-7: "Every Surface Is a Power Tool"
+
+> **Status: SHIPPED (partial).** The cross-screen ``/`` filter
+> pattern + the row-action vocabulary documentation landed.
+> Specifically:
+>
+>   - **Campaigns screen** — ``/`` reveals a substring filter
+>     input; matches against campaign id, client, engagement
+>     id, and status (case-insensitive). New bottom preview
+>     strip shows engagement / scope_hash / completed_phases /
+>     findings breakdown / last modified for the cursor row,
+>     so the operator can triage without committing to a full
+>     ``Enter`` into ResultsScreen.
+>   - **Reports screen** — ``/`` reveals a substring filter
+>     above the deliverables list. Matches against the label
+>     AND the filename (so a power user filtering on
+>     ``credential_exposure_paths`` still finds the row even
+>     if its label says "Credentials").
+>   - **Help modal** — new "Cross-screen vocabulary" table
+>     documents the keys that mean the same thing on every
+>     list-shaped screen: ``/`` Enter Esc Tab c m e d ``[`` ``]``
+>     Space ``?`` Ctrl+P Ctrl+Q.
+>
+> Several TUI-7 items are already covered by prior PRs:
+>   - Tools screen ``/`` filter (since TUI-2).
+>   - In-place edit-key modal from the Tools detail pane
+>     (commit ``8e8b7c2``) covers "row-level action shortcuts:
+>     ``c`` = configure".
+>   - Sidebar arrow-key navigation + dashboard gap surface
+>     (commits ``8e8b7c2`` / ``c77c9a1``) cover the
+>     "consistent navigation" goal.
+>
+> Deferred to a follow-up:
+>   - **Tools detail pane "recent invocations / avg duration /
+>     last error".** Requires an invocation-history store the
+>     framework doesn't have today; instrumenting the registry
+>     to capture per-tool timing + error counts is its own
+>     non-trivial change. Re-evaluate after the live-drift CI
+>     produces enough longitudinal data to make the surface
+>     useful.
+>   - **Micro-interactions** — skeleton loaders, focus-ring
+>     emphasis, async spinners. All four items in the original
+>     TUI-7 §4 list are CSS / minor-widget polish; scoping them
+>     into a focused PR will be easier after TUI-8 starts so we
+>     can also pick up the related theme-contribution work.
+>
+> 14 new unit tests + 180 prior TUI tests pass (194 total).
+
 **Goal:** Consistent high-agency interaction model across the app.
 
 **Deliverables:**

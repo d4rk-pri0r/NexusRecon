@@ -31,7 +31,15 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
-from textual.widgets import Footer, Header, ListItem, ListView, MarkdownViewer, Static
+from textual.widgets import (
+    Footer,
+    Header,
+    Input,
+    ListItem,
+    ListView,
+    MarkdownViewer,
+    Static,
+)
 
 from nexusrecon.tui.widgets import StatusBar
 
@@ -174,6 +182,7 @@ class ReportsBrowserScreen(Screen):
     """Three-pane in-TUI markdown report browser."""
 
     BINDINGS = [
+        Binding("slash", "focus_filter", "Filter"),
         Binding("escape", "back", "Back"),
         Binding("tab", "focus_next_pane", "Cycle panes"),
         Binding("m", "toggle_reviewed", "Mark reviewed"),
@@ -185,6 +194,12 @@ class ReportsBrowserScreen(Screen):
         super().__init__()
         self.campaign_dir = Path(campaign_dir)
         self._entries: list[ReportEntry] = []
+        # Filtered view of entries (what the ListView shows). Refreshed
+        # on every ``_filter_text`` change. Keep ``_entries`` as the
+        # source of truth so the filter can be cleared cheaply.
+        self._visible_entries: list[ReportEntry] = []
+        # Substring filter; lowercased at set time.
+        self._filter_text: str = ""
         self._current_idx: int = 0
 
     def compose(self) -> ComposeResult:
@@ -195,6 +210,16 @@ class ReportsBrowserScreen(Screen):
                 yield Static(
                     "[bold $primary]Reports[/bold $primary]",
                     id="reports-list-title",
+                )
+                # TUI-7: hidden filter Input above the list. Revealed
+                # on ``/``; Esc clears + hides + restores focus to
+                # the list. Substring match against the entry label,
+                # case-insensitive — operators don't recall the exact
+                # filename.
+                yield Input(
+                    placeholder="Filter reports…",
+                    id="reports-filter",
+                    classes="reports-filter-hidden",
                 )
                 yield ListView(id="reports-list")
             with Vertical(id="reports-preview-pane"):
@@ -229,6 +254,12 @@ class ReportsBrowserScreen(Screen):
         await self._render_selection(first_present)
 
     def _populate_list(self) -> None:
+        """Repopulate the ListView from the filtered entry set.
+
+        TUI-7: the visible rows are now ``_visible_entries`` not
+        ``_entries`` directly. ``_filter_text`` empty means show
+        everything (so the unfiltered call path is identical to
+        pre-TUI-7 behaviour)."""
         try:
             list_view = self.query_one("#reports-list", ListView)
         except Exception:
@@ -237,8 +268,24 @@ class ReportsBrowserScreen(Screen):
             list_view.clear()
         except Exception:
             pass
-        for entry in self._entries:
+        self._visible_entries = self._filtered_entries()
+        for entry in self._visible_entries:
             list_view.append(ListItem(Static(render_row(entry))))
+
+    def _filtered_entries(self) -> list[ReportEntry]:
+        """Subset of ``_entries`` matching the active filter.
+        Empty filter returns the full list. Substring match
+        against the entry label (operator-facing name) AND the
+        filename (so a power user can filter on technical names
+        like ``credential_exposure_paths``)."""
+        if not self._filter_text:
+            return list(self._entries)
+        needle = self._filter_text.lower()
+        return [
+            e for e in self._entries
+            if needle in e.label.lower()
+            or needle in e.filename.lower()
+        ]
 
     # ── Selection + preview ─────────────────────────────────────────
 
@@ -251,9 +298,12 @@ class ReportsBrowserScreen(Screen):
         await self._render_selection(idx)
 
     async def _render_selection(self, idx: int) -> None:
-        if not (0 <= idx < len(self._entries)):
+        # TUI-7: idx is into the FILTERED list. The current idx is
+        # tracked against the filtered set too, so action_open /
+        # action_toggle_reviewed look up the right entry.
+        if not (0 <= idx < len(self._visible_entries)):
             return
-        entry = self._entries[idx]
+        entry = self._visible_entries[idx]
         self._current_idx = idx
 
         try:
@@ -324,12 +374,17 @@ class ReportsBrowserScreen(Screen):
     # ── Actions ─────────────────────────────────────────────────────
 
     def action_toggle_reviewed(self) -> None:
-        if not (0 <= self._current_idx < len(self._entries)):
+        # TUI-7: index resolves against the visible (filtered) list.
+        if not (0 <= self._current_idx < len(self._visible_entries)):
             return
-        entry = self._entries[self._current_idx]
+        entry = self._visible_entries[self._current_idx]
         new_state = mark_reviewed(entry.path)
         entry.reviewed = new_state
-        # Re-populate the list so the icon updates.
+        # Re-populate the list so the icon updates. The entry's
+        # ``reviewed`` flag was updated in-place above; since
+        # ``_visible_entries`` holds the same object refs as
+        # ``_entries`` (we slice, not deep-copy), the renderer
+        # picks up the new state on next populate.
         self._populate_list()
         try:
             list_view = self.query_one("#reports-list", ListView)
@@ -339,9 +394,10 @@ class ReportsBrowserScreen(Screen):
         self._render_actions(entry)
 
     def action_open_external(self) -> None:
-        if not (0 <= self._current_idx < len(self._entries)):
+        # TUI-7: index resolves against the visible (filtered) list.
+        if not (0 <= self._current_idx < len(self._visible_entries)):
             return
-        entry = self._entries[self._current_idx]
+        entry = self._visible_entries[self._current_idx]
         if not entry.exists:
             return
         try:
@@ -349,6 +405,62 @@ class ReportsBrowserScreen(Screen):
             _open_path(str(entry.path))
         except Exception:
             pass
+
+    # ── TUI-7 filter actions ────────────────────────────────────────────
+
+    def action_focus_filter(self) -> None:
+        """``/`` — reveal + focus the filter Input."""
+        try:
+            inp = self.query_one("#reports-filter", Input)
+        except Exception:
+            return
+        inp.remove_class("reports-filter-hidden")
+        inp.focus()
+
+    def action_clear_filter(self) -> None:
+        """Esc while filtering — clear + hide + return focus
+        to the report list."""
+        try:
+            inp = self.query_one("#reports-filter", Input)
+        except Exception:
+            return
+        inp.value = ""
+        inp.add_class("reports-filter-hidden")
+        self._filter_text = ""
+        try:
+            self.query_one("#reports-list", ListView).focus()
+        except Exception:
+            pass
+        self._populate_list()
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        """Live filter — repopulate the list on every keystroke.
+        Tiny entry count (~20) so the cost is irrelevant."""
+        if event.input.id != "reports-filter":
+            return
+        self._filter_text = (event.value or "").strip()
+        self._populate_list()
+        # Snap selection to the first row of the new filtered
+        # set so the preview stays in sync.
+        try:
+            list_view = self.query_one("#reports-list", ListView)
+            list_view.index = 0
+        except Exception:
+            pass
+
+    def on_key(self, event) -> None:  # type: ignore[no-untyped-def]
+        """Esc while filter Input focused → clear filter rather
+        than triggering ``action_back``."""
+        try:
+            focused = self.focused
+        except Exception:
+            focused = None
+        if (
+            getattr(focused, "id", None) == "reports-filter"
+            and event.key == "escape"
+        ):
+            event.stop()
+            self.action_clear_filter()
 
     def action_focus_next_pane(self) -> None:
         try:

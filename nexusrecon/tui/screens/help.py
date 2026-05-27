@@ -42,6 +42,21 @@ class HelpModal(ModalScreen):
             table: DataTable = DataTable(id="help-table", show_cursor=False)
             table.add_columns("Key", "Action")
             yield table
+            # TUI-7: cross-screen row-action vocabulary. The
+            # per-screen table above shows what's bound RIGHT
+            # NOW; this section documents the consistent keys
+            # the operator can rely on EVERYWHERE.
+            yield Static(
+                "\n[bold]Cross-screen vocabulary[/bold]\n"
+                "[dim]These keys mean the same thing on every "
+                "list-shaped screen.[/dim]",
+                id="help-vocabulary-title",
+            )
+            vocab_table: DataTable = DataTable(
+                id="help-vocabulary-table", show_cursor=False,
+            )
+            vocab_table.add_columns("Key", "Meaning")
+            yield vocab_table
             yield Static(
                 "[dim]Press Esc, q, or ? to close.[/dim]",
                 id="help-hint",
@@ -86,6 +101,35 @@ class HelpModal(ModalScreen):
 
         for k, d in rows:
             table.add_row(k, d)
+
+        # TUI-7: cross-screen vocabulary. Curated rather than
+        # introspected — these are the keys we PROMISE behave the
+        # same way regardless of which list view the operator is
+        # in. Adding a new screen with these bindings = no work
+        # to surface here; removing the binding from a screen
+        # IS a regression and should be obvious in review.
+        try:
+            vocab_table = self.query_one(
+                "#help-vocabulary-table", DataTable,
+            )
+            for key, meaning in (
+                ("/", "Filter — substring match, case-insensitive"),
+                ("Enter", "Open / activate the highlighted row"),
+                ("Esc",   "Close filter (when active) or pop screen"),
+                ("Tab",   "Cycle focus between panes"),
+                ("c",     "Configure key (Tools) / Config (Dashboard)"),
+                ("m",     "Mark/unmark reviewed (Reports)"),
+                ("e",     "Open externally (Reports)"),
+                ("d",     "Detail toggle (Runner) / dismiss (Dashboard)"),
+                ("[ ]",   "Previous / next phase boundary (Runner)"),
+                ("Space", "Pause/resume tail (Runner)"),
+                ("?",     "Open this help"),
+                ("Ctrl+P", "Command palette"),
+                ("Ctrl+Q", "Quit the app"),
+            ):
+                vocab_table.add_row(key, meaning)
+        except Exception:
+            pass
 
     def _parent_screen(self):
         """Return the screen that was active when the modal was pushed."""
