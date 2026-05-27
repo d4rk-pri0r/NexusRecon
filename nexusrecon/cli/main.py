@@ -2657,6 +2657,168 @@ def adversarial_scan_text(
             console.print(f"     [dim]{m.snippet}[/dim]")
 
 
+# ── Phase 5 PR D: Multi-modal vision ─────────────────────────────────
+
+
+vision_app = typer.Typer(
+    help=(
+        "Multi-modal scanning — feed screenshots, document "
+        "scans, logos, and QR codes into the Living Graph. "
+        "Opt-in via Strategy.tool_budgets['vision_calls']."
+    ),
+)
+app.add_typer(vision_app, name="vision")
+
+
+def _build_vision_backend() -> Any:
+    """Construct the langchain-backed vision backend using
+    the campaign's configured LLM."""
+    from nexusrecon.core.config import get_config
+    from nexusrecon.graph.agent_executor import get_llm_from_config
+    from nexusrecon.vision import LangChainVisionBackend
+
+    llm = get_llm_from_config(get_config())
+    return LangChainVisionBackend(llm=llm)
+
+
+@vision_app.command("scan")
+def vision_scan(
+    campaign_id: str = typer.Argument(...),
+    image_path: str = typer.Argument(
+        ..., help="Path to an image / PDF artifact.",
+    ),
+    noop: bool = typer.Option(
+        False, "--noop",
+        help=(
+            "Use the no-op backend (no LLM cost). Still runs "
+            "QR decoding + cost-gate audit; useful for "
+            "verifying the pipeline plumbing."
+        ),
+    ),
+) -> None:
+    """Scan a single visual artifact + fold it into a
+    campaign's graph."""
+    from nexusrecon.core.entity_graph import EntityGraph
+    from nexusrecon.vision import (
+        NoopVisionBackend,
+        VisionExtractor,
+    )
+
+    state_path = _resolve_campaign_state_path(campaign_id)
+    graph, data = _rebuild_graph_from_state_path(state_path)
+
+    backend = NoopVisionBackend() if noop else _build_vision_backend()
+    extractor = VisionExtractor(backend=backend)
+    out = extractor.scan_file(image_path, graph=graph, state=data)
+    results = out if isinstance(out, list) else [out]
+
+    _persist_graph_to_state_path(state_path, graph, data)
+
+    for r in results:
+        if r.skipped:
+            console.print(
+                f"[yellow]skipped[/yellow] [cyan]{r.source_label}[/cyan] — "
+                f"{r.cost_decision.reason}"
+            )
+            continue
+        if r.error:
+            console.print(
+                f"[red]✗[/red] [cyan]{r.source_label}[/cyan] — {r.error}"
+            )
+            continue
+        console.print(
+            Panel(
+                (
+                    f"[bold green]Scanned.[/bold green] "
+                    f"backend=[cyan]{r.backend_used}[/cyan] "
+                    f"budget=[cyan]{r.cost_decision.used}/"
+                    f"{r.cost_decision.budget}[/cyan]\n"
+                    f"  entities added: [cyan]{r.entities_added}[/cyan]\n"
+                    f"  by type:        [cyan]"
+                    + ", ".join(
+                        f"{k}={v}" for k, v in
+                        sorted(r.entity_counts.items())
+                    )
+                    + "[/cyan]\n"
+                    + (
+                        f"  QR decodes:     [cyan]{len(r.qr_decodes)}[/cyan]\n"
+                        if r.qr_decodes else ""
+                    )
+                    + (
+                        f"\nNarrative:\n  [dim]{r.description}[/dim]"
+                        if r.description else ""
+                    )
+                ),
+                title=f"vision scan — {r.source_label}",
+                border_style="green",
+            )
+        )
+
+
+@vision_app.command("scan-dir")
+def vision_scan_dir(
+    campaign_id: str = typer.Argument(...),
+    directory: str = typer.Argument(
+        ..., help="Directory of image / PDF artifacts.",
+    ),
+    noop: bool = typer.Option(False, "--noop"),
+) -> None:
+    """Walk a directory + scan every supported artifact."""
+    from nexusrecon.core.entity_graph import EntityGraph
+    from nexusrecon.vision import (
+        NoopVisionBackend,
+        VisionExtractor,
+        is_supported_image,
+        is_supported_pdf,
+    )
+
+    state_path = _resolve_campaign_state_path(campaign_id)
+    graph, data = _rebuild_graph_from_state_path(state_path)
+
+    backend = NoopVisionBackend() if noop else _build_vision_backend()
+    extractor = VisionExtractor(backend=backend)
+
+    base = Path(directory).expanduser().resolve()
+    if not base.exists() or not base.is_dir():
+        console.print(f"[red]Not a directory:[/red] {base}")
+        raise typer.Exit(1)
+
+    candidates = [
+        p for p in sorted(base.rglob("*"))
+        if p.is_file()
+        and (is_supported_image(p) or is_supported_pdf(p))
+    ]
+    if not candidates:
+        console.print(
+            f"[yellow]No images or PDFs in {base}[/yellow]"
+        )
+        return
+
+    total_added = 0
+    total_skipped = 0
+    for path in candidates:
+        out = extractor.scan_file(path, graph=graph, state=data)
+        results = out if isinstance(out, list) else [out]
+        for r in results:
+            if r.skipped:
+                total_skipped += 1
+            total_added += r.entities_added
+
+    _persist_graph_to_state_path(state_path, graph, data)
+    console.print(
+        Panel(
+            (
+                f"[bold green]Directory scanned.[/bold green]\n"
+                f"  files seen:      [cyan]{len(candidates)}[/cyan]\n"
+                f"  entities added:  [cyan]{total_added}[/cyan]\n"
+                f"  results skipped: [cyan]{total_skipped}[/cyan]"
+            ),
+            title=f"vision scan-dir — {base.name}",
+            border_style="green",
+        )
+    )
+
+
 def main() -> None:
     """Entry point for the nexusrecon CLI."""
     app()
