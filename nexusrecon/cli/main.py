@@ -1105,6 +1105,155 @@ def packs_list(
     console.print("\n".join(table_lines))
 
 
+@packs_app.command("install")
+def packs_install(
+    url_spec: str = typer.Argument(
+        ..., help=(
+            "Pack URL: `gh:owner/repo[@ref]` or a full git URL."
+        ),
+    ),
+    pack_dir: str | None = typer.Option(
+        None, "--pack-dir",
+        help="Override the pack directory (default: ~/.nexusrecon/packs).",
+    ),
+) -> None:
+    """Install a recon pack from a git URL."""
+    from nexusrecon.packs import install_pack
+
+    result = install_pack(url_spec, pack_root=pack_dir)
+    if result.success:
+        console.print(
+            f"[green]✓ installed[/green] "
+            f"[cyan]{result.pack_name or '?'}[/cyan]"
+            + (f" ({result.version})" if result.version else "")
+            + f" → {result.pack_path}"
+        )
+        if result.error:
+            console.print(f"  [yellow]⚠[/yellow] {result.error}")
+    else:
+        console.print(f"[red]✗ install failed:[/red] {result.error}")
+        raise typer.Exit(1)
+
+
+@packs_app.command("uninstall")
+def packs_uninstall(
+    name: str = typer.Argument(
+        ..., help="Pack directory name (or absolute path).",
+    ),
+    pack_dir: str | None = typer.Option(
+        None, "--pack-dir",
+        help="Override the pack directory.",
+    ),
+    confirm: bool = typer.Option(
+        False, "--yes", "-y",
+        help="Skip confirmation prompt.",
+    ),
+) -> None:
+    """Remove an installed recon pack."""
+    from rich.prompt import Confirm
+
+    from nexusrecon.packs import uninstall_pack
+    from nexusrecon.packs.loader import _resolve_pack_dir
+
+    if not confirm:
+        target = (
+            Path(name).expanduser().resolve()
+            if Path(name).is_absolute()
+            else _resolve_pack_dir(pack_dir) / name
+        )
+        if not Confirm.ask(
+            f"Remove [cyan]{target}[/cyan]?", default=False,
+        ):
+            console.print("[yellow]cancelled[/yellow]")
+            return
+
+    if uninstall_pack(name, pack_root=pack_dir):
+        console.print(f"[green]✓ removed[/green] {name}")
+    else:
+        console.print(
+            f"[yellow]nothing to remove[/yellow] (no pack at {name})"
+        )
+
+
+@packs_app.command("update")
+def packs_update(
+    name: str = typer.Argument(
+        ..., help="Pack directory name (or absolute path).",
+    ),
+    pack_dir: str | None = typer.Option(
+        None, "--pack-dir",
+        help="Override the pack directory.",
+    ),
+) -> None:
+    """Update an installed pack to its remote's latest."""
+    from nexusrecon.packs import update_pack
+
+    result = update_pack(name, pack_root=pack_dir)
+    if result.success:
+        console.print(
+            f"[green]✓ updated[/green] "
+            f"[cyan]{result.pack_name or name}[/cyan]"
+            + (f" → {result.version}" if result.version else "")
+        )
+        if result.error:
+            console.print(f"  [yellow]⚠[/yellow] {result.error}")
+    else:
+        console.print(f"[red]✗ update failed:[/red] {result.error}")
+        raise typer.Exit(1)
+
+
+@packs_app.command("search")
+def packs_search(
+    query: str = typer.Argument(
+        "", help="Substring to search for in pack names + summaries.",
+    ),
+    category: str | None = typer.Option(
+        None, "--category",
+        help="Filter by category (exact match).",
+    ),
+    source: str | None = typer.Option(
+        None, "--source",
+        help=(
+            "Marketplace URL or local index path. Defaults to "
+            "$NEXUSRECON_MARKETPLACE_URL."
+        ),
+    ),
+) -> None:
+    """Search the marketplace for community packs."""
+    from nexusrecon.packs import load_marketplace, resolve_marketplace_url
+
+    url = source or resolve_marketplace_url()
+    if not url:
+        console.print(
+            "[yellow]No marketplace configured.[/yellow]\n"
+            "Set [cyan]NEXUSRECON_MARKETPLACE_URL[/cyan] to a "
+            "marketplace JSON URL, or pass --source <path>."
+        )
+        return
+    try:
+        marketplace = load_marketplace(url)
+    except ValueError as exc:
+        console.print(f"[red]marketplace load failed:[/red] {exc}")
+        raise typer.Exit(1)
+
+    results = marketplace.search(query, category=category)
+    if not results:
+        console.print("[yellow]no matches[/yellow]")
+        return
+    for entry in results:
+        cats = (
+            f" [dim]({', '.join(entry.categories)})[/dim]"
+            if entry.categories else ""
+        )
+        console.print(
+            f"[cyan]{entry.name}[/cyan] "
+            f"{entry.latest_version}{cats}\n"
+            f"  {entry.summary}\n"
+            f"  [dim]install:[/dim] "
+            f"[bold]nexusrecon packs install {entry.url}[/bold]\n"
+        )
+
+
 @packs_app.command("validate")
 def packs_validate(
     pack_path: str = typer.Argument(

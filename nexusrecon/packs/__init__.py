@@ -52,6 +52,14 @@ What's deliberately NOT here
 - Hot reload — packs are loaded once at startup; restart
   required.
 """
+from nexusrecon.packs.distribution import (
+    InstallResult,
+    ParsedURL,
+    install_pack,
+    parse_url,
+    uninstall_pack,
+    update_pack,
+)
 from nexusrecon.packs.loader import (
     PackLoadResult,
     PackLoadStatus,
@@ -64,6 +72,12 @@ from nexusrecon.packs.manifest import (
     compute_manifest_hash,
     parse_manifest,
 )
+from nexusrecon.packs.marketplace import (
+    Marketplace,
+    MarketplaceEntry,
+    load_marketplace,
+    resolve_marketplace_url,
+)
 from nexusrecon.packs.registry import (
     PackRegistry,
     get_pack_registry,
@@ -74,18 +88,28 @@ from nexusrecon.packs.registry import (
 )
 
 __all__ = [
+    "InstallResult",
+    "Marketplace",
+    "MarketplaceEntry",
     "PackContribution",
     "PackLoadResult",
     "PackLoadStatus",
     "PackManifest",
     "PackRegistry",
+    "ParsedURL",
     "compute_manifest_hash",
     "discover_packs",
     "get_pack_registry",
+    "install_pack",
     "is_known_entity_type",
     "is_known_relationship_type",
+    "load_marketplace",
     "load_packs",
     "parse_manifest",
+    "parse_url",
     "register_entity_type",
     "register_relationship_type",
+    "resolve_marketplace_url",
+    "uninstall_pack",
+    "update_pack",
 ]
