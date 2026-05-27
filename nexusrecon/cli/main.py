@@ -1147,6 +1147,152 @@ def packs_validate(
         )
 
 
+# ── Phase 3 PR B: Agent SDK ──────────────────────────────────────────
+
+agent_app = typer.Typer(
+    help=(
+        "Author new agents for recon packs. Generates "
+        "boilerplate with prompt versioning + citation "
+        "guardrails wired in."
+    ),
+)
+app.add_typer(agent_app, name="agent")
+
+
+@agent_app.command("new")
+def agent_new(
+    name: str | None = typer.Option(
+        None, "--name", help="Agent slug (snake_case).",
+    ),
+    role: str | None = typer.Option(
+        None, "--role", help="One-line role description.",
+    ),
+    goal: str | None = typer.Option(
+        None, "--goal", help="What the agent is trying to do.",
+    ),
+    backstory: str | None = typer.Option(
+        None, "--backstory",
+        help="Multi-sentence backstory + voice for the agent.",
+    ),
+    pack: str | None = typer.Option(
+        None, "--pack",
+        help=(
+            "'new' to create a fresh pack (default), or a "
+            "path to an existing pack directory to extend."
+        ),
+    ),
+    pack_name: str | None = typer.Option(
+        None, "--pack-name",
+        help="Slug for the new pack (only with --pack new).",
+    ),
+) -> None:
+    """Generate a new agent. Walks through Rich prompts for
+    any missing fields; ``--`` flags bypass the prompts.
+    """
+    from rich.prompt import Prompt
+
+    from nexusrecon.packs.loader import _resolve_pack_dir
+    from nexusrecon.sdk.agent_scaffolder import (
+        ScaffoldInputs,
+        scaffold_agent,
+        validate_inputs,
+    )
+
+    # ── Pack target ──────────────────────────────────────────
+    pack_choice = pack
+    if pack_choice is None:
+        pack_choice = Prompt.ask(
+            "[bold cyan]Pack target[/bold cyan] — 'new' "
+            "for a fresh pack, or path to an existing pack",
+            default="new",
+        )
+
+    if pack_choice == "new":
+        is_new_pack = True
+        pn = pack_name
+        if pn is None:
+            pn = Prompt.ask(
+                "[bold cyan]New pack name[/bold cyan] (kebab-case)",
+            )
+        pack_root = _resolve_pack_dir(None) / pn
+        target = pack_root
+        pack_slug = pn
+    else:
+        is_new_pack = False
+        target = Path(pack_choice).expanduser().resolve()
+        if not (target / "manifest.yaml").exists():
+            console.print(
+                f"[red]No manifest.yaml at {target}.[/red] "
+                "Pass --pack new if you meant to create a "
+                "fresh pack, or correct the path."
+            )
+            raise typer.Exit(1)
+        # Pack slug comes from the existing manifest.
+        import yaml as _yaml
+        raw = _yaml.safe_load((target / "manifest.yaml").read_text())
+        pack_slug = (raw or {}).get("name", "pack")
+
+    # ── Agent identity ───────────────────────────────────────
+    if name is None:
+        name = Prompt.ask(
+            "[bold cyan]Agent slug[/bold cyan] (snake_case)",
+        )
+    if role is None:
+        role = Prompt.ask(
+            "[bold cyan]Role[/bold cyan] "
+            "(one-line description of what the agent IS)",
+        )
+    if goal is None:
+        goal = Prompt.ask(
+            "[bold cyan]Goal[/bold cyan] "
+            "(what the agent is trying to do)",
+        )
+    if backstory is None:
+        backstory = Prompt.ask(
+            "[bold cyan]Backstory + voice[/bold cyan] "
+            "(used as system prompt; multi-sentence ok)",
+        )
+
+    inputs = ScaffoldInputs(
+        agent_name=name,
+        role=role,
+        goal=goal,
+        backstory=backstory,
+        pack_target=target,
+        is_new_pack=is_new_pack,
+        pack_name=pack_slug if is_new_pack else "",
+    )
+    try:
+        validate_inputs(inputs)
+        result = scaffold_agent(inputs)
+    except (ValueError, FileExistsError, FileNotFoundError) as exc:
+        console.print(f"[red]Scaffolding failed:[/red] {exc}")
+        raise typer.Exit(1)
+
+    console.print(
+        Panel(
+            (
+                f"[bold green]Agent scaffolded.[/bold green]\n"
+                f"  module:    [cyan]{result.agent_module_path}[/cyan]\n"
+                f"  manifest:  [cyan]{result.manifest_path}[/cyan]\n"
+                + (
+                    f"  test:      [cyan]{result.test_path}[/cyan]\n"
+                    if result.test_path else ""
+                )
+                + "\nNext steps:\n"
+                "  1. Edit the prompt / role / goal in the "
+                "module to match your capability.\n"
+                "  2. Run [cyan]nexusrecon packs list[/cyan] "
+                "to confirm the pack loads.\n"
+                "  3. Add the agent to a workflow phase or "
+                "dispatch policy."
+            ),
+            title="✓ agent new",
+            border_style="green",
+        )
+    )
+
+
 def main() -> None:
     """Entry point for the nexusrecon CLI."""
     app()
