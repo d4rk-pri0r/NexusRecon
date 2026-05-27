@@ -2071,6 +2071,227 @@ def ingest_csv(
     _print_import_report(report)
 
 
+# ── Phase 5 PR A: Watch Mode ─────────────────────────────────────────
+
+
+watch_app = typer.Typer(
+    help=(
+        "Continuous monitoring: long-running sensors trigger "
+        "alerts and (for high-severity events) micro-campaigns "
+        "when a campaign's graph changes materially."
+    ),
+)
+app.add_typer(watch_app, name="watch")
+
+
+@watch_app.command("create")
+def watch_create(
+    watch_id: str = typer.Argument(..., help="Stable id for this watch."),
+    campaign_id: str = typer.Argument(..., help="Campaign id to monitor."),
+    parent_domain: str | None = typer.Option(
+        None, "--parent-domain",
+        help=(
+            "ScopeSensor: watch every subdomain of this "
+            "parent domain."
+        ),
+    ),
+    entity_type: str | None = typer.Option(
+        None, "--entity-type",
+        help="ScopeSensor: watch every entity of this type.",
+    ),
+    interval_hours: float | None = typer.Option(
+        None, "--interval-hours",
+        help=(
+            "TimedSensor: re-fire every N hours regardless "
+            "of graph state. May be combined with other "
+            "sensor flags."
+        ),
+    ),
+    description: str = typer.Option("", "--description"),
+) -> None:
+    """Create a new watch."""
+    from nexusrecon.watch import (
+        ScopeSensor,
+        Sensor,
+        TimedSensor,
+        Watch,
+        WatchStorage,
+    )
+
+    sensors: list[Sensor] = []
+    if parent_domain:
+        sensors.append(ScopeSensor(
+            sensor_id=f"{watch_id}.parent-{parent_domain}",
+            parent_domain=parent_domain,
+        ))
+    if entity_type:
+        sensors.append(ScopeSensor(
+            sensor_id=f"{watch_id}.type-{entity_type}",
+            entity_type=entity_type,
+        ))
+    if interval_hours is not None:
+        sensors.append(TimedSensor(
+            sensor_id=f"{watch_id}.timed",
+            interval_seconds=int(interval_hours * 3600),
+            description=description or f"Every {interval_hours}h",
+        ))
+    if not sensors:
+        console.print(
+            "[red]Need at least one of: --parent-domain, "
+            "--entity-type, --interval-hours[/red]"
+        )
+        raise typer.Exit(1)
+
+    storage = WatchStorage(watch_id)
+    if storage.exists():
+        console.print(
+            f"[red]Watch {watch_id!r} already exists.[/red] "
+            f"Use `nexusrecon watch remove {watch_id}` first."
+        )
+        raise typer.Exit(1)
+    watch = Watch(
+        watch_id=watch_id,
+        campaign_id=campaign_id,
+        sensors=sensors,
+        description=description,
+    )
+    storage.save_watch(watch)
+    console.print(
+        Panel(
+            (
+                f"[bold green]Watch created.[/bold green]\n"
+                f"  id:        [cyan]{watch_id}[/cyan]\n"
+                f"  campaign:  [cyan]{campaign_id}[/cyan]\n"
+                f"  sensors:   [cyan]{len(sensors)}[/cyan]\n"
+                f"  config:    [cyan]{storage.config_path}[/cyan]\n\n"
+                f"Run periodically:\n"
+                f"  [bold]nexusrecon watch tick {watch_id}[/bold]"
+            ),
+            title="✓ watch create",
+            border_style="green",
+        )
+    )
+
+
+@watch_app.command("list")
+def watch_list() -> None:
+    """List configured watches."""
+    from nexusrecon.watch import list_watches
+
+    watches = list_watches()
+    if not watches:
+        console.print("[yellow]No watches configured.[/yellow]")
+        return
+    for w in watches:
+        console.print(
+            f"[cyan]{w.watch_id}[/cyan]  "
+            f"campaign=[cyan]{w.campaign_id}[/cyan]  "
+            f"sensors={len(w.sensors)}"
+            + (f"  — {w.description}" if w.description else "")
+        )
+
+
+@watch_app.command("tick")
+def watch_tick(
+    watch_id: str = typer.Argument(...),
+) -> None:
+    """Run one pass of the watch's sensors."""
+    from nexusrecon.watch import tick
+
+    result = tick(watch_id)
+    if result.errors:
+        for e in result.errors:
+            console.print(f"[red]✗[/red] {e}")
+        if not result.sensors_evaluated:
+            raise typer.Exit(1)
+
+    body_lines = [
+        f"sensors evaluated: [cyan]{result.sensors_evaluated}[/cyan]",
+        f"sensors fired:     [cyan]{result.sensors_fired}[/cyan]",
+    ]
+    if result.actions:
+        for a in result.actions:
+            sev = a.action.severity
+            color = (
+                "red" if sev == "high"
+                else "yellow" if sev == "medium"
+                else "cyan"
+            )
+            body_lines.append(
+                f"  • [{color}]{sev}[/{color}] {a.action.reason}"
+            )
+    else:
+        body_lines.append("no actions")
+    console.print(
+        Panel(
+            "\n".join(body_lines),
+            title=f"watch tick — {watch_id}",
+            border_style="cyan",
+        )
+    )
+
+
+@watch_app.command("alerts")
+def watch_alerts(
+    watch_id: str = typer.Argument(...),
+    limit: int = typer.Option(20, "--limit", "-n"),
+) -> None:
+    """Show the most-recent alert history."""
+    from nexusrecon.watch import WatchStorage
+
+    storage = WatchStorage(watch_id)
+    if not storage.exists():
+        console.print(f"[red]No watch {watch_id!r}.[/red]")
+        raise typer.Exit(1)
+    alerts = storage.read_alerts()
+    if not alerts:
+        console.print("[yellow]No alerts yet.[/yellow]")
+        return
+    for record in alerts[-limit:]:
+        sev = record.get("severity", "?")
+        color = (
+            "red" if sev == "high"
+            else "yellow" if sev == "medium"
+            else "cyan"
+        )
+        console.print(
+            f"[{color}]{sev:<6}[/{color}] "
+            f"{record.get('timestamp', '')} "
+            f"sensor=[cyan]{record.get('sensor_id', '')}[/cyan] "
+            f"{record.get('reason', '')}"
+        )
+
+
+@watch_app.command("remove")
+def watch_remove(
+    watch_id: str = typer.Argument(...),
+    confirm: bool = typer.Option(
+        False, "--yes", "-y",
+        help="Skip confirmation prompt.",
+    ),
+) -> None:
+    """Delete a watch + all its history."""
+    from rich.prompt import Confirm
+
+    from nexusrecon.watch import WatchStorage
+
+    storage = WatchStorage(watch_id)
+    if not storage.exists():
+        console.print(f"[yellow]No watch {watch_id!r}.[/yellow]")
+        return
+    if not confirm:
+        if not Confirm.ask(
+            f"Remove watch [cyan]{watch_id}[/cyan] and all its history?",
+            default=False,
+        ):
+            console.print("[dim]cancelled[/dim]")
+            return
+    if storage.delete():
+        console.print(f"[green]✓ removed[/green] {watch_id}")
+    else:
+        console.print(f"[red]✗[/red] could not remove {watch_id}")
+
+
 def main() -> None:
     """Entry point for the nexusrecon CLI."""
     app()
