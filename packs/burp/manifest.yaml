@@ -1,0 +1,14 @@
+name: burp
+version: 0.1.0
+schema_version: 1
+description: |
+  Bidirectional Burp Suite XML handoff. Imports Burp site
+  map XML into the Living Graph; exports the campaign's
+  in-scope domains as a Burp-importable scope XML.
+  First-party pack that dogfoods the Recon Pack format.
+author: nexusrecon
+license: MIT
+contributes:
+  tools:
+    - module: burp_xml
+      class_name: BurpXmlImporter
