@@ -31,7 +31,7 @@ What the graph carries after Phase 0.1
   (COLLABORATES_WITH, FOLLOWS, KNOWS, FEDERATED_WITH) between
   person nodes.
 
-What's still TODO per ``IMPLEMENTATION_PLAN_METASPLOIT_OSINT.md``
+What's still TODO per ARCHITECTURE.md §13-22
 - Confidence propagation (Phase 2 verification engine).
 - Time-travel / versioning (explicitly deferred — owner
   decision in audit §9.3).
@@ -1246,7 +1246,7 @@ class EntityGraph:
 # ──────────────────────────────────────────────────────────────────────
 
 #: Architectural alias matching the language used in
-#: ``IMPLEMENTATION_PLAN_METASPLOIT_OSINT.md``. New code should
+#: ARCHITECTURE.md §13-22. New code should
 #: import :class:`LivingGraph` to signal "this is the central
 #: reasoning substrate, not just an entity store." The
 #: ``EntityGraph`` name survives as the canonical class so the

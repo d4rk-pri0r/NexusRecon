@@ -1,7 +1,7 @@
 """Migrate pre-Phase-0 ``state.json`` files to the new
 Living Graph format.
 
-Phase 0 of ``IMPLEMENTATION_PLAN_METASPLOIT_OSINT.md`` reshaped
+Phase 0 of ARCHITECTURE.md §13-22 reshaped
 ``state["entity_graph"]`` from a truncated 500-entry name-list
 dict (``{"subdomains": [...], "emails": [...]}``) to the real
 serialised :class:`LivingGraph` carrying every entity surfaced

@@ -610,41 +610,6 @@ subsequent Sonnet sessions using the iteration template below.
 
 ---
 
-## Iteration Template (for the next Sonnet prompt)
-
-Once you've completed a testing pass and have a list of issues, hand
-back to Sonnet with this template:
-
-```
-You are iterating on NexusRecon based on real-world testing feedback.
-The full spec is in EXECUTION_PLAN_V2_GOLD_STANDARD.md at
-/Users/waifumachine/agentic-osint/. Section 0 conventions are binding.
-
-The operator ran the TESTING_RUNBOOK.md end-to-end and reports the
-following issues, in priority order:
-
-[paste the list of issues from the Report-Back Template, one per heading,
-with all artifacts attached or inline]
-
-For each issue:
-1. Locate the responsible file(s) and line(s)
-2. Diagnose the root cause
-3. Implement the fix surgically (no broad refactors)
-4. Note the fix in your end-of-turn report
-
-Working rules from prior sessions still apply:
-- No git commits, operator commits manually after review
-- No system binary installs (PyPI fine)
-- Stop and ask on architectural ambiguity
-- Parallel tool calls for independent edits
-- End-of-turn report under 15 lines
-
-Begin by reading the issue list in full, then state your fix order
-(typically: BLOCKER → CRITICAL → HIGH → MEDIUM → LOW), then proceed.
-```
-
----
-
 ## Appendix: Useful Diagnostics
 
 ```bash

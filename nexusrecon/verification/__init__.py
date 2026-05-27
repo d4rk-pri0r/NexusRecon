@@ -1,6 +1,6 @@
 """Verification & Continuous Confidence Engine — Phase 2.
 
-Phase 2 of ``IMPLEMENTATION_PLAN_METASPLOIT_OSINT.md`` makes
+Phase 2 of ARCHITECTURE.md §13-22 makes
 verification a continuously-running background capability
 instead of a single ``EvidenceAuditorAgent`` pass at the end.
 A campaign's view of "is this finding true?" should sharpen
@@ -40,7 +40,7 @@ Design tenets
 2. **Read-write the graph cautiously.** A verifier may
    adjust an entity's ``confidence`` field, but never mutate
    ``sources`` / ``provenance`` (those are sacred — see
-   ``IMPLEMENTATION_PLAN_METASPLOIT_OSINT.md§Phase 0``).
+   ARCHITECTURE.md §13).
 
 3. **Auditability first.** Every verdict that changes
    confidence is recorded via

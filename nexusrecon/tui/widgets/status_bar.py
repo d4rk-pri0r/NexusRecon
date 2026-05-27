@@ -6,7 +6,6 @@ campaign's target), tool / availability counters, LLM provider,
 budget gauge (when a campaign is running). Refreshes every second so
 the elapsed-time and cost figures stay live without manual remount.
 
-Spec ref: ``docs/TUI_DESIGN_SPEC.md§5.6``.
 
 Sample idle render::
 

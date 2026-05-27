@@ -627,11 +627,10 @@ Post-0.5 layers (sections 13-22 below describe each):
 
 # Post-0.5 Architecture Additions
 
-Sections 13-22 cover the major layers added in 0.6.x / 0.7.x against
-the [METASPLOIT_OSINT implementation plan](docs/IMPLEMENTATION_PLAN_METASPLOIT_OSINT.md).
-They each follow the same shape: *what problem it solves, the
-public surface, the invariants it preserves, what's deliberately
-out of scope.*
+Sections 13-22 cover the major layers added in 0.6.x / 0.7.x.
+Each follows the same shape: *what problem it solves, the public
+surface, the invariants it preserves, what's deliberately out of
+scope.*
 
 ---
 

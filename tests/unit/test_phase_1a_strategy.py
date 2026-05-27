@@ -1,7 +1,7 @@
 """Tests for Phase 1 PR A: Strategy + DispatchPolicy.
 
 The scaffold for the strategic reasoning engine described in
-``IMPLEMENTATION_PLAN_METASPLOIT_OSINT.md§Phase 1``. PR A
+ARCHITECTURE.md §15. PR A
 introduces the ``nexusrecon.strategy`` package without
 changing campaign behavior; this file pins what the new
 surface promises.

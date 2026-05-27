@@ -353,8 +353,8 @@ status. A GUI builder could:
 4. Use the "Tools unlocked" column to show the operator what each key buys
 5. Open the signup URL in the user's browser on click
 6. Test the key live by invoking the corresponding tool (`nexusrecon
-   tools <name> --self-test` doesn't exist yet but should, file as an
-   enhancement in `ITERATION_BACKLOG.md`)
+   tools <name> --self-test` doesn't exist yet but should, file as a
+   GitHub issue)
 
 The data model is stable. If you extract to JSON for the GUI, that JSON
 should derive from this Markdown, keep one source of truth, not two.

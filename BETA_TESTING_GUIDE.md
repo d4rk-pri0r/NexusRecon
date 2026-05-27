@@ -514,8 +514,9 @@ By end of week one, you should have a clear opinion on:
   and what each API key unlocks.
 - **`TESTING_RUNBOOK.md`**: detailed end-to-end test procedure. Useful
   when something breaks and you need to isolate where.
-- **`ITERATION_BACKLOG.md`**: open and resolved bugs. Check here before
-  filing a new bug to avoid duplicates.
+- **`CHANGELOG.md`**: what shipped in each release; check the
+  most-recent entry before filing a bug to avoid duplicates of
+  newly-fixed issues.
 - **`nexusrecon/docs/AGENT_LOOP.md`**: dispatcher deep-dive (how the
   agentic loop works and when it fires).
 - **`nexusrecon/docs/REPORT_GUIDE.md`**: which report file is for which

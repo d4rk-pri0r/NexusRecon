@@ -1,6 +1,6 @@
 """Read-only graph-summary accessor for agents.
 
-Step 0.0 of ``IMPLEMENTATION_PLAN_METASPLOIT_OSINT.md``: give
+Step 0.0 of ARCHITECTURE.md §13-22: give
 agents a clean handle to the campaign's :class:`EntityGraph`
 so they can reason over a real graph instead of the flat
 state buckets.

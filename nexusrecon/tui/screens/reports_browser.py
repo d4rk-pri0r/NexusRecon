@@ -19,7 +19,7 @@ next to it (``<report>.reviewed``). The state survives reboots
 and is honoured by the icon column. Reset by deleting the flag
 or pressing ``m`` again.
 
-Spec ref: ``docs/TUI_DESIGN_SPEC.md§6.4`` and §4.3.
+Spec ref: and §4.3.
 """
 from __future__ import annotations
 

@@ -8,9 +8,9 @@ minor bumps (0.x → 0.x+1) may break APIs.
 ## [0.7.0]: 2026-05-27
 
 **Test suite: 590/590 passing.** This release executes the four core
-bets of the
-[METASPLOIT_OSINT implementation plan](docs/IMPLEMENTATION_PLAN_METASPLOIT_OSINT.md)
-plus four of five Phase 5 moonshots. See
+bets of the post-0.5 transformation (Living Graph, Strategic
+Reasoning, Continuous Confidence, Contribution & Pack format) plus
+four of five moonshot capabilities. See
 [`ARCHITECTURE.md`](ARCHITECTURE.md) sections 13-22 for design
 deep-dives.
 
@@ -195,8 +195,8 @@ deep-dives.
 - README rewritten for v0.7.0. Capabilities tables for the
   strategic / verification / interop / extensibility layers,
   expanded CLI section with every new command, status block
-  pointing at the IMPLEMENTATION_PLAN_METASPLOIT_OSINT.md
-  acceptance criteria.
+  summarising what shipped against the post-0.5 transformation
+  goals.
 - ARCHITECTURE.md gained sections 13-22 (post-0.5 architecture
   deep-dives) and a glossary addendum.
 - Top-level CLI doc entries for the new Strategy / Plan / Pack /
@@ -642,8 +642,9 @@ this line landed during the pre-beta hardening sprint.
   upstream-drift detection. Auto-skipped unless API keys present.
 - **`tests/fixtures/`** directory with 120 JSON / HTML / XML / text
   fixtures built from each provider's public API documentation.
-- **`TESTING_PLAN.md`**: methodology doc covering the five mocking
-  strategies (HTTP / binary / DNS / pure-logic / stub).
+- Internal testing methodology covering five mocking strategies
+  (HTTP / binary / DNS / pure-logic / stub) — see
+  [`TESTING_RUNBOOK.md`](TESTING_RUNBOOK.md).
 - Custom **`ChunkyBar`** progress widget in the TUI runner screen.
 - **Live structlog stream panel** in the TUI runner screen. Operators
   can watch the framework's internal logs in real time during a

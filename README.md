@@ -451,7 +451,6 @@ Per-key tool-unlock matrix:
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contributor | Dev setup, adding tools / agents / packs |
 | [`BETA_TESTING_GUIDE.md`](BETA_TESTING_GUIDE.md) | Beta tester | First campaign walkthrough |
 | [`DISCLAIMER.md`](DISCLAIMER.md) | Everyone | Authorized-use policy, legal terms |
-| [`docs/IMPLEMENTATION_PLAN_METASPLOIT_OSINT.md`](docs/IMPLEMENTATION_PLAN_METASPLOIT_OSINT.md) | Anyone tracking the long-term vision | The "Metasploit of OSINT" plan and what's been shipped against it |
 | [`nexusrecon/docs/AGENT_LOOP.md`](nexusrecon/docs/AGENT_LOOP.md) | Engineer | Dynamic dispatcher internals |
 | [`nexusrecon/docs/REPORT_GUIDE.md`](nexusrecon/docs/REPORT_GUIDE.md) | Operator | Every output file and its schema |
 
@@ -459,14 +458,13 @@ Per-key tool-unlock matrix:
 
 ## Status
 
-**v0.7.0, beta.** The four core bets of the
-[METASPLOIT_OSINT implementation plan](docs/IMPLEMENTATION_PLAN_METASPLOIT_OSINT.md)
+**v0.7.0, beta.** The four core bets of the post-0.5 transformation
 (Living Graph foundation, Strategic Reasoning Engine, Continuous
-Confidence Engine, Contribution & Pack format) and all of Phase 4
-(intent-driven entry, STIX export/import, downstream emitters) ship
-in this release. Four of five Phase 5 moonshots are in place (Watch
-Mode, Signed Bundles, Adversarial Defense, Vision). The remaining
-moonshot. Fleet-Level Learning. Is open for design discussion.
+Confidence Engine, Contribution & Pack format) and the intent-driven
+entry + STIX export/import + downstream emitters ship in this
+release. Four of five moonshot capabilities are in place (Watch
+Mode, Signed Bundles, Adversarial Defense, Vision). Fleet-Level
+Learning is open for design discussion.
 
 **Test suite: 590/590 passing.**
 

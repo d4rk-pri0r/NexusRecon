@@ -16,7 +16,7 @@ Collapsible: pressing ``]`` toggles the sidebar between full width
 (24 cols) and a narrow icon-only mode (3 cols). Toggle persists for
 the lifetime of the screen, not across sessions.
 
-Spec ref: ``docs/TUI_DESIGN_SPEC.md§5.1`` (persistent shell layout).
+Spec ref: (persistent shell layout).
 """
 from __future__ import annotations
 

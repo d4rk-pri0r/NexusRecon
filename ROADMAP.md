@@ -7,9 +7,10 @@ welcome; prioritisation is set by the maintainer.
 
 ## Current state: `0.7.0` (beta)
 
-The four core bets of the
-[METASPLOIT_OSINT implementation plan](docs/IMPLEMENTATION_PLAN_METASPLOIT_OSINT.md)
-plus four of five Phase 5 moonshots ship in this release.
+The four core bets of the post-0.5 transformation (Living Graph
+foundation, Strategic Reasoning Engine, Continuous Confidence
+Engine, Contribution & Pack format) plus four of five moonshot
+capabilities ship in this release.
 **Test suite: 590/590 passing.**
 
 What works today:
@@ -231,8 +232,7 @@ Once the beta has run for a meaningful number of cycles:
       transforms (`nexusrecon/reports/obsidian_export.py`); the
       standard `master_report.md` is unchanged so GitHub rendering
       and external markdown viewers keep working. See
-      [`docs/obsidian.md`](docs/obsidian.md). Phase 1 of
-      [`TOOLCHAIN_AND_PLUGIN_SDK_PLAN.md`](TOOLCHAIN_AND_PLUGIN_SDK_PLAN.md).
+      [`docs/obsidian.md`](docs/obsidian.md).
 
 ### Performance + scale
 

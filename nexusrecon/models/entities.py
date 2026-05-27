@@ -92,7 +92,7 @@ class RelationshipType(StrEnum):
 class ProvenanceRecord(BaseModel):
     """One observation tying an entity to the tool that surfaced it.
 
-    Phase 0.1 of ``IMPLEMENTATION_PLAN_METASPLOIT_OSINT.md``:
+    Phase 0.1 of ARCHITECTURE.md §13-22:
     the bare ``sources: list[str]`` was sufficient for the
     Step 0.0 wire-up but loses the audit trail. With a typed
     provenance record we can answer:

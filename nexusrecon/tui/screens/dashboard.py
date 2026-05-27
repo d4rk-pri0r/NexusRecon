@@ -14,7 +14,6 @@ shapes the operator's entire mental model of the tool. Goal per the
 spec: dense, useful, beautiful — an operations center, not a
 splash screen.
 
-Spec ref: ``docs/TUI_DESIGN_SPEC.md§6.1``.
 """
 from __future__ import annotations
 

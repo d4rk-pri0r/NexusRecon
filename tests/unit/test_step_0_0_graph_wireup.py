@@ -1,4 +1,4 @@
-"""Tests for Step 0.0 of IMPLEMENTATION_PLAN_METASPLOIT_OSINT.md.
+"""Tests for Step 0.0 of ARCHITECTURE.md §13-22.
 
 The wire-up that surfaces the existing :class:`EntityGraph` into
 the LangGraph state and makes it reachable by the correlation +
