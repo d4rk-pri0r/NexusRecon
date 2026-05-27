@@ -107,6 +107,14 @@ class ToolRegistry:
         self._audit_log = None
         self._stealth_profile = None
         self._rate_limiter = None
+
+    @property
+    def audit_log(self):
+        """Phase 1 PR D: read-only accessor so the strategic
+        modules (planner, dispatcher) can write hash-chained
+        audit entries without re-plumbing the campaign object.
+        Returns ``None`` when no campaign context is bound."""
+        return self._audit_log
         self._proxy_manager = None
 
     def register(self, tool_cls: type[OSINTTool]) -> None:

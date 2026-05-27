@@ -39,6 +39,12 @@ explicitly pick a policy get the same behavior they had before
 (the ``lite`` policy is the default; same caps, same phase
 eligibility). Phase 1 is additive; nothing breaks.
 """
+from nexusrecon.strategy.bounded_agency import (
+    queue_for_approval,
+    resolve_approval,
+    resolve_pivot_policy,
+    route_plan_items,
+)
 from nexusrecon.strategy.plan import Strategy
 from nexusrecon.strategy.planner import plan_campaign, replan
 from nexusrecon.strategy.policy import (
@@ -66,6 +72,10 @@ __all__ = [
     "append_simulation_log",
     "get_policy",
     "plan_campaign",
+    "queue_for_approval",
     "replan",
+    "resolve_approval",
+    "resolve_pivot_policy",
+    "route_plan_items",
     "simulate_dispatch_plan",
 ]

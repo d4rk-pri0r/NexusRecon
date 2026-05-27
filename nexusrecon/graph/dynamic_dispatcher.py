@@ -380,6 +380,22 @@ async def run_dynamic_dispatch(state: CampaignGraphState) -> CampaignGraphState:
                     error=str(exc))
         simulation = None
 
+    # Audit log access — read once and reuse for every
+    # strategic decision in this dispatch cycle. ``None`` when
+    # running outside a campaign context (tests, dry runs).
+    audit_log = getattr(get_registry(), "audit_log", None)
+
+    if audit_log is not None:
+        try:
+            audit_log.log_dispatch_policy_resolved(
+                policy_name=policy.name,
+                source=_policy_source(state),
+                current_phase=str(state.get("current_phase", "")),
+                eligible=True,
+            )
+        except Exception as exc:
+            log.debug("Audit log write failed", error=str(exc))
+
     if (
         simulation is not None
         and simulation.recommendation == "abort"
@@ -391,13 +407,160 @@ async def run_dynamic_dispatch(state: CampaignGraphState) -> CampaignGraphState:
             estimated_cost=simulation.estimated_cost_usd,
         )
         append_simulation_log(state, simulation, decision="aborted_by_gate")
+        _audit_simulation(audit_log, simulation, decision="aborted_by_gate")
+        return state
+
+    # ── Route plan items (Phase 1 PR D) ────────────────────────────
+    # Split into immediate-execute, deep-pivot grants, and
+    # human-approval queue adds. Items without the new fields
+    # behave exactly as before (action == "execute" with the
+    # campaign policy unchanged).
+    from nexusrecon.strategy.bounded_agency import (
+        queue_for_approval,
+        resolve_pivot_policy,
+        route_plan_items,
+    )
+
+    decisions = route_plan_items(
+        valid_plan,
+        default_policy_name=policy.name,
+    )
+
+    items_to_execute: list[dict[str, Any]] = []
+    for decision in decisions:
+        if decision.action == "human_approval":
+            cost_estimate = _per_item_cost_estimate(
+                simulation, decision.item,
+            )
+            queued = queue_for_approval(
+                state, decision.item,
+                reason=decision.queue_reason,
+                estimated_cost_usd=cost_estimate,
+                tier=_item_tier(decision.item),
+            )
+            if audit_log is not None:
+                try:
+                    audit_log.log_human_approval_queued(
+                        tool=queued["tool"],
+                        target=queued["target"],
+                        reason=queued["approval_reason"],
+                        tier=queued["tier"],
+                        estimated_cost_usd=queued["estimated_cost_usd"],
+                    )
+                except Exception as exc:
+                    log.debug("Audit log write failed", error=str(exc))
+            continue
+
+        if decision.action == "deep_pivot":
+            override = resolve_pivot_policy(
+                decision.override_policy_name or policy.name,
+                default_policy_name=policy.name,
+            )
+            if audit_log is not None:
+                try:
+                    audit_log.log_deep_pivot_grant(
+                        tool=str(decision.item.get("tool", "")),
+                        target=str(decision.item.get("target", "")),
+                        granting_policy=policy.name,
+                        override_policy=override.name,
+                        rationale=decision.queue_reason,
+                    )
+                except Exception as exc:
+                    log.debug("Audit log write failed", error=str(exc))
+            items_to_execute.append(decision.item)
+            continue
+
+        items_to_execute.append(decision.item)
+
+    if not items_to_execute:
+        # Everything routed to approval / rejected — nothing to
+        # run, but the simulation outcome is still part of the
+        # audit trail.
+        if simulation is not None:
+            append_simulation_log(
+                state, simulation, decision="queued_for_approval",
+            )
+            _audit_simulation(
+                audit_log, simulation, decision="queued_for_approval",
+            )
         return state
 
     log.info(
         "Dynamic dispatcher executing",
-        count=len(valid_plan), policy=policy.name,
+        count=len(items_to_execute), policy=policy.name,
     )
-    state = await _execute_plan(valid_plan, state)
+    state = await _execute_plan(items_to_execute, state)
     if simulation is not None:
         append_simulation_log(state, simulation, decision="executed")
+        _audit_simulation(audit_log, simulation, decision="executed")
     return state
+
+
+# ── Audit helpers (Phase 1 PR D) ─────────────────────────────────────
+
+
+def _policy_source(state: CampaignGraphState) -> str:
+    """Mirror of :func:`_resolve_policy`'s precedence chain —
+    surfaces which slot the active policy name came from so
+    audit reviewers can trace how the dispatcher arrived at
+    its choice."""
+    if state.get("dispatch_policy_name"):
+        return "strategy"
+    if state.get("dispatch_mode"):
+        return "state.dispatch_mode"
+    return "default"
+
+
+def _audit_simulation(
+    audit_log: Any,
+    simulation: Any,
+    *,
+    decision: str,
+) -> None:
+    """Write a hash-chained simulation reference. The full
+    body lives in ``state["simulation_log"]``; this entry is
+    the tamper-evident pointer."""
+    if audit_log is None or simulation is None:
+        return
+    try:
+        audit_log.log_simulation(
+            plan_size=simulation.plan_size,
+            estimated_cost_usd=simulation.estimated_cost_usd,
+            expected_new_nodes=simulation.expected_new_nodes,
+            recommendation=simulation.recommendation,
+            confidence=simulation.confidence,
+            decision=decision,
+            flag_kinds=[f["kind"] for f in simulation.scope_creep_flags],
+        )
+    except Exception as exc:
+        log.debug("Audit log write failed", error=str(exc))
+
+
+def _per_item_cost_estimate(simulation: Any, item: dict[str, Any]) -> float:
+    """Find the simulated cost for one plan item (if any).
+    Falls back to ``0.0`` so audit / approval queues always
+    have a number even when the simulator didn't run."""
+    if simulation is None:
+        return 0.0
+    tool = str(item.get("tool", ""))
+    target = str(item.get("target", ""))
+    for sim_item in getattr(simulation, "items", []):
+        if sim_item.tool == tool and sim_item.target == target:
+            return float(sim_item.estimated_cost_usd)
+    return 0.0
+
+
+def _item_tier(item: dict[str, Any]) -> str:
+    """Best-effort: read the tier the planner / dispatcher
+    knew about. Tools whose tier we can't determine show as
+    ``?`` in the approval queue — operators see this and know
+    the underlying tool registration is missing tier metadata."""
+    try:
+        registry = get_registry()
+        tool_obj = registry.get(str(item.get("tool", "")))
+        if tool_obj is None:
+            return "?"
+        tier = getattr(tool_obj, "tier", None)
+        return str(getattr(tier, "value", tier or "?"))
+    except Exception:
+        return "?"

@@ -352,6 +352,28 @@ async def plan_campaign(
     if state is not None:
         _append_history(state, strategy, reason="initial")
 
+    # Phase 1 PR D: hash-chained record of the strategic
+    # decision. Goes through the campaign's AuditLog if one is
+    # bound to the tool registry; silent no-op otherwise (tests,
+    # dry runs).
+    try:
+        from nexusrecon.tools.registry import get_registry
+        audit = getattr(get_registry(), "audit_log", None)
+        if audit is not None:
+            audit.log_strategy_generated(
+                strategy_name=strategy.name,
+                dispatch_policy_name=strategy.dispatch_policy_name,
+                phases=strategy.phases,
+                response_kind=str(strategy.metadata.get(
+                    "planner_response_kind", "structured",
+                )),
+                fallback_reason=str(strategy.metadata.get(
+                    "planner_fallback_reason", "",
+                )) or None,
+            )
+    except Exception as exc:
+        log.debug("Strategy audit log write failed", error=str(exc))
+
     log.info(
         "Planner produced strategy",
         name=strategy.name,
@@ -392,6 +414,10 @@ async def replan(
     max_llm_cost_usd = float(state.get("max_llm_cost_usd", 10.0))
     scope_summary = str(state.get("scope_summary") or "(scope summary unavailable)")
 
+    old_strategy_name = str(
+        (state.get("strategy") or {}).get("name") or "default",
+    )
+
     new_strategy = await plan_campaign(
         scope_summary=scope_summary,
         seeds=seeds,
@@ -408,6 +434,21 @@ async def replan(
     if history:
         history[-1]["reason"] = f"replan: {reason}"
         state["strategy_history"] = history
+
+    # Phase 1 PR D: hash-chained replan record. Pairs with the
+    # ``strategy_generated`` entry plan_campaign() already wrote.
+    try:
+        from nexusrecon.tools.registry import get_registry
+        audit = getattr(get_registry(), "audit_log", None)
+        if audit is not None:
+            audit.log_strategy_replan(
+                reason=reason,
+                old_name=old_strategy_name,
+                new_name=new_strategy.name,
+                new_dispatch_policy_name=new_strategy.dispatch_policy_name,
+            )
+    except Exception as exc:
+        log.debug("Replan audit log write failed", error=str(exc))
     return new_strategy
 
 
@@ -431,7 +472,7 @@ def _fallback_strategy(
     if extra:
         metadata.update(extra)
     base = Strategy.default()
-    return Strategy(
+    strategy = Strategy(
         name=base.name,
         phases=list(base.phases),
         dispatch_policy_name=base.dispatch_policy_name,
@@ -440,6 +481,23 @@ def _fallback_strategy(
         kill_criteria=list(base.kill_criteria),
         metadata=metadata,
     )
+    # Phase 1 PR D: fallbacks are strategic decisions too —
+    # record so the audit trail shows when the planner couldn't
+    # give us a real plan.
+    try:
+        from nexusrecon.tools.registry import get_registry
+        audit = getattr(get_registry(), "audit_log", None)
+        if audit is not None:
+            audit.log_strategy_generated(
+                strategy_name=strategy.name,
+                dispatch_policy_name=strategy.dispatch_policy_name,
+                phases=strategy.phases,
+                response_kind="fallback",
+                fallback_reason=reason,
+            )
+    except Exception as exc:
+        log.debug("Fallback audit log write failed", error=str(exc))
+    return strategy
 
 
 def _append_history(

@@ -236,6 +236,170 @@ class AuditLog:
             "report_paths": report_paths,
         })
 
+    # ── Strategic decisions (Phase 1 PR D) ────────────────────────────────────
+    # Each strategic decision (plan generation, dispatch policy
+    # resolution, simulation outcome, deep-pivot grant,
+    # human-approval queue add) lands as its own hash-chained
+    # entry. This means an auditor can replay the entire
+    # reasoning trail and prove that ``state.json`` /
+    # ``simulation_log`` haven't been retroactively edited.
+
+    def log_strategy_generated(
+        self,
+        *,
+        strategy_name: str,
+        dispatch_policy_name: str,
+        phases: list[str],
+        response_kind: str,
+        fallback_reason: str | None = None,
+    ) -> str:
+        """Record that the planner produced (or fell back to)
+        a Strategy. ``response_kind`` is ``structured`` for a
+        real planner output, ``fallback`` for the default."""
+        return self._append_raw({
+            "event_type": "strategy_generated",
+            "strategy_name": strategy_name,
+            "dispatch_policy_name": dispatch_policy_name,
+            "phases": list(phases),
+            "response_kind": response_kind,
+            "fallback_reason": fallback_reason or "",
+        })
+
+    def log_strategy_replan(
+        self,
+        *,
+        reason: str,
+        old_name: str,
+        new_name: str,
+        new_dispatch_policy_name: str,
+    ) -> str:
+        """Record a mid-campaign replan. ``reason`` is the
+        operator's (or auto-trigger's) explanation; old/new
+        names let auditors reconstruct the swap without
+        loading the full strategy bodies."""
+        return self._append_raw({
+            "event_type": "strategy_replan",
+            "reason": reason,
+            "old_strategy_name": old_name,
+            "new_strategy_name": new_name,
+            "new_dispatch_policy_name": new_dispatch_policy_name,
+        })
+
+    def log_dispatch_policy_resolved(
+        self,
+        *,
+        policy_name: str,
+        source: str,
+        current_phase: str,
+        eligible: bool,
+    ) -> str:
+        """Record each dispatcher invocation's policy choice.
+        ``source`` is ``strategy``, ``state.dispatch_mode``,
+        ``default``, or ``fallback`` depending on which slot in
+        ``_resolve_policy``'s precedence chain matched."""
+        return self._append_raw({
+            "event_type": "dispatch_policy_resolved",
+            "policy_name": policy_name,
+            "source": source,
+            "current_phase": current_phase,
+            "eligible": bool(eligible),
+        })
+
+    def log_simulation(
+        self,
+        *,
+        plan_size: int,
+        estimated_cost_usd: float,
+        expected_new_nodes: int,
+        recommendation: str,
+        confidence: str,
+        decision: str,
+        flag_kinds: list[str] | None = None,
+    ) -> str:
+        """Record one simulation outcome. ``decision`` is what
+        the dispatcher actually did after seeing the simulation
+        (``executed`` / ``aborted_by_gate``). The simulation's
+        full body lives in ``state["simulation_log"]``; this
+        entry is the hash-chained reference."""
+        return self._append_raw({
+            "event_type": "simulation",
+            "plan_size": plan_size,
+            "estimated_cost_usd": round(float(estimated_cost_usd), 4),
+            "expected_new_nodes": int(expected_new_nodes),
+            "recommendation": recommendation,
+            "confidence": confidence,
+            "decision": decision,
+            "flag_kinds": list(flag_kinds or []),
+        })
+
+    def log_deep_pivot_grant(
+        self,
+        *,
+        tool: str,
+        target: str,
+        granting_policy: str,
+        override_policy: str,
+        rationale: str,
+    ) -> str:
+        """Record that a single dispatch item was granted a
+        per-item dispatch-policy override (``deep_pivot``).
+        High-signal — these grants temporarily widen the
+        operator's bounded-agency envelope; auditors want them
+        prominent so unexpected escalations show up
+        immediately."""
+        return self._append_raw({
+            "event_type": "deep_pivot_grant",
+            "tool": tool,
+            "target": target,
+            "granting_policy": granting_policy,
+            "override_policy": override_policy,
+            "rationale": rationale,
+        })
+
+    def log_human_approval_queued(
+        self,
+        *,
+        tool: str,
+        target: str,
+        reason: str,
+        tier: str,
+        estimated_cost_usd: float,
+    ) -> str:
+        """Record that a dispatch item was queued for human
+        approval rather than executed. Pairs with
+        ``state["pending_approvals"]``; the operator approving
+        or rejecting later emits ``log_human_approval_decision``."""
+        return self._append_raw({
+            "event_type": "human_approval_queued",
+            "tool": tool,
+            "target": target,
+            "reason": reason,
+            "tier": tier,
+            "estimated_cost_usd": round(float(estimated_cost_usd), 4),
+        })
+
+    def log_human_approval_decision(
+        self,
+        *,
+        tool: str,
+        target: str,
+        approved: bool,
+        operator: str,
+        notes: str = "",
+    ) -> str:
+        """Record an operator's approve / reject decision on a
+        queued item. ``operator`` is whatever identifier the
+        TUI captures (a name, an ID, ``cli`` if approved
+        through the CLI)."""
+        return self._append_raw({
+            "event_type": "human_approval_decision",
+            "tool": tool,
+            "target": target,
+            "approved": bool(approved),
+            "operator": operator,
+            "notes": notes,
+        })
+
     # ── Verification ──────────────────────────────────────────────────────────
 
     def verify_chain(self) -> bool:
