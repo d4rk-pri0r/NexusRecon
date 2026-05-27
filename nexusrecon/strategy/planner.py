@@ -70,6 +70,7 @@ def _build_planner_prompt(
     mode: str,
     dispatch_policy_name: str,
     max_llm_cost_usd: float,
+    verification_health: dict[str, Any] | None = None,
 ) -> str:
     """Build the strategic-planning prompt the
     :class:`CampaignPlannerAgent` sees.
@@ -81,6 +82,28 @@ def _build_planner_prompt(
     task-specific addendum.
     """
     seeds_line = ", ".join(seeds) if seeds else "(none — use scope domains)"
+    # Phase 2 PR D: feed verification health into the planner
+    # prompt when available. Low corroboration coverage or
+    # high contradiction density signals the planner should
+    # favor verification-oriented strategies (more identity /
+    # cert tools, fewer aggressive pivots).
+    health_block = ""
+    if verification_health:
+        health_block = (
+            "\n## Verification Health (campaign snapshot)\n"
+            f"- Entities: {verification_health.get('entity_count', 0)}\n"
+            f"- Corroboration coverage: "
+            f"{verification_health.get('corroboration_coverage', 0):.1%}\n"
+            f"- Average confidence: "
+            f"{verification_health.get('avg_confidence', 0):.2f}\n"
+            f"- Open contradictions: "
+            f"{verification_health.get('open_contradiction_count', 0)}\n"
+            f"- Weak links: "
+            f"{verification_health.get('weak_link_counts', {})}\n"
+            "Use these to bias the strategy — low coverage + "
+            "high contradictions means prefer verification "
+            "tools over breadth-first expansion.\n"
+        )
     return (
         "## Engagement Summary\n"
         f"{scope_summary}\n\n"
@@ -88,7 +111,8 @@ def _build_planner_prompt(
         f"- Seeds: {seeds_line}\n"
         f"- Mode: {mode}\n"
         f"- Operator-selected dispatch policy: {dispatch_policy_name}\n"
-        f"- LLM budget (USD): {max_llm_cost_usd:.2f}\n\n"
+        f"- LLM budget (USD): {max_llm_cost_usd:.2f}\n"
+        f"{health_block}\n"
         "## Task\n"
         "Produce a campaign strategy as a strict JSON object with the\n"
         "fields below. Use null for any field you are not\n"
@@ -311,12 +335,19 @@ async def plan_campaign(
             )
             return _fallback_strategy(operator_metadata, reason="no_executor")
 
+    # Phase 2 PR D: pull verification health off state when
+    # available so the planner can bias toward verification
+    # tools when corroboration is thin / contradictions are
+    # high. ``None`` on first plan (no campaign yet); populated
+    # by ``compute_verification_health`` at phase boundaries.
+    verification_health = (state or {}).get("verification_health")
     prompt = _build_planner_prompt(
         scope_summary=scope_summary,
         seeds=seeds,
         mode=mode,
         dispatch_policy_name=dispatch_policy_name,
         max_llm_cost_usd=max_llm_cost_usd,
+        verification_health=verification_health,
     )
 
     try:
