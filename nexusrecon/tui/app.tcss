@@ -273,6 +273,42 @@ Footer {
     padding: 1 0;
 }
 
+/* TUI-6b: gauge + sparkline row inside the stats panel. The
+ * horizontal arranges the IntensityGauge + two sparklines side
+ * by side; spacers/labels keep them readable. ``height: 1``
+ * because each widget renders a single line. */
+#runner-stats-viz {
+    height: 1;
+    width: 100%;
+    padding: 0 0 1 0;
+    align: left middle;
+}
+
+#runner-stats-viz > .runner-spacer { width: 2; }
+#runner-stats-viz > .runner-spark-label { width: auto; }
+
+/* TUI-6b: per-phase progress strip lives under the main bar in
+ * the header panel. ``margin-top: 1`` leaves a clean gap so the
+ * strip reads as a separate signal. */
+#runner-header > #runner-phase-strip {
+    margin: 1 2 0 2;
+    width: 1fr;
+}
+
+/* TUI-6b: filter input collapses to zero height when hidden, so
+ * its container layout doesn't reserve space when the operator
+ * hasn't pressed ``/`` yet. ``display: none`` would work too but
+ * the class swap is cheaper to flip. */
+#runner-filter {
+    width: 100%;
+    height: 1;
+    margin: 0 1;
+}
+
+#runner-filter.runner-filter-hidden {
+    display: none;
+}
+
 #runner-activity-wrap {
     border: round $nx-border-muted;
     padding: 0 1;

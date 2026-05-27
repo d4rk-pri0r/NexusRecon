@@ -215,6 +215,27 @@ Study these projects. Clone them. Run them in Kitty/WezTerm/Ghostty. Steal the *
 
 #### TUI-6b — Runner overhaul (PR 2; depends on 6a)
 
+> **Status: SHIPPED in a follow-on PR.** Power keys (``/``,
+> ``Space``, ``[``, ``]``), substring filter on a 2000-line
+> buffer, budget IntensityGauge, findings + dispatch
+> MiniSparklines, and per-phase PhaseStrip under the main
+> ChunkyBar all landed. 20 new runner tests + 160 prior TUI
+> tests pass.
+>
+> Two acceptance items moved to a follow-up:
+>   - **``n`` / ``N`` filter-match navigation.** When the
+>     filter is active, every visible line IS a match — vim-
+>     jumps add little signal. Re-evaluate if operators
+>     report wanting search-without-filter.
+>   - **Right-hand contextual detail pane.** The existing
+>     detail pane (structlog tail) is unchanged. A
+>     selection-driven contextual mode would require swapping
+>     the activity log from ``Static`` to ``ListView`` /
+>     ``OptionList`` — significant rendering-model change;
+>     scheduling separately. The filter + ``[``/``]`` already
+>     cover the "find a thing in 2000 lines" case the plan
+>     called out.
+
 1. **Runner activity surface overhaul**
    - Add `/` filter on the activity log. **Substring-based,
      not regex** — matches the existing palette's fuzzy/
