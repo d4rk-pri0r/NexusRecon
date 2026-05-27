@@ -257,15 +257,39 @@ def _render_tool_gaps(limit: int = 3) -> str:
     Returns an empty string when there are no gaps (so the card
     layout collapses cleanly). Each line names one env var + the
     number of tools it would unlock so the operator can prioritise.
+
+    TUI-6a: each gap now carries a small intensity-tinted bar
+    rendered with the same color stops as
+    :class:`IntensityGauge`. The bar's fill ratio is the gap's
+    impact normalised against the WORST gap shown, so the
+    operator's eye lands on the highest-leverage key first.
     """
+    from nexusrecon.tui.widgets.gauges import pick_intensity_color
+
     gaps = _top_key_gaps(limit=limit)
     if not gaps:
         return ""
+    max_count = max(count for _, count in gaps)
     lines: list[str] = ["[dim]Top gaps:[/dim]"]
+    bar_cells = 6
     for key, count in gaps:
+        # Normalise against the worst gap so within this list,
+        # the highest-impact key is always rendered fully hot
+        # and lesser gaps shade down. The absolute impact is in
+        # the trailing count, so the bar carries the relative
+        # signal without misrepresenting a 2-tool gap as
+        # "critical."
+        ratio = count / max_count if max_count > 0 else 0.0
+        color = pick_intensity_color(ratio)
+        filled = int(round(ratio * bar_cells))
+        empty = bar_cells - filled
+        bar = (
+            f"[{color}]{'█' * filled}[/{color}]"
+            f"[dim]{'░' * empty}[/dim]"
+        )
         suffix = "tool" if count == 1 else "tools"
         lines.append(
-            f"  [bold $primary]{key}[/bold $primary] "
+            f"  {bar} [bold $primary]{key}[/bold $primary] "
             f"[dim]would unlock {count} {suffix}[/dim]"
         )
     return "\n".join(lines)

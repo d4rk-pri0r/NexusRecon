@@ -319,6 +319,28 @@ Footer {
 .severity-low      { color: #5dade2; }
 .severity-info     { color: $nx-text-muted; }
 
+/* Intensity classes for the gauges widget library (TUI-6a).
+ * Mirror the severity ramp at intentionally hard stops so
+ * gauges visually reuse the operator's existing severity
+ * mental model. The classes are not used by IntensityGauge
+ * itself (which embeds hex colors directly in its rendered
+ * Rich markup), but ARE available for any non-gauge widget
+ * that wants to inherit the same ramp via CSS.
+ */
+.intensity-cool     { color: #00ff9c; }
+.intensity-warm     { color: #f1c40f; }
+.intensity-hot      { color: #ff8c00; }
+.intensity-critical { color: #ff3838; text-style: bold; }
+
+IntensityGauge,
+MiniSparkline,
+PhaseStrip {
+    /* Widgets default to ``height: 1`` already; restate at the
+     * stylesheet level so future contributors searching the
+     * TCSS for "PhaseStrip" find a hit. */
+    height: 1;
+}
+
 /* Configuration screen */
 
 #config-content {
