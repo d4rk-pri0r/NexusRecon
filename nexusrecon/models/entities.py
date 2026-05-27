@@ -75,6 +75,15 @@ class RelationshipType(StrEnum):
     # a graph traversal instead of a prompt-engineering exercise.
     CITES = "cites"
     BLOCKS = "blocks"  # an open_question BLOCKS a downstream lead
+    # Phase 0.1 PR B: three-graph unification. Phase D's
+    # IdentityGraph and Phase E's RelationshipGraph collapse
+    # into the EntityGraph. These edge types carry the
+    # interaction semantics each relationship-graph edge
+    # originally encoded.
+    KNOWS = "knows"                      # generic person-to-person link
+    COLLABORATES_WITH = "collaborates_with"  # co-authored a commit / paper / talk
+    FOLLOWS = "follows"                  # social-graph follow edge
+    FEDERATED_WITH = "federated_with"    # cloud / SSO federation (cross-org)
 
 
 # ── Provenance (Phase 0.1) ───────────────────────────────────────────────────

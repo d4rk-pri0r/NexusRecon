@@ -599,6 +599,229 @@ class EntityGraph:
         net.save_graph(str(output_path))
         return str(output_path)
 
+    # ── Phase 0.1 PR B: three-graph unification ───────────────────────────────
+
+    def merge_identity(self, identity: Any) -> str:
+        """Ingest one Phase D :class:`Identity` as a
+        :class:`PersonEntity` in this graph + relate the
+        person's identifiers as their own nodes.
+
+        Returns the entity_id of the merged PersonEntity. The
+        EntityGraph's ``(type, value)`` dedup ensures that
+        re-ingesting the same identity is a no-op past the
+        first call.
+
+        We use ``identity.identity_id`` as the PersonEntity's
+        ``value`` (and entity_id) so the Phase D content-derived
+        id round-trips. ``primary_label`` becomes ``full_name``
+        on the PersonEntity for operator-readable display in
+        reports.
+        """
+        from nexusrecon.models.entities import (
+            EmailEntity, PersonEntity, UsernameEntity,
+        )
+
+        # Idempotency: if this identity is already in the graph
+        # (re-ingest path), return the existing entity_id.
+        existing = self._value_index.get(
+            (EntityType.PERSON.value, identity.identity_id.lower()),
+        )
+        if existing:
+            return existing
+
+        # Build the PersonEntity. Use the identity's id as both
+        # entity_id (cross-graph stable) and value (dedup key).
+        person = PersonEntity(
+            entity_id=identity.identity_id,
+            value=identity.identity_id,
+            full_name=identity.primary_label or identity.identity_id,
+            metadata=dict(identity.metadata or {}),
+            confidence=max(
+                (idr.confidence for idr in (identity.identifiers or [])),
+                default=1.0,
+            ),
+        )
+        # Source list: union of identifier sources.
+        for idr in identity.identifiers or []:
+            if idr.source and idr.source not in person.sources:
+                person.sources.append(idr.source)
+
+        person_id = self.add_entity(person)
+        # Collect non-typed identifier rows (real_name, phone,
+        # domain, other) here; flushed onto the node's
+        # metadata at the end so the graph snapshot picks them
+        # up.
+        extra_identifier_rows: list[dict[str, Any]] = []
+
+        # Each identifier becomes its own typed entity + edge.
+        for idr in identity.identifiers or []:
+            it_value = idr.identifier_type.value
+            if it_value in ("corp_email", "personal_email"):
+                # Email entity + HAS_ACCOUNT edge from person → email.
+                parts = idr.value.lower().split("@")
+                local = parts[0] if len(parts) == 2 else idr.value
+                domain = parts[1] if len(parts) == 2 else ""
+                em = EmailEntity(
+                    value=idr.value.lower(),
+                    local_part=local,
+                    domain=domain,
+                    sources=[idr.source] if idr.source else [],
+                    confidence=idr.confidence,
+                )
+                em_id = self.add_entity(em)
+                self.relate(
+                    person_id, em_id,
+                    RelationshipType.HAS_ACCOUNT,
+                    confidence=idr.confidence,
+                    source_tool=idr.source or None,
+                    evidence=f"identifier_type={it_value}",
+                )
+            elif it_value == "handle":
+                # Username entity + HAS_ACCOUNT edge. The
+                # ``service`` field on the identifier carries
+                # which platform (GitHub, Mastodon, etc.).
+                un = UsernameEntity(
+                    value=idr.value,
+                    username=idr.value,
+                    platforms_found=[idr.service] if idr.service else [],
+                    sources=[idr.source] if idr.source else [],
+                    confidence=idr.confidence,
+                )
+                un_id = self.add_entity(un)
+                self.relate(
+                    person_id, un_id,
+                    RelationshipType.HAS_ACCOUNT,
+                    confidence=idr.confidence,
+                    source_tool=idr.source or None,
+                    evidence=f"service={idr.service or '?'}",
+                )
+            # ``real_name`` / ``phone`` / etc. fold into the
+            # PersonEntity's typed fields where applicable. For
+            # now we keep them on metadata so the operator can
+            # see the raw identifier list without losing
+            # nuance.
+            else:
+                extra_identifier_rows.append({
+                    "value": idr.value,
+                    "type": it_value,
+                    "service": idr.service,
+                    "source": idr.source,
+                    "confidence": idr.confidence,
+                })
+
+        # Credential exposures fold onto the person node as
+        # metadata for now. A future Phase 2 verification PR
+        # can promote them to standalone Breach entities with
+        # edges back; this PR is unification, not surface
+        # explosion.
+        exposures_meta = []
+        for exposure in identity.credential_exposures or []:
+            exposures_meta.append({
+                "breach_source": exposure.breach_source,
+                "breach_date": exposure.breach_date,
+                "observed_at_identifier": exposure.observed_at_identifier,
+                "credential_kind": exposure.credential_kind,
+                "confidence": exposure.confidence.value
+                if hasattr(exposure.confidence, "value")
+                else str(exposure.confidence),
+            })
+
+        # Sync the post-add mutations back onto the graph node.
+        # ``add_entity`` already snapshotted the person via
+        # ``model_dump()``, so the in-place changes we made
+        # above aren't visible in the graph until we mirror
+        # them explicitly. Doing it once at the end keeps the
+        # node update cheap.
+        if extra_identifier_rows or exposures_meta:
+            node_metadata = dict(self.graph.nodes[person_id].get("metadata") or {})
+            if extra_identifier_rows:
+                node_metadata["extra_identifiers"] = extra_identifier_rows
+            if exposures_meta:
+                node_metadata["credential_exposures"] = exposures_meta
+            self.graph.nodes[person_id]["metadata"] = node_metadata
+
+        return person_id
+
+    def merge_identity_graph(self, identity_graph: Any) -> int:
+        """Ingest every identity from a Phase D ``IdentityGraph``.
+
+        Iterates :meth:`IdentityGraph.all` and calls
+        :meth:`merge_identity` for each. Returns the count of
+        identities ingested.
+        """
+        if identity_graph is None:
+            return 0
+        count = 0
+        for identity in identity_graph.all():
+            self.merge_identity(identity)
+            count += 1
+        return count
+
+    #: Mapping from Phase E ``RelationshipEdge.interaction_type``
+    #: strings to the :class:`RelationshipType` enum value the
+    #: edge becomes in the unified EntityGraph. Unknown
+    #: interaction types fall back to KNOWS so we don't lose
+    #: edges to schema drift.
+    _INTERACTION_TO_REL_TYPE: dict[str, RelationshipType] = {
+        "co_author": RelationshipType.COLLABORATES_WITH,
+        "collaborator": RelationshipType.COLLABORATES_WITH,
+        "co_committer": RelationshipType.COLLABORATES_WITH,
+        "co_speaker": RelationshipType.COLLABORATES_WITH,
+        "follower": RelationshipType.FOLLOWS,
+        "following": RelationshipType.FOLLOWS,
+        "follows": RelationshipType.FOLLOWS,
+        "reply": RelationshipType.KNOWS,
+        "mention": RelationshipType.KNOWS,
+        "boost": RelationshipType.KNOWS,
+        "endorses": RelationshipType.KNOWS,
+        "federated_with": RelationshipType.FEDERATED_WITH,
+    }
+
+    def merge_relationship_graph(self, rel_graph: Any) -> int:
+        """Ingest every edge from a Phase E :class:`RelationshipGraph`
+        as a typed :class:`EntityRelationship` between the two
+        person nodes.
+
+        Assumes the corresponding identities have already been
+        merged (via :meth:`merge_identity_graph` or
+        :meth:`merge_identity`) so the source/target person
+        nodes exist. Edges between missing nodes are silently
+        skipped — same tolerance the audit logs require.
+
+        Returns the count of edges ingested.
+        """
+        if rel_graph is None:
+            return 0
+        count = 0
+        # The RelationshipGraph exposes its edges via ``all_edges()``
+        # returning ``(source_id, edge)`` tuples; fall back to a
+        # private accessor for graphs that pre-date that API.
+        if hasattr(rel_graph, "all_edges"):
+            iter_edges = rel_graph.all_edges()
+        else:
+            iter_edges = []
+            for src, idx_list in getattr(rel_graph, "_by_source", {}).items():
+                for idx in idx_list:
+                    iter_edges.append((src, rel_graph._edges[idx]))
+
+        for source_id, edge in iter_edges:
+            target_id = edge.target_identity_id
+            # Confirm both person nodes are in the graph.
+            if source_id not in self.graph or target_id not in self.graph:
+                continue
+            rel_type = self._INTERACTION_TO_REL_TYPE.get(
+                edge.interaction_type, RelationshipType.KNOWS,
+            )
+            self.relate(
+                source_id, target_id, rel_type,
+                confidence=float(edge.strength or 1.0),
+                evidence=f"interaction_type={edge.interaction_type}; "
+                         f"last_observed={edge.last_observed}",
+                source_tool=(edge.sources[0] if edge.sources else None),
+            )
+            count += 1
+        return count
+
     @classmethod
     def from_state(
         cls,
@@ -732,6 +955,36 @@ class EntityGraph:
         for q in (state.get("open_questions") or []):
             if isinstance(q, str) and q:
                 g.add_open_question(q, source="phase4_correlation")
+
+        # Phase 0.1 PR B: pull the Phase D IdentityGraph + Phase E
+        # RelationshipGraph into the unified EntityGraph when
+        # present in state. Each Identity becomes a PersonEntity;
+        # each Identifier becomes its typed entity + HAS_ACCOUNT
+        # edge; each RelationshipEdge becomes a typed KNOWS /
+        # COLLABORATES_WITH / FOLLOWS / FEDERATED_WITH edge
+        # between the corresponding person nodes. Missing graphs
+        # are tolerated — older state.json files lack these
+        # entirely.
+        identity_graph_dict = state.get("identity_graph") or {}
+        if isinstance(identity_graph_dict, dict) and identity_graph_dict.get("identities"):
+            try:
+                from nexusrecon.core.identity_graph import IdentityGraph
+                idg = IdentityGraph.from_dict(identity_graph_dict)
+                g.merge_identity_graph(idg)
+            except Exception:
+                # Identity graph deserialization is best-effort
+                # — schema drift between releases shouldn't
+                # break phase4 / phase8.
+                pass
+
+        relationship_graph_dict = state.get("relationship_graph") or {}
+        if isinstance(relationship_graph_dict, dict) and relationship_graph_dict.get("edges"):
+            try:
+                from nexusrecon.core.relationship_graph import RelationshipGraph
+                rg = RelationshipGraph.from_dict(relationship_graph_dict)
+                g.merge_relationship_graph(rg)
+            except Exception:
+                pass
 
         return g
 
