@@ -28,6 +28,13 @@ priorities change; phase 5 stays last.
 
 # Phase 1 — Obsidian-friendly master report
 
+> **Status: SHIPPED.** Implementation landed in the same PR as
+> this status update. The acceptance criteria below remain as
+> the regression contract; the unit tests in
+> `tests/unit/test_obsidian_export.py` (35 tests) and the smoke
+> parametrisation in `tests/unit/test_report_quality_smoke.py`
+> (10 new tests across the 5 fixtures) pin each criterion.
+
 ## Objective
 
 When an operator drops the campaign output directory into an

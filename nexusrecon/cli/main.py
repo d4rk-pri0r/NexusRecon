@@ -163,6 +163,15 @@ def run(
     generate_phishing: bool = typer.Option(False, "--generate-phishing", help="Generate per-target phishing email drafts. Authorized engagements only."),
     dispatch_mode: str = typer.Option("lite", "--dispatch-mode", help="Dynamic dispatch mode: lite (default), full, or off."),
     pretext_targets: str | None = typer.Option(None, "--pretext-targets", help="Comma-separated identity IDs to score pretexts for (Phase 7.7). Default: all identities."),
+    obsidian: bool = typer.Option(
+        False, "--obsidian",
+        help=(
+            "Also emit master_report.obsidian.md — same content as "
+            "master_report.md but with YAML frontmatter, [[wikilink]] "
+            "cross-references, and Obsidian callouts. Drop the campaign "
+            "directory into a vault to read."
+        ),
+    ),
 ) -> None:
     """
     Launch a NexusRecon reconnaissance campaign.
@@ -275,6 +284,7 @@ def run(
             [t.strip() for t in pretext_targets.split(",") if t.strip()]
             if pretext_targets else []
         ),
+        "generate_obsidian": obsidian,
         "llm_cost_usd": 0.0,
         "max_llm_cost_usd": getattr(scope_model.constraints, "max_llm_cost_usd", 10.0),
         "tool_cost_usd": 0.0,

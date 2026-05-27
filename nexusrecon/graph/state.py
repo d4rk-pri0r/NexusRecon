@@ -98,6 +98,11 @@ class CampaignGraphState(TypedDict, total=False):
     # for. None / absent = all identities (default). Comma-separated
     # via the --pretext-targets CLI flag, parsed into a list.
     pretext_targets: list[str]
+    # When True the report engine emits an Obsidian-flavored parallel
+    # of ``master_report.md`` ── YAML frontmatter, [[wikilink]] cross-
+    # references, callout-style severity blockquotes. Drop the
+    # campaign directory into an Obsidian vault to read.
+    generate_obsidian: bool
 
     # ── Report paths (set at end) ────────────────────────────────────
     report_paths: dict[str, str]

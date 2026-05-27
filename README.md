@@ -278,6 +278,10 @@ Every campaign writes to `./campaigns/<client>/<engagement>/<campaign-id>/report
 - `findings.json`, every `Finding` with severity, confidence, MITRE, evidence
 - `maltego_export.csv`, Maltego-compatible entity import
 - `report.pdf`, full report as PDF (requires `weasyprint`)
+- `master_report.obsidian.md`, parallel master report with YAML
+  frontmatter, `[[wikilinks]]`, and Obsidian callouts. Emitted
+  only when you pass `--obsidian` to `nexusrecon run`. See
+  [`docs/obsidian.md`](docs/obsidian.md) for the vault workflow.
 
 Full index with content schemas: [`nexusrecon/docs/REPORT_GUIDE.md`](nexusrecon/docs/REPORT_GUIDE.md).
 

@@ -127,8 +127,17 @@ beta-blocker work above has shaken out:
       → an importable `.burp` file.
 - [ ] **BloodHound CE JSON.** Azure / M365 federation findings →
       BloodHound graph ingest.
-- [ ] **Obsidian-friendly master report.** Verify links / callouts /
-      frontmatter render cleanly when dropped into a vault.
+- [x] **Obsidian-friendly master report.** `--obsidian` emits
+      `master_report.obsidian.md` alongside the standard report:
+      YAML frontmatter (campaign_id / target / scope_hash / version
+      / tags), `[[wikilinks]]` between deliverables for Graph
+      View, and Obsidian's built-in callouts (`> [!danger]
+      CRITICAL`) replacing bare severity blockquotes. Pure-function
+      transforms (`nexusrecon/reports/obsidian_export.py`); the
+      standard `master_report.md` is unchanged so GitHub rendering
+      and external markdown viewers keep working. See
+      [`docs/obsidian.md`](docs/obsidian.md). Phase 1 of
+      [`TOOLCHAIN_AND_PLUGIN_SDK_PLAN.md`](TOOLCHAIN_AND_PLUGIN_SDK_PLAN.md).
 
 ### Performance + scale
 

@@ -85,6 +85,16 @@ class ReportEngine:
         # V3 Move 2: master_report runs LAST so it can link to every other report
         self.report_paths["master_report"] = self._master_report(state)
 
+        # Phase 1 of the toolchain plan: parallel Obsidian-flavored
+        # master report. Gated on the --obsidian CLI flag (lives in
+        # state["generate_obsidian"]). Must run AFTER _master_report
+        # because it reads the standard file from disk and transforms
+        # it — no source-of-truth fork.
+        if state.get("generate_obsidian"):
+            self.report_paths["master_report_obsidian"] = (
+                self._master_report_obsidian(state)
+            )
+
         return self.report_paths
 
     # ── Top Threads to Pull ────────────────────────────────────────────────────
@@ -1721,6 +1731,35 @@ class ReportEngine:
         return str(path)
 
     # ── Spear-Phishing Intelligence (Phase E11) ────────────────────────────────
+
+    def _master_report_obsidian(self, state: dict[str, Any]) -> str:
+        """Emit ``master_report.obsidian.md`` next to the standard
+        master report.
+
+        Reads the just-written ``master_report.md`` from disk and
+        runs it through the Obsidian transforms (frontmatter,
+        wikilinks, callouts). This way the prose generation has
+        exactly one source — a future edit to the master_report
+        builder picks up automatically in the Obsidian variant.
+        """
+        from nexusrecon.reports.obsidian_export import build_obsidian_master
+
+        standard_path = Path(self.report_paths["master_report"])
+        standard_md = standard_path.read_text(encoding="utf-8")
+        out = build_obsidian_master(
+            standard_md=standard_md,
+            state={
+                **state,
+                "campaign_id": self.campaign_id,
+                "engagement_id": self.engagement_id,
+                "generated": datetime.utcnow().isoformat(),
+            },
+            scope_hash=self.scope_hash,
+            nexusrecon_version=self.nexusrecon_version,
+        )
+        path = self.output_dir / "master_report.obsidian.md"
+        path.write_text(out, encoding="utf-8")
+        return str(path)
 
     def _spear_phishing_intelligence(
         self, state: dict[str, Any],

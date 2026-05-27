@@ -576,6 +576,56 @@ class TestGeneratedReportsAcrossFixtures:
                     f"{cve_shaped!r}. Expected CVE-YYYY-NNNN."
                 )
 
+    @pytest.mark.parametrize("name,fixture_fn", FIXTURES)
+    def test_obsidian_export_emitted_when_flagged(
+        self, name: str, fixture_fn, engine: ReportEngine,
+    ):
+        """Phase 1 of the toolchain plan: ``generate_obsidian=True``
+        produces a parallel ``master_report.obsidian.md`` carrying
+        the YAML frontmatter, wikilinks, and callouts that make the
+        directory drop-in for an Obsidian vault. Verify across
+        every target shape so a fixture-specific edge case can't
+        sneak past."""
+        state = fixture_fn()
+        state["generate_obsidian"] = True
+        paths = engine.generate_all(state)
+        assert "master_report_obsidian" in paths, (
+            f"[{name}] obsidian flag set but master_report_obsidian "
+            f"absent from paths"
+        )
+        body = Path(paths["master_report_obsidian"]).read_text(encoding="utf-8")
+        # Frontmatter present and well-formed.
+        assert body.startswith("---\n"), (
+            f"[{name}] obsidian file missing YAML frontmatter open"
+        )
+        assert "\n---\n\n" in body, (
+            f"[{name}] obsidian file missing YAML frontmatter close"
+        )
+        # Required Property fields all surfaced.
+        for field in (
+            f"scope_hash: {engine.scope_hash}",
+            f"nexusrecon_version: {engine.nexusrecon_version}",
+            "tags:",
+            "  - nexusrecon",
+        ):
+            assert field in body, (
+                f"[{name}] obsidian frontmatter missing {field!r}"
+            )
+
+    @pytest.mark.parametrize("name,fixture_fn", FIXTURES)
+    def test_obsidian_flag_off_means_no_parallel_file(
+        self, name: str, fixture_fn, engine: ReportEngine,
+    ):
+        """When the flag is absent (default behavior pre-Phase 1),
+        the obsidian file MUST NOT land on disk. Pin so a future
+        always-on default doesn't sneak in and quietly double
+        every campaign's deliverable count."""
+        state = fixture_fn()
+        # Explicitly do not set generate_obsidian.
+        paths = engine.generate_all(state)
+        assert "master_report_obsidian" not in paths
+        assert not (engine.output_dir / "master_report.obsidian.md").exists()
+
 
 # ──────────────────────────────────────────────────────────────────────
 # Cross-tool dedup
