@@ -51,6 +51,11 @@ Design tenets
    down the campaign that's writing to the graph. The
    orchestrator wraps every verifier call.
 """
+from nexusrecon.verification.contradictions import (
+    ContradictionDetector,
+    ContradictionVerdict,
+    resolve_contradiction,
+)
 from nexusrecon.verification.corroboration import (
     CorroborationEngine,
     CorroborationVerdict,
@@ -62,9 +67,12 @@ from nexusrecon.verification.orchestrator import (
 )
 
 __all__ = [
+    "ContradictionDetector",
+    "ContradictionVerdict",
     "CorroborationEngine",
     "CorroborationVerdict",
     "SOURCE_INDEPENDENCE_CLASSES",
     "VerificationOrchestrator",
     "Verifier",
+    "resolve_contradiction",
 ]

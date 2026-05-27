@@ -71,6 +71,22 @@ log = structlog.get_logger(__name__)
 E = TypeVar("E", bound=BaseEntity)
 
 
+#: Relationship types where an entity can have AT MOST ONE
+#: outgoing edge — adding a second triggers
+#: ``exclusive_rel_conflict`` for the ContradictionDetector.
+#: Membership here is conservative: only relationships with
+#: clear singular-ownership semantics qualify. ``RESOLVES_TO``
+#: is excluded because DNS records routinely have multiple
+#: targets; ``HAS_TECH`` is excluded because an entity can use
+#: many technologies. Future relationship types added to
+#: :class:`~nexusrecon.models.entities.RelationshipType` opt
+#: in here when their semantics demand it.
+_EXCLUSIVE_REL_TYPES: frozenset[str] = frozenset({
+    "belongs_to", "owns", "part_of", "registered_by",
+    "hosted_on",
+})
+
+
 class EntityGraph:
     """
     Directed entity graph with deduplication and provenance tracking.
@@ -137,6 +153,38 @@ class EntityGraph:
             # Merge into existing
             existing_id = self._value_index[idx_key]
             existing_data = self.graph.nodes[existing_id]
+
+            # Phase 2 PR B: detect sticky-field conflicts BEFORE
+            # merging — the merge silently drops new values for
+            # fields that already have a value, so this is the
+            # only chance to record the divergence. Collected
+            # here, emitted as separate events after the merge
+            # to keep the ordering ``entity_merged`` →
+            # ``sticky_field_conflict`` predictable.
+            existing_sources_snapshot = list(
+                existing_data.get("sources", []),
+            )
+            existing_confidence_snapshot = float(
+                existing_data.get("confidence", 0.0),
+            )
+            sticky_conflicts: list[dict[str, Any]] = []
+            for k, v in entity.model_dump().items():
+                if k in ("entity_id", "entity_type", "value",
+                         "sources", "tags", "confidence",
+                         "first_seen", "last_seen", "provenance"):
+                    continue
+                if not v:
+                    continue
+                existing_v = existing_data.get(k)
+                if not existing_v:
+                    continue
+                if isinstance(v, (str, int, float, bool)) and v != existing_v:
+                    sticky_conflicts.append({
+                        "field": k,
+                        "existing_value": existing_v,
+                        "incoming_value": v,
+                    })
+
             # Merge sources
             existing_sources = set(existing_data.get("sources", []))
             existing_sources.update(entity.sources)
@@ -165,6 +213,19 @@ class EntityGraph:
                 "value": entity.value,
                 "new_sources": list(entity.sources),
             })
+            for conflict in sticky_conflicts:
+                self._emit_mutation({
+                    "kind": "sticky_field_conflict",
+                    "entity_id": existing_id,
+                    "entity_type": entity.entity_type.value,
+                    "value": entity.value,
+                    "field": conflict["field"],
+                    "existing_value": conflict["existing_value"],
+                    "incoming_value": conflict["incoming_value"],
+                    "existing_sources": existing_sources_snapshot,
+                    "incoming_sources": list(entity.sources),
+                    "existing_confidence": existing_confidence_snapshot,
+                })
             return existing_id
 
         # New entity
@@ -232,6 +293,34 @@ class EntityGraph:
             "timestamp": rel.timestamp.isoformat(),
             **rel.metadata,
         }
+        # Phase 2 PR B: detect exclusive-relationship conflicts
+        # BEFORE adding the new edge. Exclusive rel_types are
+        # ones an entity can have at most one outgoing edge of
+        # (e.g. ``belongs_to``, ``owns``, ``part_of`` —
+        # singular ownership semantics). When a new edge of
+        # such a type contradicts an existing one, emit a
+        # conflict event the ContradictionDetector listens for.
+        # NB ``resolves_to`` is intentionally NOT exclusive —
+        # DNS records routinely target multiple IPs.
+        conflicts: list[dict[str, Any]] = []
+        if rel.rel_type.value in _EXCLUSIVE_REL_TYPES:
+            for _, existing_target, edge_data in list(
+                self.graph.out_edges(rel.source_id, data=True),
+            ):
+                if (
+                    edge_data.get("rel_type") == rel.rel_type.value
+                    and existing_target != rel.target_id
+                ):
+                    conflicts.append({
+                        "existing_target": existing_target,
+                        "existing_confidence": float(
+                            edge_data.get("confidence", 0.0),
+                        ),
+                        "existing_source_tool": str(
+                            edge_data.get("source_tool", "") or "",
+                        ),
+                    })
+
         self.graph.add_edge(rel.source_id, rel.target_id, **data)
         self._emit_mutation({
             "kind": "relationship_added",
@@ -240,6 +329,18 @@ class EntityGraph:
             "rel_type": rel.rel_type.value,
             "confidence": rel.confidence,
         })
+        for c in conflicts:
+            self._emit_mutation({
+                "kind": "exclusive_rel_conflict",
+                "source_id": rel.source_id,
+                "rel_type": rel.rel_type.value,
+                "existing_target": c["existing_target"],
+                "existing_confidence": c["existing_confidence"],
+                "existing_source_tool": c["existing_source_tool"],
+                "incoming_target": rel.target_id,
+                "incoming_confidence": rel.confidence,
+                "incoming_source_tool": rel.source_tool or "",
+            })
         return rel.rel_id
 
     def relate(
