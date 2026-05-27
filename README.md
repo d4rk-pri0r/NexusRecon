@@ -169,30 +169,26 @@ nexusrecon
 
 Running with no arguments opens an interactive Textual UI:
 
-```
-   ┌─ NexusRecon, Agentic OSINT Orchestration ─────────────────┐
-   │                                                            │
-   │              [ N E X U S R E C O N    v 0.5.0 ]            │
-   │                                                            │
-   │       N tools registered · 0 campaigns · LLM: anthropic    │
-   │                                                            │
-   │       🎯  New Campaign      (n)                            │
-   │       🔄  Resume Campaign   (r)                            │
-   │       📊  Past Campaigns    (p)                            │
-   │       🔧  Configuration     (c)                            │
-   │       🛠   Tools             (t)                            │
-   │       ❌  Quit               (q)                            │
-   │                                                            │
-   │     ↑/↓ navigate · Enter select · letter shortcut quick    │
-   └────────────────────────────────────────────────────────────┘
-```
+![NexusRecon TUI walkthrough](docs/demo/nexusrecon.gif)
+
+> The 90-second demo above (dashboard → tools browser → in-place key
+> edit → command palette) is captured deterministically from
+> [`docs/demo/nexusrecon.tape`](docs/demo/nexusrecon.tape). Re-render
+> after a UI change with `make demo` —
+> [setup instructions here](docs/demo/RECORDING.md).
 
 From the TUI you can:
 
 - Walk a **new-campaign wizard** that builds the scope file for you
-- **Edit API keys** in `.env` via a masked editor (the Configuration screen)
-- **Browse the live tool catalogue** and see which tools are unlocked by which keys
+- **Browse the live tool catalogue** with category labels, per-tool
+  required + optional key status, and a `c`-shortcut that pops a
+  masked edit modal right where the missing key lives
+- **Configure** application-wide settings (LLM, OPSEC, storage, debug)
+  in the slimmed Configuration screen — tool API keys live in the
+  Tools surface so the two never duplicate each other
 - **Resume** or **diff** prior campaigns
+- See the **top-impact missing API keys** ranked by how many tools
+  each one would unlock, right on the dashboard
 
 ### 3. Or use the CLI directly
 
