@@ -1869,6 +1869,160 @@ def plan(
     )
 
 
+# ── Phase 4 PR C: Bidirectional import ────────────────────────────────
+
+
+import_app = typer.Typer(
+    help=(
+        "Ingest third-party tool output into a campaign's "
+        "Living Graph. Supports STIX 2.1 bundles, Nessus "
+        "XML, Nuclei JSON-lines, and generic CSV."
+    ),
+)
+app.add_typer(import_app, name="ingest")
+
+
+def _resolve_campaign_state_path(campaign_id: str) -> Path:
+    """Find a campaign's state.json by ID (re-uses the same
+    rglob trick the export command does)."""
+    config = get_config()
+    output_dir = Path(config.output_dir)
+    for candidate in output_dir.rglob(campaign_id):
+        if candidate.is_dir():
+            sp = candidate / "state.json"
+            if sp.exists():
+                return sp
+    raise FileNotFoundError(f"campaign {campaign_id!r} not found")
+
+
+def _rebuild_graph_from_state_path(state_path: Path):
+    """Common helper for `import` subcommands."""
+    from nexusrecon.core.entity_graph import EntityGraph
+    data = json.loads(state_path.read_text(encoding="utf-8"))
+    graph = EntityGraph.from_state(
+        data,
+        campaign_id=data.get("campaign_id", ""),
+        engagement_id=data.get("engagement_id", ""),
+    )
+    return graph, data
+
+
+def _persist_graph_to_state_path(state_path: Path, graph, data: dict) -> None:
+    data["entity_graph"] = graph.to_dict()
+    state_path.write_text(
+        json.dumps(data, indent=2, default=str), encoding="utf-8",
+    )
+
+
+def _print_import_report(report) -> None:
+    console.print(
+        Panel(
+            (
+                f"[bold green]Imported via {report.importer}[/bold green]\n"
+                f"  source:       [cyan]{report.source_path}[/cyan]\n"
+                f"  entities new: [cyan]{report.entities_added}[/cyan]\n"
+                f"  merges:       [cyan]{report.entities_merged}[/cyan]\n"
+                f"  edges:        [cyan]{report.relationships_added}[/cyan]\n"
+                f"  skipped:      [cyan]{report.skipped}[/cyan]\n"
+                + (
+                    "  by type:      "
+                    + ", ".join(
+                        f"{k}={v}"
+                        for k, v in sorted(report.counts_by_type.items())
+                    )
+                    + "\n"
+                    if report.counts_by_type else ""
+                )
+            ),
+            title="✓ ingest",
+            border_style="green",
+        )
+    )
+    for w in report.warnings:
+        console.print(f"  [yellow]⚠[/yellow] {w}")
+
+
+@import_app.command("stix")
+def ingest_stix(
+    campaign_id: str = typer.Argument(...),
+    path: str = typer.Argument(..., help="Path to STIX 2.1 bundle JSON."),
+) -> None:
+    """Import a STIX 2.1 bundle into a campaign's graph."""
+    from nexusrecon.ingest import STIXBundleImporter
+
+    state_path = _resolve_campaign_state_path(campaign_id)
+    graph, data = _rebuild_graph_from_state_path(state_path)
+    report = STIXBundleImporter().import_file(path, graph)
+    _persist_graph_to_state_path(state_path, graph, data)
+    _print_import_report(report)
+
+
+@import_app.command("nessus")
+def ingest_nessus(
+    campaign_id: str = typer.Argument(...),
+    path: str = typer.Argument(..., help="Path to a .nessus XML report."),
+) -> None:
+    """Import a Nessus XML report into a campaign's graph."""
+    from nexusrecon.ingest import NessusImporter
+
+    state_path = _resolve_campaign_state_path(campaign_id)
+    graph, data = _rebuild_graph_from_state_path(state_path)
+    report = NessusImporter().import_file(path, graph)
+    _persist_graph_to_state_path(state_path, graph, data)
+    _print_import_report(report)
+
+
+@import_app.command("nuclei")
+def ingest_nuclei(
+    campaign_id: str = typer.Argument(...),
+    path: str = typer.Argument(
+        ..., help="Path to Nuclei JSON-lines (or JSON array) output.",
+    ),
+) -> None:
+    """Import Nuclei output into a campaign's graph."""
+    from nexusrecon.ingest import NucleiImporter
+
+    state_path = _resolve_campaign_state_path(campaign_id)
+    graph, data = _rebuild_graph_from_state_path(state_path)
+    report = NucleiImporter().import_file(path, graph)
+    _persist_graph_to_state_path(state_path, graph, data)
+    _print_import_report(report)
+
+
+@import_app.command("csv")
+def ingest_csv(
+    campaign_id: str = typer.Argument(...),
+    path: str = typer.Argument(..., help="Path to a CSV file."),
+    entity_type: str = typer.Option(
+        ..., "--entity-type",
+        help="Entity type column maps to: domain, subdomain, ip_address, email, url, technology, cve.",
+    ),
+    value_column: str = typer.Option(
+        ..., "--value-column",
+        help="Name of the column carrying the entity's value.",
+    ),
+    confidence_column: str | None = typer.Option(
+        None, "--confidence-column",
+        help="Optional column carrying per-row confidence (0-1 or 0-100).",
+    ),
+) -> None:
+    """Import a CSV file via a declarative column mapping."""
+    from nexusrecon.ingest import CSVImporter
+
+    state_path = _resolve_campaign_state_path(campaign_id)
+    graph, data = _rebuild_graph_from_state_path(state_path)
+    report = CSVImporter().import_file(
+        path, graph,
+        mapping={
+            "entity_type": entity_type,
+            "value_column": value_column,
+            "confidence_column": confidence_column,
+        },
+    )
+    _persist_graph_to_state_path(state_path, graph, data)
+    _print_import_report(report)
+
+
 def main() -> None:
     """Entry point for the nexusrecon CLI."""
     app()
