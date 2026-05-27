@@ -361,9 +361,43 @@ async def run_dynamic_dispatch(state: CampaignGraphState) -> CampaignGraphState:
         log.info("Dynamic dispatcher: no valid items after validation")
         return state
 
+    # ── Simulate (Phase 1 PR C) ───────────────────────────────────────────────
+    # Pre-execution forecast of cost, expected graph growth, and
+    # scope-creep risk. Always recorded to ``state["simulation_log"]``
+    # so the audit trail can answer "what did we expect vs. what
+    # happened?". When ``state["simulation_gating"]`` is truthy and
+    # the simulator recommends ``abort``, the dispatch is suppressed;
+    # otherwise the recommendation is advisory only.
+    try:
+        from nexusrecon.strategy.simulation import (
+            append_simulation_log,
+            simulate_dispatch_plan,
+        )
+        simulation = simulate_dispatch_plan(valid_plan, state)
+    except Exception as exc:
+        # Simulator failures must not block real dispatch.
+        log.warning("Simulator failed — proceeding without forecast",
+                    error=str(exc))
+        simulation = None
+
+    if (
+        simulation is not None
+        and simulation.recommendation == "abort"
+        and state.get("simulation_gating")
+    ):
+        log.warning(
+            "Dispatch aborted by simulation gate",
+            rationale=simulation.rationale,
+            estimated_cost=simulation.estimated_cost_usd,
+        )
+        append_simulation_log(state, simulation, decision="aborted_by_gate")
+        return state
+
     log.info(
         "Dynamic dispatcher executing",
         count=len(valid_plan), policy=policy.name,
     )
     state = await _execute_plan(valid_plan, state)
+    if simulation is not None:
+        append_simulation_log(state, simulation, decision="executed")
     return state

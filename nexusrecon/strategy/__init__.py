@@ -48,14 +48,24 @@ from nexusrecon.strategy.policy import (
     OffPolicy,
     get_policy,
 )
+from nexusrecon.strategy.simulation import (
+    SimulatedItem,
+    SimulationResult,
+    append_simulation_log,
+    simulate_dispatch_plan,
+)
 
 __all__ = [
     "DispatchPolicy",
     "FullPolicy",
     "LitePolicy",
     "OffPolicy",
+    "SimulatedItem",
+    "SimulationResult",
     "Strategy",
+    "append_simulation_log",
     "get_policy",
     "plan_campaign",
     "replan",
+    "simulate_dispatch_plan",
 ]
