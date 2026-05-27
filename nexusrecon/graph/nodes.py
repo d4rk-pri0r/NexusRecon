@@ -1728,19 +1728,42 @@ async def reflection_node(state: CampaignGraphState) -> CampaignGraphState:
             f"After {current}: {len(open_hyps)} open hypotheses remain"
         ]
 
-    # Dynamic dispatch
-    dispatch_mode = state.get("dispatch_mode", "lite")
-    if dispatch_mode == "off":
-        return state
+    # Dynamic dispatch — Phase 1 PR A: eligibility check + caps
+    # come from the active DispatchPolicy (resolved via
+    # state["dispatch_policy_name"] or the legacy
+    # state["dispatch_mode"]). Module-level constants like
+    # _LITE_DISPATCH_PHASES survive as documentation; the
+    # policy is the source of truth.
+    try:
+        from nexusrecon.strategy.policy import get_policy
+        policy = get_policy(
+            str(state.get("dispatch_policy_name")
+                or state.get("dispatch_mode") or "lite"),
+        )
+    except Exception:
+        # Defensive: never let policy resolution kill the
+        # workflow. Fall back to lite-equivalent behavior.
+        policy = None
 
-    if dispatch_mode == "lite" and current not in _LITE_DISPATCH_PHASES:
-        return state
-
-    # Total cap check — fast path before spinning up LLM
-    dispatch_log = state.get("dynamic_dispatch_log", [])
-    if len(dispatch_log) >= 30:
-        log.info("Total dispatch cap reached", total=len(dispatch_log))
-        return state
+    if policy is None:
+        # Legacy path preserved for the worst case.
+        dispatch_mode = state.get("dispatch_mode", "lite")
+        if dispatch_mode == "off":
+            return state
+        if dispatch_mode == "lite" and current not in _LITE_DISPATCH_PHASES:
+            return state
+        dispatch_log = state.get("dynamic_dispatch_log", [])
+        if len(dispatch_log) >= 30:
+            log.info("Total dispatch cap reached", total=len(dispatch_log))
+            return state
+    else:
+        if not policy.should_dispatch_for_phase(current):
+            return state
+        dispatch_log = state.get("dynamic_dispatch_log", [])
+        if len(dispatch_log) >= policy.max_total:
+            log.info("Total dispatch cap reached",
+                     total=len(dispatch_log), policy=policy.name)
+            return state
 
     try:
         from nexusrecon.graph.dynamic_dispatcher import run_dynamic_dispatch

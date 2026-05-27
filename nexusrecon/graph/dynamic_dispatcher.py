@@ -267,6 +267,38 @@ async def _execute_plan(
 
 # ── Main entry point ──────────────────────────────────────────────────────────
 
+def _resolve_policy(state: CampaignGraphState) -> Any:
+    """Phase 1 PR A: resolve the active :class:`DispatchPolicy`.
+
+    Order of precedence (highest → lowest):
+      1. ``state["dispatch_policy_name"]`` — set by an
+         operator-authored Strategy or by a future planner
+         agent.
+      2. ``state["dispatch_mode"]`` — legacy field carrying
+         the ``--dispatch-mode`` CLI flag value
+         (``lite`` / ``full`` / ``off``).
+      3. Default ``LitePolicy``.
+
+    Falling back gracefully on import error keeps the module
+    importable even when the new ``strategy`` package is
+    missing (matters for tests that monkey-patch only the
+    legacy surface)."""
+    try:
+        from nexusrecon.strategy.policy import get_policy
+        name = (
+            state.get("dispatch_policy_name")
+            or state.get("dispatch_mode")
+            or "lite"
+        )
+        return get_policy(str(name))
+    except Exception as exc:
+        log.warning("Dispatch policy resolution failed, falling back to lite",
+                    error=str(exc))
+        # Last-resort: re-import the bundled LitePolicy.
+        from nexusrecon.strategy.policy import LitePolicy
+        return LitePolicy()
+
+
 async def run_dynamic_dispatch(state: CampaignGraphState) -> CampaignGraphState:
     """
     Build LLM prompt → parse plan → validate → execute → merge.
@@ -276,11 +308,28 @@ async def run_dynamic_dispatch(state: CampaignGraphState) -> CampaignGraphState:
     - LLM call fails
     - Plan parses to []
     - No items survive validation
+
+    Phase 1 PR A: the cap values + the per-phase eligibility
+    check now come from the active :class:`DispatchPolicy`
+    (resolved via ``state["dispatch_policy_name"]`` or the
+    legacy ``state["dispatch_mode"]``). Module-level
+    constants (``MAX_PER_CYCLE``, ``MAX_TOTAL``,
+    ``LITE_DISPATCH_PHASES``) are kept as backward-compat
+    defaults referenced by tests that pre-date the policy
+    interface; the runtime uses the policy values.
     """
+    policy = _resolve_policy(state)
     dispatch_log = state.get("dynamic_dispatch_log", [])
-    remaining = MAX_TOTAL - len(dispatch_log)
+
+    # Hard total cap comes from the policy. ``OffPolicy`` has
+    # ``max_total=0`` so this short-circuits immediately when
+    # the operator picked ``off``.
+    remaining = policy.max_total - len(dispatch_log)
     if remaining <= 0:
-        log.info("Total dispatch budget exhausted", total=len(dispatch_log))
+        log.info(
+            "Total dispatch budget exhausted",
+            total=len(dispatch_log), policy=policy.name,
+        )
         return state
 
     # ── Call LLM ──────────────────────────────────────────────────────────────
@@ -306,12 +355,15 @@ async def run_dynamic_dispatch(state: CampaignGraphState) -> CampaignGraphState:
 
     # ── Validate ──────────────────────────────────────────────────────────────
     valid_plan = _validate_plan(plan, state)
-    # Apply remaining budget cap
-    valid_plan = valid_plan[: min(MAX_PER_CYCLE, remaining)]
+    # Per-cycle + remaining-total caps come from the policy.
+    valid_plan = valid_plan[: min(policy.max_per_cycle, remaining)]
     if not valid_plan:
         log.info("Dynamic dispatcher: no valid items after validation")
         return state
 
-    log.info("Dynamic dispatcher executing", count=len(valid_plan))
+    log.info(
+        "Dynamic dispatcher executing",
+        count=len(valid_plan), policy=policy.name,
+    )
     state = await _execute_plan(valid_plan, state)
     return state

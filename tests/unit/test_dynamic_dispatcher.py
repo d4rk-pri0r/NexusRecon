@@ -186,14 +186,21 @@ class TestDispatchBudgetCaps:
 
     @pytest.mark.asyncio
     async def test_total_cap_prevents_dispatch(self):
-        """When dispatch_log already has MAX_TOTAL entries, no new dispatch occurs."""
+        """When dispatch_log already has MAX_TOTAL entries, no new dispatch occurs.
+
+        Phase 1 PR A: the total cap is now the active
+        :class:`DispatchPolicy`'s ``max_total``. LitePolicy
+        preserves the historical value (30 == ``MAX_TOTAL``), so
+        pinning lite here keeps the cap-enforcement assertion
+        meaningful without depending on FullPolicy's higher
+        cap (50)."""
         # Fill the log to capacity
         full_log = [
             {"tool": "whois", "target": f"t{i}.com", "target_type": "domain",
              "reason": "x", "phase": "phase1", "timestamp": "2026-01-01T00:00:00Z", "success": True}
             for i in range(MAX_TOTAL)
         ]
-        state = _base_state(dynamic_dispatch_log=full_log, dispatch_mode="full")
+        state = _base_state(dynamic_dispatch_log=full_log, dispatch_mode="lite")
 
         # reflection_node short-circuits via cap check before importing run_dynamic_dispatch,
         # so we verify by outcome: log length is unchanged at MAX_TOTAL.
@@ -208,7 +215,9 @@ class TestDispatchBudgetCaps:
              "reason": "x", "phase": "phase1", "timestamp": "2026-01-01T00:00:00Z", "success": True}
             for i in range(MAX_TOTAL)
         ]
-        state = _base_state(dynamic_dispatch_log=full_log)
+        # Phase 1 PR A: pin lite so MAX_TOTAL (30) is the
+        # active policy's cap (full mode is 50 now).
+        state = _base_state(dynamic_dispatch_log=full_log, dispatch_mode="lite")
         result = await run_dynamic_dispatch(state)
         assert len(result["dynamic_dispatch_log"]) == MAX_TOTAL
 
