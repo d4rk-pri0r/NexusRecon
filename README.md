@@ -17,6 +17,8 @@
 [![python](https://img.shields.io/badge/python-3.11--3.13-blue)](pyproject.toml)
 [![engine](https://img.shields.io/badge/engine-agentic-purple)](#why-agentic-osint)
 [![license](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+[![tests](https://github.com/d4rk-pri0r/NexusRecon/actions/workflows/test.yml/badge.svg)](https://github.com/d4rk-pri0r/NexusRecon/actions/workflows/test.yml)
+[![live-drift](https://github.com/d4rk-pri0r/NexusRecon/actions/workflows/live-drift.yml/badge.svg)](https://github.com/d4rk-pri0r/NexusRecon/actions/workflows/live-drift.yml)
 
 You hand it a scope file and a seed domain. ~30-60 minutes later it
 hands you back a ranked, prioritized, citation-backed attack-surface

@@ -18,12 +18,29 @@ name: live-drift
 #
 # Schedule: Monday 06:00 UTC. Manual ``workflow_dispatch`` for ad-hoc
 # runs (debugging a flaky provider, after adding a new secret, etc.).
+# PR trigger when files under ``tests/live/`` or the live conftest
+# change so live-test refactors get exercised at review time.
+#
+# Failure → file an issue. The workflow's whole point is to surface
+# upstream drift; a silent red checkmark in the Actions tab nobody
+# reads defeats the purpose. The "on-failure" step opens (or updates)
+# a tracking issue tagged ``live-drift`` so it lands in the standard
+# triage flow.
 
 on:
   schedule:
     # Minute Hour Day-of-month Month Day-of-week. Monday is 1.
     - cron: "0 6 * * 1"
   workflow_dispatch:
+  pull_request:
+    paths:
+      - "tests/live/**"
+      - ".github/workflows/live-drift.yml"
+
+permissions:
+  contents: read
+  # Needed by the "create issue on failure" step.
+  issues: write
 
 jobs:
   live:
@@ -47,6 +64,7 @@ jobs:
           pip install -e ".[dev]"
 
       - name: Run live-drift tests
+        id: pytest
         env:
           # Subdomain enumeration
           CHAOS_API_KEY: ${{ secrets.CHAOS_API_KEY }}
@@ -74,28 +92,132 @@ jobs:
           VULNERS_API_KEY: ${{ secrets.VULNERS_API_KEY }}
           # Pretext
           CRUNCHBASE_API_KEY: ${{ secrets.CRUNCHBASE_API_KEY }}
+          # Phase E ── added after the workflow first shipped; the
+          # tests/live/ conftest already maps these via
+          # LIVE_KEY_REQUIREMENTS, so without passing them here the
+          # corresponding tests skipped silently even when the secrets
+          # were configured.
+          BUILTWITH_API_KEY: ${{ secrets.BUILTWITH_API_KEY }}
+          LINKEDIN_LI_AT: ${{ secrets.LINKEDIN_LI_AT }}
+          LINKEDIN_JSESSIONID: ${{ secrets.LINKEDIN_JSESSIONID }}
         # ``-r a`` prints a summary line per test outcome (passed, failed,
         # skipped) so the workflow log makes the drift signal obvious.
         # We deliberately do NOT add ``--tb=long`` ── traceback short keeps
         # the failure noise readable in the GitHub Actions UI.
-        run: pytest tests/live -v -r a --tb=short
+        #
+        # ``--junitxml`` lets the summary step below count outcomes
+        # without re-parsing pytest's text output. ``2>&1`` merges so
+        # ``grep`` against the tail catches the summary line wherever
+        # pytest emitted it.
+        run: |
+          set +e
+          pytest tests/live -v -r a --tb=short \
+            --junitxml=pytest-junit.xml \
+            | tee pytest-stdout.log
+          status=${PIPESTATUS[0]}
+          echo "pytest_exit=$status" >> "$GITHUB_OUTPUT"
+          exit $status
 
       - name: Summarise results in the job summary
         if: always()
-        # Pull the pytest summary line into the GitHub-rendered job
+        # Pull the pytest summary into the GitHub-rendered job
         # summary so it shows up at the top of the run page without
-        # needing to expand the log.
+        # needing to expand the log. Counts come from the junit
+        # XML (deterministic) rather than parsing pytest's prose.
         run: |
+          tests=0; failures=0; errors=0; skipped=0
+          if [ -f pytest-junit.xml ]; then
+            # Read the <testsuite> aggregate attributes. The XML
+            # produced by ``--junitxml`` always has one outer
+            # <testsuite> with these four attrs at the top.
+            tests=$(grep -oE 'tests="[0-9]+"' pytest-junit.xml | head -1 | grep -oE '[0-9]+' || echo 0)
+            failures=$(grep -oE 'failures="[0-9]+"' pytest-junit.xml | head -1 | grep -oE '[0-9]+' || echo 0)
+            errors=$(grep -oE 'errors="[0-9]+"' pytest-junit.xml | head -1 | grep -oE '[0-9]+' || echo 0)
+            skipped=$(grep -oE 'skipped="[0-9]+"' pytest-junit.xml | head -1 | grep -oE '[0-9]+' || echo 0)
+          fi
+          passed=$((tests - failures - errors - skipped))
           {
             echo "## live-drift run summary"
             echo ""
             echo "Triggered: \`${{ github.event_name }}\`"
             echo "Commit: \`${{ github.sha }}\`"
             echo ""
-            echo "Each test in tests/live/ is gated by a per-provider"
+            echo "| outcome | count |"
+            echo "|---------|------:|"
+            echo "| ✅ passed   | $passed |"
+            echo "| ❌ failed   | $failures |"
+            echo "| 💥 errored  | $errors |"
+            echo "| ⏭️  skipped | $skipped |"
+            echo ""
+            echo "Each test in \`tests/live/\` is gated by a per-provider"
             echo "marker that auto-skips when its API key isn't configured"
             echo "as a repository secret. Skipped tests are expected ──"
             echo "the signal we care about is **failures** (upstream"
             echo "schema drift) and unexpected **passes** after adding"
             echo "a new secret."
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload pytest junit XML
+        # Keep the raw machine-readable result around for 14 days
+        # in case the on-failure issue triage needs the full
+        # traceback context (truncated in the issue body).
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-junit-${{ github.run_id }}
+          path: |
+            pytest-junit.xml
+            pytest-stdout.log
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Open issue on failure
+        # Only fire on the scheduled run ── a PR-triggered failure
+        # is the PR author's responsibility to fix, not a triage
+        # issue. Manual dispatches stay silent too because the
+        # operator who pushed the dispatch is already watching.
+        if: failure() && github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # De-dupe: if an open issue with the live-drift label
+          # already exists, append a comment instead of filing a new
+          # one. Two Mondays in a row = two comments, not two issues.
+          set -euo pipefail
+
+          existing=$(gh issue list \
+            --label live-drift \
+            --state open \
+            --json number,title \
+            --jq '.[0].number // empty')
+
+          body_file=$(mktemp)
+          {
+            echo "Weekly live-drift run failed on \`${{ github.sha }}\`."
+            echo ""
+            echo "**Workflow run:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo ""
+            echo "### Failing tests"
+            echo ""
+            echo '```'
+            # Pull just the FAILED lines + the short summary footer.
+            grep -E 'FAILED|^=+ short test summary' pytest-stdout.log || \
+              echo "(no FAILED lines found ── inspect the run log directly)"
+            echo '```'
+            echo ""
+            echo "When triaging:"
+            echo ""
+            echo "1. Open the workflow run linked above and read the failing test's traceback."
+            echo "2. If the failure is upstream schema drift, update the mocked fixture in \`tests/integration/\` and the integration test for that tool."
+            echo "3. If the failure is a transient network blip, comment here and re-run via \`workflow_dispatch\`."
+            echo "4. Close the issue when the next scheduled run is green."
+          } > "$body_file"
+
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body-file "$body_file"
+          else
+            gh issue create \
+              --title "live-drift: weekly run failed ($(date -u +%Y-%m-%d))" \
+              --label live-drift \
+              --body-file "$body_file"
+          fi

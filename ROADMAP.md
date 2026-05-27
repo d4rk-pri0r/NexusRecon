@@ -70,11 +70,19 @@ each is independently testable.
       Eliminates the silent-swallow bug class structurally. Shipped
       as `nexusrecon/tools/base.py::BaseHTTPTool`; every Phase D + E
       HTTP tool subclasses it.
-- [ ] **Live-drift CI schedule.** Run `tests/live/` weekly via
-      GitHub Actions (scheduled workflow) with whatever API secrets
-      are available, surfacing schema drift on the providers we can
-      authenticate against. This is the tripwire for wayback /
-      fullhunt class bugs.
+- [x] **Live-drift CI schedule.** Weekly scheduled workflow
+      (`.github/workflows/live-drift.yml`) runs `tests/live/` every
+      Monday 06:00 UTC. Each test is gated by
+      `@pytest.mark.live("<provider>")`; the `tests/live/conftest.py`
+      auto-skips when the relevant env vars aren't set, so the
+      workflow runs whatever subset of the live suite has secrets
+      configured — adding a new repo secret widens coverage with
+      no workflow edit. Failures on the scheduled run automatically
+      open (or update) a `live-drift`-labelled issue with the
+      failing tests + a triage runbook so upstream schema drift
+      lands in the standard triage flow instead of dying silently
+      in the Actions tab. Job summary surfaces the
+      passed/failed/errored/skipped counts at the top of every run.
 - [x] **Stubbed-tool policy.** `OSINTTool.stubbed: bool` class
       attribute (default False). When True, `is_available()` returns
       False so the registry keeps the tool out of
