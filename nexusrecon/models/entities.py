@@ -36,6 +36,17 @@ class EntityType(StrEnum):
     USERNAME = "username"
     URL = "url"
     FILE_ARTIFACT = "file_artifact"
+    # Step 0.0 (METASPLOIT_PLAN): reasoning artifacts become
+    # first-class graph nodes. Previously these lived as bare
+    # ``list[str]`` on ``CampaignGraphState`` (hypotheses /
+    # confirmed_leads / open_questions) — flat text the agents
+    # couldn't reason over. Promoting them to nodes lets the
+    # correlation agent query "which hypothesis cites which
+    # entity" and the risk analyst surface "what
+    # open-questions block the top thread".
+    HYPOTHESIS = "hypothesis"
+    LEAD = "lead"
+    OPEN_QUESTION = "open_question"
 
 
 class RelationshipType(StrEnum):
@@ -57,6 +68,13 @@ class RelationshipType(StrEnum):
     REGISTERED_BY = "registered_by"
     HOSTED_ON = "hosted_on"
     EXPOSES = "exposes"
+    # Step 0.0: edges from reasoning artifacts back to the
+    # entities that justify them. A HypothesisEntity CITES the
+    # email-list it was generated from; a LeadEntity CITES the
+    # cloud-asset it implicates. Makes "explain this finding"
+    # a graph traversal instead of a prompt-engineering exercise.
+    CITES = "cites"
+    BLOCKS = "blocks"  # an open_question BLOCKS a downstream lead
 
 
 # ── Base Entity ──────────────────────────────────────────────────────────────
@@ -328,6 +346,55 @@ class FileArtifactEntity(BaseEntity):
     internal_paths: list[str] = Field(default_factory=list)
     software_info: list[str] = Field(default_factory=list)
     username_leaks: list[str] = Field(default_factory=list)
+
+
+# ── Reasoning artifacts (Step 0.0) ────────────────────────────────────────────
+#
+# Previously held as ``list[str]`` on the LangGraph state. Promoting
+# to first-class entities means agents can reason over them: which
+# hypothesis cites which entity (CITES edge), which open question
+# blocks which lead (BLOCKS edge), how confidence in a derived lead
+# tracks confidence in its cited evidence.
+
+
+class HypothesisEntity(BaseEntity):
+    """A working hypothesis surfaced by the correlation phase.
+
+    The ``value`` is the human-readable hypothesis text; the
+    ``cites`` field carries entity_ids the hypothesis is based
+    on (mirrored as CITES edges in the graph for traversal)."""
+    entity_type: EntityType = EntityType.HYPOTHESIS
+    statement: str = ""
+    cites: list[str] = Field(default_factory=list)
+    status: str = "open"  # open | corroborated | rejected
+    generated_by: str | None = None  # phase or agent name
+
+
+class LeadEntity(BaseEntity):
+    """A confirmed lead — a finding the operator can act on.
+
+    Stronger than a hypothesis: the cited evidence has cleared a
+    confidence floor (per the correlation agent's logic). Carries
+    severity + recommended-next-step so the TUI can surface it
+    in the top threads pane."""
+    entity_type: EntityType = EntityType.LEAD
+    statement: str = ""
+    cites: list[str] = Field(default_factory=list)
+    severity: str = "medium"  # critical | high | medium | low | info
+    recommended_action: str | None = None
+
+
+class OpenQuestionEntity(BaseEntity):
+    """A gap the operator (or the dispatcher) should chase.
+
+    ``blocks`` lists entity_ids of downstream leads/hypotheses
+    that depend on the question being answered. Useful for the
+    strategic-reasoning engine in Phase 1 — "what's the next
+    most-blocking question to dispatch tools against?" """
+    entity_type: EntityType = EntityType.OPEN_QUESTION
+    question: str = ""
+    blocks: list[str] = Field(default_factory=list)
+    suggested_tools: list[str] = Field(default_factory=list)
 
 
 # ── Relationship Model ────────────────────────────────────────────────────────

@@ -28,7 +28,10 @@ from nexusrecon.models.entities import (
     EmailEntity,
     EntityRelationship,
     EntityType,
+    HypothesisEntity,
     IPAddressEntity,
+    LeadEntity,
+    OpenQuestionEntity,
     PersonEntity,
     RelationshipType,
     RepositoryEntity,
@@ -229,6 +232,92 @@ class EntityGraph:
         e = PersonEntity(value=name, full_name=name, sources=[source], **kwargs)
         return self.add_entity(e)
 
+    # ── Reasoning artifacts (Step 0.0) ────────────────────────────────────────
+
+    def add_hypothesis(
+        self,
+        statement: str,
+        source: str,
+        *,
+        cites: list[str] | None = None,
+        confidence: float = 0.6,
+        generated_by: str | None = None,
+    ) -> str:
+        """Add a HypothesisEntity + draw CITES edges to the cited
+        entities.
+
+        ``cites`` is the list of entity_ids the hypothesis is
+        based on. Missing ids are silently skipped (a
+        hypothesis can cite an entity that hasn't landed in the
+        graph yet — the edge is added lazily next time)."""
+        e = HypothesisEntity(
+            value=statement,
+            statement=statement,
+            cites=list(cites or []),
+            confidence=confidence,
+            sources=[source],
+            generated_by=generated_by,
+        )
+        hid = self.add_entity(e)
+        for cited_id in cites or []:
+            if cited_id in self.graph:
+                self.relate(hid, cited_id, RelationshipType.CITES,
+                            confidence=confidence, source_tool=source)
+        return hid
+
+    def add_lead(
+        self,
+        statement: str,
+        source: str,
+        *,
+        cites: list[str] | None = None,
+        confidence: float = 0.8,
+        severity: str = "medium",
+        recommended_action: str | None = None,
+    ) -> str:
+        """Add a LeadEntity + draw CITES edges to its evidence."""
+        e = LeadEntity(
+            value=statement,
+            statement=statement,
+            cites=list(cites or []),
+            confidence=confidence,
+            severity=severity,
+            recommended_action=recommended_action,
+            sources=[source],
+        )
+        lid = self.add_entity(e)
+        for cited_id in cites or []:
+            if cited_id in self.graph:
+                self.relate(lid, cited_id, RelationshipType.CITES,
+                            confidence=confidence, source_tool=source)
+        return lid
+
+    def add_open_question(
+        self,
+        question: str,
+        source: str,
+        *,
+        blocks: list[str] | None = None,
+        confidence: float = 0.5,
+        suggested_tools: list[str] | None = None,
+    ) -> str:
+        """Add an OpenQuestionEntity + draw BLOCKS edges to the
+        downstream leads/hypotheses it gates."""
+        e = OpenQuestionEntity(
+            value=question,
+            question=question,
+            blocks=list(blocks or []),
+            suggested_tools=list(suggested_tools or []),
+            confidence=confidence,
+            sources=[source],
+        )
+        qid = self.add_entity(e)
+        for blocked_id in blocks or []:
+            if blocked_id in self.graph:
+                self.relate(qid, blocked_id, RelationshipType.BLOCKS,
+                            confidence=confidence, source_tool=source)
+        return qid
+
     # ── Statistics ────────────────────────────────────────────────────────────
 
     def stats(self) -> dict[str, Any]:
@@ -359,6 +448,142 @@ class EntityGraph:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         net.save_graph(str(output_path))
         return str(output_path)
+
+    @classmethod
+    def from_state(
+        cls,
+        state: dict[str, Any],
+        *,
+        campaign_id: str = "",
+        engagement_id: str = "",
+    ) -> EntityGraph:
+        """Build a populated :class:`EntityGraph` from the flat
+        ``CampaignGraphState`` buckets.
+
+        This is the Step 0.0 bridge: the existing phase
+        functions populate ``subdomain_intel`` / ``email_intel``
+        / ``cloud_intel`` / ``code_intel`` as dicts; this
+        helper materialises them as a real graph the
+        correlation + risk-analyst agents can reason over.
+
+        The helper is idempotent under deduplication — calling
+        it twice on the same state produces the same graph
+        (entities merge by ``(type, value)``). Safe to call
+        every phase if cheap.
+
+        Args:
+            state: The LangGraph campaign state dict.
+            campaign_id: Override; otherwise read from state.
+            engagement_id: Override; otherwise read from state.
+
+        Returns:
+            A fresh ``EntityGraph`` populated from the flat
+            buckets in ``state``. Reasoning artifacts
+            (``hypotheses``, ``confirmed_leads``,
+            ``open_questions``) are translated to first-class
+            HYPOTHESIS / LEAD / OPEN_QUESTION nodes.
+        """
+        g = cls(
+            campaign_id=campaign_id or state.get("campaign_id", ""),
+            engagement_id=engagement_id or state.get("engagement_id", ""),
+        )
+        # Subdomains: each key in subdomain_intel is a subdomain;
+        # the values may carry source-tool info. We harvest the
+        # source list if present, defaulting to a generic marker.
+        subdomain_intel = state.get("subdomain_intel") or {}
+        for sub, info in subdomain_intel.items():
+            if not isinstance(sub, str) or not sub:
+                continue
+            sources_field = (
+                info.get("sources") if isinstance(info, dict) else None
+            )
+            source = (
+                sources_field[0]
+                if isinstance(sources_field, list) and sources_field
+                else "phase1"
+            )
+            # Best-effort parent domain inference: last two labels.
+            parts = sub.split(".")
+            parent = ".".join(parts[-2:]) if len(parts) >= 2 else sub
+            g.add_subdomain(sub, parent=parent, source=source)
+
+        # Emails: email_intel.emails is a dict keyed by address.
+        email_intel = state.get("email_intel") or {}
+        emails = email_intel.get("emails", {}) if isinstance(email_intel, dict) else {}
+        for em, info in emails.items():
+            if not isinstance(em, str) or "@" not in em:
+                continue
+            sources_field = (
+                info.get("sources") if isinstance(info, dict) else None
+            )
+            source = (
+                sources_field[0]
+                if isinstance(sources_field, list) and sources_field
+                else "phase2"
+            )
+            g.add_email(em, source=source)
+
+        # Cloud assets: cloud_intel keys are typically
+        # ``provider/service`` strings; we record one
+        # CloudAssetEntity per top-level key. Granular bucket
+        # / tenant breakdowns are left for the Phase D / E
+        # identity-graph path which already covers them.
+        cloud_intel = state.get("cloud_intel") or {}
+        for key, data in cloud_intel.items():
+            if not isinstance(key, str):
+                continue
+            provider, _, service = key.partition("/")
+            attr_conf = 1.0
+            if isinstance(data, dict):
+                attr_conf = float(
+                    data.get("attribution_confidence", 1.0) or 1.0,
+                )
+            g.add_cloud_asset(
+                key, provider=provider or "unknown",
+                service=service or "unknown",
+                source="phase2",
+                confidence=attr_conf,
+            )
+
+        # Code intel: each key is typically a repo / org slug.
+        code_intel = state.get("code_intel") or {}
+        for key in code_intel:
+            if not isinstance(key, str) or not key:
+                continue
+            # Generic placeholder — code tools store richer info
+            # under the key but the graph only needs the slug
+            # for cross-referencing in this Step 0.0 wire-up.
+            g.add_repository(
+                key, platform="github", source="phase3",
+            )
+
+        # CVEs from vuln_intel.enriched_cves (Phase D wiring).
+        vuln_intel = state.get("vuln_intel") or {}
+        enriched = (
+            vuln_intel.get("enriched_cves", {})
+            if isinstance(vuln_intel, dict) else {}
+        )
+        for cve_id in enriched:
+            if isinstance(cve_id, str) and cve_id.startswith("CVE-"):
+                g.add_cve(cve_id, source="phase6")
+
+        # Reasoning artifacts → first-class nodes. The cite/
+        # block edges are NOT inferred here (we don't know which
+        # entities each hypothesis was based on without re-
+        # running the correlation logic). The correlation phase
+        # itself is the right place to draw the edges.
+        for h in (state.get("hypotheses") or []):
+            if isinstance(h, str) and h:
+                g.add_hypothesis(h, source="phase4_correlation",
+                                 generated_by="phase4")
+        for ld in (state.get("confirmed_leads") or []):
+            if isinstance(ld, str) and ld:
+                g.add_lead(ld, source="phase4_correlation")
+        for q in (state.get("open_questions") or []):
+            if isinstance(q, str) and q:
+                g.add_open_question(q, source="phase4_correlation")
+
+        return g
 
     def export_maltego_csv(self, output_path: str | Path) -> str:
         """Export entities in Maltego-compatible CSV format."""

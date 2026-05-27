@@ -301,6 +301,82 @@ After Step 0.0 ships and agents demonstrably consume the
 graph, proceed to Phase 0.1 with confidence that the rest of
 the plan rests on a real foundation, not a hopeful one.
 
+## 11. Step 0.0 — SHIPPED (2026-05-27)
+
+Step 0.0 landed in a single PR matching the §7 spec. Summary
+of what changed and where, so future contributors can read
+the audit as living history rather than a snapshot.
+
+**Code:**
+- `nexusrecon/models/entities.py` — added
+  `EntityType.HYPOTHESIS / LEAD / OPEN_QUESTION`,
+  `RelationshipType.CITES / BLOCKS`, plus three Pydantic
+  subclasses (`HypothesisEntity`, `LeadEntity`,
+  `OpenQuestionEntity`) with their type-specific fields
+  (statement / cites / status / severity / blocks / suggested
+  _tools).
+- `nexusrecon/core/entity_graph.py` — added
+  `add_hypothesis()` / `add_lead()` / `add_open_question()`
+  builders that draw CITES / BLOCKS edges back to the cited
+  entities. Added classmethod
+  `EntityGraph.from_state(state)` that ingests the flat
+  buckets (`subdomain_intel`, `email_intel`, `cloud_intel`,
+  `code_intel`, `vuln_intel.enriched_cves`, plus the three
+  reasoning-artifact lists) into a real graph.
+- `nexusrecon/core/graph_context.py` — NEW. Read-only
+  summary wrapper with `count_by_type()`, `top_entities()`,
+  `hypotheses()`, `leads()`, `open_questions()`, and a
+  composite `to_task_data()` for spreading into agent prompts.
+- `nexusrecon/graph/nodes.py` — `phase4_correlation` now
+  builds the graph via `from_state`, passes
+  `graph_context.to_task_data()` into the correlation
+  agent's `task_data`, and serialises the REAL graph into
+  `state["entity_graph"]` instead of the previous truncated
+  500-entry name list. `phase8_attack_surface` similarly
+  passes the graph summary to the risk-analyst agent.
+
+**Tests** (`tests/unit/test_step_0_0_graph_wireup.py`, 33 new):
+- New entity types + relationship types + Pydantic default
+  shapes.
+- `add_hypothesis` / `add_lead` / `add_open_question` create
+  the right node type, draw CITES / BLOCKS edges to existing
+  entities, silently skip missing entity ids.
+- `EntityGraph.from_state(state)` ingests subdomains, emails,
+  cloud assets (carrying attribution_confidence), code repos,
+  CVEs from enriched_cves, and the three reasoning-artifact
+  lists. Idempotent across repeat invocations.
+- `GraphContext.to_task_data()` returns the documented shape;
+  empty graph yields zero counts.
+- Migration: pre-Step-0.0 state.json files with the truncated
+  `entity_graph` format load without raising (via
+  `EntityGraph.from_dict`'s tolerance) and the resume path
+  rebuilds via `from_state`.
+
+**Acceptance criteria for Step 0.0 (from §7):**
+- ✓ Stop truncating `state["entity_graph"]`.
+- ✓ Promote the EntityGraph to a workflow-level construct
+  every phase can write into (via `from_state` + the
+  builders).
+- ✓ Add HYPOTHESIS / LEAD / OPEN_QUESTION to `EntityType` +
+  Pydantic subclasses.
+- ✓ `GraphContext` accessor wired into correlation +
+  risk-analyst agents.
+- ✓ Migration: old state.json files load without crashing.
+
+**What remains for Phase 0.1+ (per the original plan):**
+- Provenance schema upgrade (`sources: list[str]` →
+  `list[{source, ts, evidence_hash, tool}]`).
+- Unification of EntityGraph + IdentityGraph + RelationshipGraph
+  (open question §9.1).
+- Path-finding API on the EntityGraph (current `find_path`
+  doesn't accept relationship_type filter).
+- Confidence propagation when a cited entity's confidence
+  changes.
+
+Open questions §9 should now be answered before 0.1 begins:
+graph unification (§9.1), prompt-summarisation strategy
+(§9.2), versioning timing (§9.3).
+
 ---
 
 **End of audit.**

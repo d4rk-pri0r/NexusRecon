@@ -600,6 +600,23 @@ async def phase4_correlation(state: CampaignGraphState) -> CampaignGraphState:
     if not cloud_intel:
         open_questions.append("No cloud intel found — check M365/AWS/GCP tool availability")
 
+    # ── Step 0.0 (METASPLOIT_PLAN): build the real EntityGraph from
+    # the state buckets BEFORE invoking the correlation agent, so the
+    # agent receives a graph-derived summary in its task_data instead
+    # of just the flat name lists. The graph is also serialized into
+    # state["entity_graph"] (replacing the previous truncated
+    # name-list assignment) so downstream phases + the TUI can
+    # consume it.
+    state["hypotheses"] = hypotheses
+    state["confirmed_leads"] = confirmed_leads
+    state["open_questions"] = open_questions
+
+    from nexusrecon.core.entity_graph import EntityGraph
+    from nexusrecon.core.graph_context import GraphContext
+
+    entity_graph = EntityGraph.from_state(state)
+    graph_context = GraphContext(entity_graph)
+
     # Agent synthesis: Correlation Agent
     executor = _get_executor()
     try:
@@ -613,6 +630,12 @@ async def phase4_correlation(state: CampaignGraphState) -> CampaignGraphState:
                 "email_count": len(emails),
                 "cloud_sources": list(cloud_intel.keys()),
                 "code_sources": list(code_intel.keys()),
+                # Step 0.0: graph-derived context. The agent sees
+                # counts, top-N per type, and the hypothesis /
+                # lead / open-question lists as graph summary —
+                # not just the bare strings from the flat
+                # state.
+                **graph_context.to_task_data(),
             },
             task_prompt="Correlate all intelligence findings. When using cloud intel, "
                         "check attribution_confidence — values below 0.5 indicate stem-match "
@@ -620,7 +643,9 @@ async def phase4_correlation(state: CampaignGraphState) -> CampaignGraphState:
                         "Generate new hypotheses, identify confirmed attack leads, and highlight "
                         "gaps in coverage. Be specific about which findings connect to form "
                         "attack chains, using only high-confidence data (attribution_confidence >= 0.5) "
-                        "for confirmed leads.",
+                        "for confirmed leads. The graph_summary in your context lists every "
+                        "entity NexusRecon has surfaced so far — cite them by value when "
+                        "building chains.",
             state=state,
         )
         state.setdefault("agent_messages", []).append({
@@ -632,13 +657,12 @@ async def phase4_correlation(state: CampaignGraphState) -> CampaignGraphState:
     except Exception as e:
         log.warning("Agent synthesis failed", phase="phase4", error=str(e))
 
-    state["hypotheses"] = hypotheses
-    state["confirmed_leads"] = confirmed_leads
-    state["open_questions"] = open_questions
-    state["entity_graph"] = {
-        "subdomains": list(subdomain_intel.keys())[:500],
-        "emails": list(emails.keys())[:500],
-    }
+    # Step 0.0: serialize the REAL graph (not a name-list
+    # truncation). Carries every entity surfaced so far +
+    # CITES / BLOCKS edges from reasoning artifacts back to the
+    # entities they're based on. Downstream phases consume this
+    # via EntityGraph.from_dict().
+    state["entity_graph"] = entity_graph.to_dict()
     state["completed_phases"] = list(state.get("completed_phases", [])) + ["phase4"]
     return state
 
@@ -1556,6 +1580,18 @@ async def phase8_attack_surface(state: CampaignGraphState) -> CampaignGraphState
         f"[{rf.get('severity', '?').upper()}] {rf.get('title', '')} (score: {rf.get('score', 0):.2f})"
         for rf in top_threads
     ]
+    # Step 0.0 (METASPLOIT_PLAN): rebuild the EntityGraph from state
+    # so the risk analyst sees graph-derived context (every entity,
+    # hypotheses, blocking open-questions) alongside the ranked
+    # threads. Lets the agent answer "which entity in the graph
+    # carries the most-cited lead" without re-deriving from
+    # flat buckets.
+    from nexusrecon.core.entity_graph import EntityGraph
+    from nexusrecon.core.graph_context import GraphContext
+
+    eg = EntityGraph.from_state(state)
+    graph_context = GraphContext(eg)
+
     try:
         agent_result = await executor.run_agent(
             "risk_analyst",
@@ -1564,13 +1600,16 @@ async def phase8_attack_surface(state: CampaignGraphState) -> CampaignGraphState
                 "total_scored": len(ranked_findings),
                 "confirmed_leads": state.get("confirmed_leads", []),
                 "enriched_cve_count": len(state.get("vuln_intel", {}).get("enriched_cves", {})),
+                **graph_context.to_task_data(),
             },
             task_prompt="You have been given the top 10 ranked attack threads produced by the scoring engine. "
                         "For each thread, provide: 1. The most likely exploitation path "
                         "2. The MITRE PRE-ATT&CK or ATT&CK technique it maps to "
                         "3. Your confidence in successful exploitation "
                         "4. The single most important next action the operator should take. "
-                        "Conclude with a one-paragraph executive summary of the overall attack surface posture.",
+                        "Conclude with a one-paragraph executive summary of the overall attack surface posture. "
+                        "Cite specific entities from the graph_summary (by value) when the chain "
+                        "uses them — operators triage faster when the chain names what it touches.",
             state=state,
         )
         state.setdefault("agent_messages", []).append({
