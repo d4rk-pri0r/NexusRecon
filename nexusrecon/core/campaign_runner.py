@@ -107,6 +107,16 @@ async def run_campaign(
     except Exception as pf_err:
         state.setdefault("errors", []).append(f"preflight: {pf_err}")
 
+    # Bind the campaign's cost tracker to the shared agent executor so LLM
+    # spend reaches phase_end / finalize instead of dying in the executor's
+    # private tracker (Wave F-A6: the disconnect behind every-phase-$0.00).
+    try:
+        from nexusrecon.graph.nodes import set_executor_cost_tracker
+        if getattr(campaign, "cost_tracker", None) is not None:
+            set_executor_cost_tracker(campaign.cost_tracker)
+    except Exception as ct_err:
+        state.setdefault("errors", []).append(f"cost_tracker_bind: {ct_err}")
+
     s = state
     for phase_id, phase_name, phase_fn in phases:
         if _PHASE_TIER_FLOOR.get(phase_id, 0) > max_tier:
@@ -192,6 +202,7 @@ async def run_campaign(
     run_health: dict[str, Any] = {}
     try:
         from nexusrecon.core.run_health import (
+            llm_provenance_from_state,
             read_entries,
             render_run_health_md,
             summarize_run_health,
@@ -204,7 +215,11 @@ async def run_campaign(
                 name: tool.category.value
                 for name, tool in get_registry()._tools.items()
             }
-            health = summarize_run_health(read_entries(audit.log_path), name_to_cat)
+            health = summarize_run_health(
+                read_entries(audit.log_path),
+                name_to_cat,
+                llm_provenance=llm_provenance_from_state(s),
+            )
             run_health = health.to_dict()
             s["run_health"] = run_health
             campaign_dir = getattr(campaign, "campaign_dir", None)

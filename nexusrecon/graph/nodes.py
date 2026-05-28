@@ -42,6 +42,16 @@ def _reset_executor() -> None:
     _executor = None
 
 
+def set_executor_cost_tracker(tracker: Any) -> None:
+    """Bind a campaign's CostTracker to the shared executor (Wave F-A6).
+
+    Ensures LLM spend recorded by the agents reaches the tracker that
+    ``campaign.end_phase`` / ``finalize`` read, instead of the executor's
+    private instance. Called once at campaign start by ``run_campaign``.
+    """
+    _get_executor().bind_cost_tracker(tracker)
+
+
 def _get_tools_by_tier(max_tier: str, exclude_categories: set = None) -> list[Any]:
     """Get available tools filtered by tier."""
     registry = get_registry()

@@ -188,14 +188,22 @@ proves is not optional.
       the master_report body is a small follow-up (the report engine
       currently runs inside the phase loop). Tests in
       `tests/unit/test_wave_f_failure_detection.py`.
-- [ ] **F-A6 Make cost/telemetry trustworthy.** Every phase reported
-      `$0.00`, so we cannot tell whether the analyst LLM actually ran
-      or silently fell back to the `mock_llm` canned-findings path in
-      `agent_executor.py`. Wire real token accounting through
-      `nexusrecon/core/cost_tracker.py`, and have the report state
-      explicitly whether findings came from a live model or the
-      deterministic fallback. Budget enforcement is meaningless while
-      cost reads zero.
+- [x] **F-A6 Make cost/telemetry trustworthy.** Root cause of the
+      `$0.00`: `AgentExecutor` recorded spend into a private
+      `CostTracker` while `campaign.end_phase` / `finalize` read the
+      campaign's, so the real numbers died in the wrong instance.
+      `AgentExecutor.bind_cost_tracker()` + `nodes.set_executor_cost_tracker()`
+      now bind the campaign tracker at `run_campaign` start, so phase_end
+      and the finalize summary reflect real per-agent token spend. Added
+      `mock_llm` (and the current claude-4.x models) to `MODEL_PRICING`;
+      `mock_llm` is priced at zero so "cost == 0 and model == mock_llm"
+      is an unambiguous fallback signal. The executor records per-model
+      call counts into `state["llm_calls_by_model"]`;
+      `run_health.llm_provenance_from_state()` derives a
+      live/mock/mixed/none verdict, surfaced in `run_health.md` (Analysis
+      engine section) with a blunt caveat when findings came from the
+      deterministic fallback. Budget now enforces against the real shared
+      tracker. Tests in `tests/unit/test_wave_f_cost_telemetry.py`.
 - [ ] **F-A7 Reconcile the pre-flight simulation with reality.** The
       simulator predicted ~98 new nodes across phases; the run
       produced zero entities, and its confidence was always "low".

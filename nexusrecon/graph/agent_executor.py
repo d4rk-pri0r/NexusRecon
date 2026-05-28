@@ -231,7 +231,21 @@ class AgentExecutor:
         self.llm = get_llm_from_config(config)
         self._step_count = 0
         # B23: high internal limit — per-campaign budget enforced via state["max_llm_cost_usd"]
+        # Default private tracker for standalone executors (intent parser,
+        # planner, report engine). During a campaign run, bind_cost_tracker()
+        # swaps in the campaign's tracker so cost actually reaches phase_end
+        # and the finalize summary instead of dying in this private instance
+        # (Wave F-A6: the disconnect that made every phase report $0.00).
         self._cost_tracker = CostTracker("agent_executor", max_llm_cost_usd=1_000_000)
+
+    def bind_cost_tracker(self, tracker: CostTracker) -> None:
+        """Record LLM spend into ``tracker`` (the campaign's) from now on.
+
+        Called once at campaign start so per-agent token usage and USD spend
+        land in the tracker that ``campaign.end_phase`` and
+        ``campaign.finalize`` actually read.
+        """
+        self._cost_tracker = tracker
 
     async def run_agent(
         self,
@@ -289,9 +303,14 @@ class AgentExecutor:
                 agent_name, model_name, in_tok, out_tok
             )
 
-            # Sync accumulated cost back to campaign state (B23)
+            # Sync accumulated cost back to campaign state (B23) and record
+            # which model served the call so the report can state whether
+            # findings came from a live model or the MockLLM fallback
+            # (Wave F-A6 provenance). cost==0 + model==mock_llm => fallback.
             if state is not None:
                 state["llm_cost_usd"] = float(state.get("llm_cost_usd", 0.0)) + call_cost
+                by_model = state.setdefault("llm_calls_by_model", {})
+                by_model[model_name] = int(by_model.get(model_name, 0)) + 1
 
             # B24: parse structured findings from FINDINGS_JSON block and inject into state
             phase = (

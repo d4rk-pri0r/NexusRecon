@@ -39,6 +39,12 @@ class RunHealth:
     degraded_capabilities: list[dict[str, Any]] = field(default_factory=list)
     entities_total: int = 0
     zero_entities: bool = False
+    # LLM provenance (Wave F-A6): was the analysis done by a live model or
+    # the deterministic MockLLM fallback? "live" / "mock" / "mixed" / "none".
+    llm_mode: str = "unknown"
+    llm_calls: int = 0
+    llm_cost_usd: float = 0.0
+    llm_models: dict[str, int] = field(default_factory=dict)
     caveats: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -53,6 +59,10 @@ class RunHealth:
             "degraded_capabilities": self.degraded_capabilities,
             "entities_total": self.entities_total,
             "zero_entities": self.zero_entities,
+            "llm_mode": self.llm_mode,
+            "llm_calls": self.llm_calls,
+            "llm_cost_usd": round(self.llm_cost_usd, 4),
+            "llm_models": self.llm_models,
             "caveats": self.caveats,
         }
 
@@ -76,18 +86,53 @@ def read_entries(log_path: str | Path) -> list[dict[str, Any]]:
     return out
 
 
+def llm_provenance_from_state(state: dict[str, Any]) -> dict[str, Any]:
+    """Derive live-vs-mock LLM provenance from the campaign state.
+
+    Reads ``state["llm_calls_by_model"]`` (populated per call by the agent
+    executor) and ``state["llm_cost_usd"]``. Mode is ``live`` (only real
+    models), ``mock`` (only the MockLLM fallback), ``mixed`` (both), or
+    ``none`` (no LLM calls at all).
+    """
+    by_model: dict[str, int] = dict(state.get("llm_calls_by_model", {}) or {})
+    calls = sum(int(v) for v in by_model.values())
+    has_mock = "mock_llm" in by_model
+    has_real = any(m != "mock_llm" for m in by_model)
+    if calls == 0:
+        mode = "none"
+    elif has_mock and has_real:
+        mode = "mixed"
+    elif has_mock:
+        mode = "mock"
+    else:
+        mode = "live"
+    return {
+        "mode": mode,
+        "calls": calls,
+        "models": by_model,
+        "cost_usd": float(state.get("llm_cost_usd", 0.0)),
+    }
+
+
 def summarize_run_health(
     entries: list[dict[str, Any]],
     name_to_category: dict[str, str] | None = None,
+    llm_provenance: dict[str, Any] | None = None,
 ) -> RunHealth:
     """Aggregate audit entries into a :class:`RunHealth`.
 
     ``name_to_category`` maps tool name -> category so the per-capability
     assessment can group tools; when omitted, capability degradation is
-    skipped but per-tool counts still work.
+    skipped but per-tool counts still work. ``llm_provenance`` (from
+    :func:`llm_provenance_from_state`) adds the live-vs-mock verdict.
     """
     name_to_category = name_to_category or {}
     h = RunHealth()
+    if llm_provenance:
+        h.llm_mode = llm_provenance.get("mode", "unknown")
+        h.llm_calls = int(llm_provenance.get("calls", 0))
+        h.llm_cost_usd = float(llm_provenance.get("cost_usd", 0.0))
+        h.llm_models = dict(llm_provenance.get("models", {}))
 
     # category -> outcome tallies, to decide which capabilities are degraded.
     cat_data: dict[str, dict[str, int]] = {}
@@ -152,6 +197,18 @@ def summarize_run_health(
 
 def _build_caveats(h: RunHealth) -> list[str]:
     caveats: list[str] = []
+    if h.llm_mode == "mock":
+        caveats.append(
+            "Analysis ran on the deterministic MockLLM fallback (no LLM API "
+            "key configured), not a live model. Findings and narrative are "
+            "templated, not reasoned; treat analytical conclusions as "
+            "placeholder output, not assessment."
+        )
+    elif h.llm_mode == "mixed":
+        caveats.append(
+            "Some analysis ran on the MockLLM fallback rather than a live "
+            "model; the affected findings are templated, not reasoned."
+        )
     degraded_cats = {c["capability"] for c in h.degraded_capabilities}
     if degraded_cats & _ACTIVE_SCAN_CATEGORIES:
         caveats.append(
@@ -216,6 +273,23 @@ def render_run_health_md(health: RunHealth, campaign_id: str = "") -> str:
     lines.append(f"| Errored | {len(h.errors)} |")
     lines.append(f"| Skipped by policy | {len(h.policy_skipped)} |")
     lines.append(f"| Entities extracted | {h.entities_total} |")
+    lines.append("")
+
+    lines.append("## Analysis engine")
+    lines.append("")
+    _mode_label = {
+        "live": "Live model",
+        "mock": "MockLLM fallback (deterministic, no API call)",
+        "mixed": "Mixed (live model + MockLLM fallback)",
+        "none": "No LLM calls",
+        "unknown": "Unknown",
+    }.get(h.llm_mode, h.llm_mode)
+    lines.append(f"- **Mode:** {_mode_label}")
+    lines.append(f"- **LLM calls:** {h.llm_calls}")
+    lines.append(f"- **LLM cost:** ${h.llm_cost_usd:.4f}")
+    if h.llm_models:
+        models = ", ".join(f"{m} ({n})" for m, n in sorted(h.llm_models.items()))
+        lines.append(f"- **Models:** {models}")
     lines.append("")
 
     if h.degraded_capabilities:
