@@ -156,8 +156,8 @@ proves is not optional.
       event, audit-logs it (`preflight_summary`), and stashes it in
       `state["preflight"]` before the first phase, so the operator
       sees `theHarvester` is uninstalled and `shodan` is policy-off up
-      front. TUI/CLI rendering of the event can follow; the data and
-      audit record land now. Tests in
+      front. The CLI prints a one-line preflight summary and the TUI
+      runner logs it (`format_preflight_console`). Tests in
       `tests/unit/test_wave_f_failure_detection.py`.
 - [x] **F-A4 Retry + distinguish transient upstream failures.**
       Added `http_get_with_retry()` in `nexusrecon/tools/base.py`:
@@ -184,10 +184,13 @@ proves is not optional.
       `run_health.md`, stashes `state["run_health"]`, and folds it
       into the `campaign_complete` event. Validated against the real
       ginandjuice.shop log (6 productive / 23 empty / 12 errors / zero
-      entities / breach+certificate degraded). Folding the block into
-      the master_report body is a small follow-up (the report engine
-      currently runs inside the phase loop). Tests in
-      `tests/unit/test_wave_f_failure_detection.py`.
+      entities / breach+certificate degraded). The master report now
+      carries a "1a. Run Health" banner (caveats + tool-outcome tally +
+      degraded capabilities + analysis-engine provenance) since
+      `generate_all` runs after `run_campaign` populates
+      `state["run_health"]`. Tests in
+      `tests/unit/test_wave_f_failure_detection.py` +
+      `test_wave_f_reporting_value.py`.
 - [x] **F-A6 Make cost/telemetry trustworthy.** Root cause of the
       `$0.00`: `AgentExecutor` recorded spend into a private
       `CostTracker` while `campaign.end_phase` / `finalize` read the
@@ -274,11 +277,12 @@ proves is not optional.
       exec-summary invent its own inconsistent integers.
 - [x] **F-B7 Recommendations must respect what the run already tried
       and what is available.** `unavailable_tools_from_preflight()` +
-      `annotate_next_steps()` in `core/scoring.py` flag any next-step
-      that recommends a tool the preflight marked uninstalled, key-
-      less, or policy-disabled (theHarvester, DeHashed, Shodan in the
-      run). Wired into phase 8. Flagging "ran but unproductive" tools
-      (amass/nuclei) needs run-health and is a follow-up.
+      `unproductive_tools_from_audit()` + `annotate_next_steps()` in
+      `core/scoring.py` flag any next-step that recommends a tool the
+      preflight marked uninstalled / key-less / policy-disabled
+      (theHarvester, DeHashed, Shodan) OR that already ran this campaign
+      with no result / a degraded result / an error (amass 60s->0,
+      nuclei 140s->0), read from the audit log. Wired into phase 8.
 - [x] **F-B8 Suppress or soften empty deliverables.**
       `harvested_credentials.md` no longer opens with the "contains
       real credentials" banner when empty; it states "No credentials

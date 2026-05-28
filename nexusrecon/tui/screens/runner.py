@@ -558,7 +558,16 @@ class RunnerScreen(Screen):
         ts = evt.get("timestamp", "")[11:19] if evt.get("timestamp") else \
             datetime.utcnow().strftime("%H:%M:%S")
         name = evt.get("name") or evt.get("phase") or ""
-        if etype == "phase_start":
+        if etype == "preflight":
+            # F-A3: show tool availability before the first phase.
+            c = evt.get("counts", {})
+            self._log(
+                f"{ts}  ⚙  Preflight: {c.get('active', 0)} active, "
+                f"{c.get('missing_binary', 0)} missing-binary, "
+                f"{c.get('missing_key', 0)} missing-key, "
+                f"{c.get('policy', 0)} policy-disabled"
+            )
+        elif etype == "phase_start":
             self._log(f"{ts}  ▶  {name}")
             self._update_label(
                 (
@@ -606,6 +615,10 @@ class RunnerScreen(Screen):
                 f"{evt.get('total_findings', 0)} findings, "
                 f"${evt.get('total_cost_usd', 0.0):.2f} spent"
             )
+            # F-A3: surface run-health trust caveats so the operator sees
+            # degraded tools / mock fallback / forecast misses before reading.
+            for caveat in (evt.get("run_health") or {}).get("caveats", []):
+                self._log(f"{ts}  !  {_rich_escape(caveat)}")
 
     # ── Output helpers ─────────────────────────────────────────────────────
 

@@ -149,25 +149,57 @@ def unavailable_tools_from_preflight(preflight: dict[str, Any] | None) -> dict[s
     return out
 
 
-def annotate_next_steps(steps: list[str], unavailable: dict[str, str]) -> list[str]:
-    """Flag any next-step that recommends a tool which can't run this campaign
-    (Wave F-B7), so the report stops telling the operator to "run theHarvester"
-    when it isn't installed or "query DeHashed" when it's policy-disabled.
+def unproductive_tools_from_audit(entries: list[dict[str, Any]]) -> dict[str, str]:
+    """Map tool name -> reason for tools that *ran this campaign but produced
+    nothing usable* (Wave F-B7): empty results, a degraded result, or an
+    error. A tool that returned data anywhere is never listed.
 
-    The step is kept (the underlying intent may still be valid by hand) but
-    annotated, never silently dropped.
+    This is the "already tried, no joy" set ── recommending "run amass" or
+    "run nuclei" when they already ran for minutes and returned nothing is
+    the busywork F-B7 exists to remove. Read from the audit log at phase 8,
+    by which point phases 1-7 tool outcomes are recorded.
     """
-    if not unavailable or not steps:
+    productive: set[str] = set()
+    note: dict[str, str] = {}
+    for e in entries:
+        tool = e.get("tool_name")
+        if not tool:
+            continue
+        et = e.get("event_type")
+        if et == "tool_result":
+            if e.get("cached"):
+                continue
+            if e.get("degraded"):
+                note.setdefault(tool, "returned a degraded result this campaign")
+            elif (e.get("result_count") or 0) > 0:
+                productive.add(tool)
+            else:
+                note.setdefault(tool, "already ran with no results this campaign")
+        elif et == "tool_error":
+            note.setdefault(tool, "failed this campaign")
+    return {t: r for t, r in note.items() if t not in productive}
+
+
+def annotate_next_steps(steps: list[str], flagged: dict[str, str]) -> list[str]:
+    """Flag any next-step that recommends a tool which can't run, or already
+    ran without result, this campaign (Wave F-B7), so the report stops telling
+    the operator to "run theHarvester" (not installed), "query DeHashed"
+    (policy-disabled), or "run amass" (already ran -> 0).
+
+    ``flagged`` maps tool name -> reason clause. The step is kept (the intent
+    may still be valid by hand) but annotated, never silently dropped.
+    """
+    if not flagged or not steps:
         return steps
     out: list[str] = []
     for step in steps:
         low = step.lower()
         hit = next(
-            (t for t in unavailable if re.search(rf"\b{re.escape(t)}\b", low)),
+            (t for t in flagged if re.search(rf"\b{re.escape(t)}\b", low)),
             None,
         )
         if hit:
-            out.append(f"{step}  [unavailable this run: {hit} is {unavailable[hit]}]")
+            out.append(f"{step}  [{hit}: {flagged[hit]}]")
         else:
             out.append(step)
     return out

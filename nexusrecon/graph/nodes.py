@@ -22,6 +22,7 @@ from nexusrecon.core.scoring import (
     score_findings,
     score_findings_with_coverage,
     unavailable_tools_from_preflight,
+    unproductive_tools_from_audit,
 )
 from nexusrecon.graph.agent_executor import AgentExecutor
 from nexusrecon.graph.state import CampaignGraphState
@@ -1588,14 +1589,27 @@ async def phase8_attack_surface(state: CampaignGraphState) -> CampaignGraphState
     # (Wave F-B1/B2/B3), surfaced separately as "what we checked".
     ranked_findings, coverage_findings = score_findings_with_coverage(state)
 
-    # F-B7: annotate next-steps that recommend tools which can't run this
-    # campaign (uninstalled, no key, policy-disabled), using the preflight
-    # report, so the report stops generating busywork ("run theHarvester")
-    # for tools that already failed or are disabled.
-    unavailable = unavailable_tools_from_preflight(state.get("preflight"))
-    if unavailable:
+    # F-B7: annotate next-steps that recommend tools which either can't run
+    # this campaign (uninstalled / no key / policy-disabled, from preflight)
+    # or already ran without result (empty / degraded / errored, from the
+    # audit log), so the report stops generating busywork ("run theHarvester",
+    # "run amass") for tools that won't help.
+    flagged = dict(unavailable_tools_from_preflight(state.get("preflight")))
+    try:
+        from nexusrecon.core.run_health import read_entries
+        from nexusrecon.tools.registry import get_registry
+        audit = get_registry().audit_log
+        if audit is not None and getattr(audit, "log_path", None):
+            unproductive = unproductive_tools_from_audit(read_entries(audit.log_path))
+            # Preflight reasons (can't run at all) take precedence over
+            # "ran but empty" when a tool somehow appears in both.
+            for tool, reason in unproductive.items():
+                flagged.setdefault(tool, reason)
+    except Exception:
+        pass
+    if flagged:
         for rf in ranked_findings:
-            rf.next_steps = annotate_next_steps(rf.next_steps, unavailable)
+            rf.next_steps = annotate_next_steps(rf.next_steps, flagged)
 
     # Store as ranked_threads (top 10 actionable items)
     top_threads = [rf.to_dict() for rf in ranked_findings[:10]]

@@ -296,11 +296,11 @@ class TestRecommendationHygiene:
         steps = [
             "Query DeHashed/IntelX for the 2 email addresses",
             "Use theHarvester to expand the email list",
-            "Run amass with brute-force mode",  # amass is available -> untouched
+            "Run amass with brute-force mode",  # amass not flagged here -> untouched
         ]
         out = annotate_next_steps(steps, u)
-        assert "unavailable this run" in out[0]
-        assert "unavailable this run" in out[1]
+        assert "[dehashed:" in out[0] and "disabled by engagement policy" in out[0]
+        assert "[theharvester:" in out[1] and "not installed" in out[1]
         assert out[2] == "Run amass with brute-force mode"
 
     def test_no_preflight_is_noop(self):
@@ -308,6 +308,30 @@ class TestRecommendationHygiene:
         u = unavailable_tools_from_preflight(None)
         steps = ["Query DeHashed"]
         assert annotate_next_steps(steps, u) == steps
+
+    def test_unproductive_tools_from_audit(self):
+        from nexusrecon.core.scoring import unproductive_tools_from_audit
+        entries = [
+            {"event_type": "tool_result", "tool_name": "amass", "result_count": 0, "degraded": False},
+            {"event_type": "tool_result", "tool_name": "nuclei", "result_count": 0, "degraded": True},
+            {"event_type": "tool_error", "tool_name": "crtsh", "error": "502"},
+            {"event_type": "tool_result", "tool_name": "dns", "result_count": 7, "degraded": False},
+            # a tool empty once but productive elsewhere is NOT flagged
+            {"event_type": "tool_result", "tool_name": "hunter", "result_count": 0, "degraded": False},
+            {"event_type": "tool_result", "tool_name": "hunter", "result_count": 2, "degraded": False},
+        ]
+        u = unproductive_tools_from_audit(entries)
+        assert "already ran with no results" in u["amass"]
+        assert "degraded" in u["nuclei"]
+        assert "failed" in u["crtsh"]
+        assert "dns" not in u          # produced data
+        assert "hunter" not in u       # productive somewhere
+
+    def test_unproductive_steps_annotated(self):
+        from nexusrecon.core.scoring import annotate_next_steps
+        flagged = {"amass": "already ran with no results this campaign"}
+        out = annotate_next_steps(["Run amass with brute-force mode"], flagged)
+        assert "[amass: already ran with no results this campaign]" in out[0]
 
 
 # ── F-B6: compute scores once (deterministic Likelihood x Impact) ────────────
@@ -356,3 +380,49 @@ class TestDeterministicScoring:
         # Impact for high = 8; the row must carry real numbers, not "- | -".
         assert "| 8 |" in body
         assert "| - | - |" not in body
+
+
+# ── F-A5 follow-up: run-health surfaced in reports ───────────────────────────
+
+
+class TestRunHealthInReports:
+    def _engine(self, tmp_path):
+        from nexusrecon.reports.engine import ReportEngine
+        return ReportEngine("nr-test", "eng", "sha256:0", tmp_path)
+
+    def _run_health(self):
+        return {
+            "productive": 6, "degraded": [{"tool": "sslyze", "reason": "no TLS data"}],
+            "errors": [{"tool": "crtsh", "error": "crt.sh returned 502"}],
+            "policy_skipped": [{"tool": "dehashed", "reason": "breach disabled"}],
+            "degraded_capabilities": [{"capability": "web"}, {"capability": "certificate"}],
+            "llm_mode": "mock", "llm_calls": 9, "llm_cost_usd": 0.0,
+            "node_estimate_note": "Pre-flight simulation forecast 98 new graph nodes; the run produced 0.",
+            "caveats": ["Active scanning was degraded or failed.", "Analysis ran on the MockLLM fallback."],
+        }
+
+    def test_master_report_health_block(self, tmp_path):
+        eng = self._engine(tmp_path)
+        block = "\n".join(eng._render_run_health_block({"run_health": self._run_health()}))
+        assert "Run Health" in block
+        assert "MockLLM fallback" in block          # caveat surfaced
+        assert "Degraded capabilities" in block and "web, certificate" in block
+        assert "mock" in block                        # analysis engine mode
+        assert "forecast 98" in block.lower()
+
+    def test_no_run_health_no_block(self, tmp_path):
+        eng = self._engine(tmp_path)
+        assert eng._render_run_health_block({}) == []
+
+    def test_coverage_appendix_lists_degraded_tools(self, tmp_path):
+        """F-B1: with run_health present, degraded tools appear in the
+        top_threads coverage appendix as 'not assessed'."""
+        eng = self._engine(tmp_path)
+        state = {
+            "ranked_threads": [],
+            "coverage_items": [],
+            "run_health": self._run_health(),
+        }
+        body = open(eng._top_threads_to_pull(state)).read()
+        assert "Not assessed" in body
+        assert "sslyze" in body

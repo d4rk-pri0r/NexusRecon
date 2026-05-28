@@ -437,12 +437,19 @@ def run(
                     progress.update(task, description=f"[red]Error in workflow: {e}[/red]")
             else:
                 _progress_tasks: dict = {}
+                _post_run: dict = {}  # capture run_health for printing after the spinner
 
                 def _cli_on_event(evt: dict) -> None:
                     etype = evt.get("type", "")
                     phase_id = evt.get("phase", "")
                     name = evt.get("name", phase_id)
-                    if etype == "phase_start":
+                    if etype == "preflight":
+                        # F-A3: surface tool availability before the run.
+                        from nexusrecon.core.run_health import format_preflight_console
+                        progress.add_task(format_preflight_console(evt), total=None)
+                    elif etype == "campaign_complete":
+                        _post_run["run_health"] = evt.get("run_health") or {}
+                    elif etype == "phase_start":
                         task = progress.add_task(f"Running: {name}...", total=None)
                         _progress_tasks[phase_id] = task
                     elif etype == "phase_end":
@@ -464,6 +471,14 @@ def run(
                 state = asyncio.run(
                     run_campaign(state, campaign, scope_model, on_event=_cli_on_event)
                 )
+
+        # F-A3: print the run-health summary after the spinner closes so the
+        # operator sees the trust caveats (degraded tools, mock fallback,
+        # forecast misses) before reading the reports.
+        if not use_graph:
+            from nexusrecon.core.run_health import format_run_health_console
+            for line in format_run_health_console(_post_run.get("run_health", {})):
+                console.print(line)
 
         # F-019: populate real EntityGraph from execution state
         try:

@@ -1972,6 +1972,40 @@ class ReportEngine:
 
     # ── Master Report (V3 Move 2) ──────────────────────────────────────────────
 
+    def _render_run_health_block(self, state: dict[str, Any]) -> list[str]:
+        """Master-report run-health banner (Wave F-A5).
+
+        Surfaces whether the run can be trusted *before* the findings are
+        read: the blunt caveats first, then a one-line tool-outcome tally,
+        the degraded capabilities, and the analysis-engine provenance
+        (live model vs. MockLLM fallback). Reads ``state["run_health"]``,
+        which run_campaign populates before report generation.
+        """
+        rh = state.get("run_health") or {}
+        if not rh:
+            return []
+        out = ["## 1a. Run Health", ""]
+        for c in rh.get("caveats", []):
+            out.append(f"> {c}")
+        if rh.get("caveats"):
+            out.append("")
+        out.append(
+            f"- **Tool outcomes:** {rh.get('productive', 0)} returned data, "
+            f"{len(rh.get('degraded', []))} degraded, {len(rh.get('errors', []))} errored, "
+            f"{len(rh.get('policy_skipped', []))} skipped by policy"
+        )
+        caps = [c.get("capability") for c in rh.get("degraded_capabilities", [])]
+        if caps:
+            out.append(f"- **Degraded capabilities:** {', '.join(caps)}")
+        out.append(
+            f"- **Analysis engine:** {rh.get('llm_mode', 'unknown')} "
+            f"({rh.get('llm_calls', 0)} call(s), ${rh.get('llm_cost_usd', 0.0):.4f})"
+        )
+        if rh.get("node_estimate_note"):
+            out.append(f"- **Forecast vs. reality:** {rh['node_estimate_note']}")
+        out.append("")
+        return out
+
     def _master_report(self, state: dict[str, Any]) -> str:
         """
         Master report — single cohesive narrative deliverable.
@@ -2253,6 +2287,9 @@ class ReportEngine:
             f"All tool activity is hash-chained in `logs/audit_log.jsonl`.",
             "",
         ])
+
+        # Section 1a: Run Health — trust banner before the findings (F-A5).
+        lines.extend(self._render_run_health_block(state))
 
         # Section 2 (Executive Brief) + 4-8 (conditional) from agent.
         # Split body_md at "## 10. Recommendations" so we can place that

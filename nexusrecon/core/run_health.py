@@ -279,6 +279,37 @@ def _build_caveats(h: RunHealth) -> list[str]:
     return caveats
 
 
+def format_run_health_console(rh: dict[str, Any]) -> list[str]:
+    """Compact Rich-markup lines summarising run health for CLI output
+    (Wave F-A3). Leads with the caveats so the operator sees the trust
+    warnings right after the run, then a one-line tool-outcome tally."""
+    if not rh:
+        return []
+    lines = ["[bold]Run health[/bold]"]
+    for c in rh.get("caveats", []):
+        lines.append(f"  [yellow]![/yellow] {c}")
+    lines.append(
+        f"  [dim]{rh.get('productive', 0)} returned data, "
+        f"{len(rh.get('degraded', []))} degraded, "
+        f"{len(rh.get('errors', []))} errored, "
+        f"{len(rh.get('policy_skipped', []))} policy-skipped; "
+        f"analysis engine: {rh.get('llm_mode', 'unknown')}[/dim]"
+    )
+    return lines
+
+
+def format_preflight_console(preflight: dict[str, Any]) -> str:
+    """One-line Rich-markup preflight tool-availability summary (Wave F-A3)."""
+    counts = (preflight or {}).get("counts", {})
+    return (
+        f"[dim]Preflight: {counts.get('active', 0)} tools active, "
+        f"{counts.get('missing_binary', 0)} missing-binary, "
+        f"{counts.get('missing_key', 0)} missing-key, "
+        f"{counts.get('policy', 0)} policy-disabled, "
+        f"{counts.get('over_tier', 0)} over-tier[/dim]"
+    )
+
+
 def render_run_health_md(health: RunHealth, campaign_id: str = "") -> str:
     """Render a RunHealth as an operator-facing markdown deliverable."""
     h = health

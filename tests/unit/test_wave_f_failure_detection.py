@@ -535,6 +535,35 @@ class TestRunHealthSummary:
         assert "crt.sh returned 502" in md
 
 
+# ── F-A3 follow-up: console surfacing ────────────────────────────────────────
+
+
+class TestConsoleSurfacing:
+    def test_run_health_console_lines(self):
+        from nexusrecon.core.run_health import format_run_health_console
+        rh = {"productive": 6, "degraded": [{"tool": "sslyze"}], "errors": [{"tool": "crtsh"}],
+              "policy_skipped": [{"tool": "dehashed"}], "llm_mode": "mock",
+              "caveats": ["Analysis ran on the MockLLM fallback."]}
+        lines = format_run_health_console(rh)
+        joined = "\n".join(lines)
+        assert "Run health" in joined
+        assert "MockLLM fallback" in joined
+        assert "6 returned data" in joined
+        assert "analysis engine: mock" in joined
+
+    def test_run_health_console_empty(self):
+        from nexusrecon.core.run_health import format_run_health_console
+        assert format_run_health_console({}) == []
+
+    def test_preflight_console_line(self):
+        from nexusrecon.core.run_health import format_preflight_console
+        line = format_preflight_console({"counts": {"active": 40, "missing_binary": 1,
+                                         "missing_key": 3, "policy": 2, "over_tier": 0}})
+        assert "40 tools active" in line
+        assert "1 missing-binary" in line
+        assert "2 policy-disabled" in line
+
+
 # ── F-A7: pre-flight simulation reconciliation ───────────────────────────────
 
 
