@@ -533,3 +533,44 @@ class TestRunHealthSummary:
         assert "# Run Health Summary" in md
         assert "Degraded capabilities" in md
         assert "crt.sh returned 502" in md
+
+
+# ── F-A7: pre-flight simulation reconciliation ───────────────────────────────
+
+
+class TestSimulationReconciliation:
+    def _entries(self, sim_nodes, entities):
+        out = [{"event_type": "simulation", "expected_new_nodes": n} for n in sim_nodes]
+        out.append({"event_type": "phase_end", "entities_count": entities})
+        return out
+
+    def test_forecast_nodes_zero_actual_flagged(self):
+        from nexusrecon.core.run_health import summarize_run_health
+        # Mirrors the real run: 48+19+20+11 forecast, 0 produced.
+        h = summarize_run_health(self._entries([48, 19, 20, 11], 0))
+        assert h.predicted_new_nodes == 98
+        assert h.node_estimate_note is not None
+        assert any("uncalibrated" in c for c in h.caveats)
+
+    def test_gross_overestimate_flagged(self):
+        from nexusrecon.core.run_health import summarize_run_health
+        h = summarize_run_health(self._entries([100], 5))  # 20x over
+        assert h.node_estimate_note is not None
+
+    def test_accurate_estimate_not_flagged(self):
+        from nexusrecon.core.run_health import summarize_run_health
+        h = summarize_run_health(self._entries([20], 18))
+        assert h.node_estimate_note is None
+
+    def test_tiny_forecast_not_flagged(self):
+        from nexusrecon.core.run_health import summarize_run_health
+        # Don't cry wolf when the forecast was small to begin with.
+        h = summarize_run_health(self._entries([3], 0))
+        assert h.node_estimate_note is None
+
+    def test_forecast_row_rendered(self):
+        from nexusrecon.core.run_health import render_run_health_md, summarize_run_health
+        h = summarize_run_health(self._entries([98], 0))
+        md = render_run_health_md(h, "nr-x")
+        assert "simulator forecast" in md.lower()
+        assert "98" in md

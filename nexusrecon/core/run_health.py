@@ -39,6 +39,13 @@ class RunHealth:
     degraded_capabilities: list[dict[str, Any]] = field(default_factory=list)
     entities_total: int = 0
     zero_entities: bool = False
+    # Pre-flight simulation reconciliation (Wave F-A7): the simulator's
+    # expected_new_nodes is an uncalibrated category heuristic and never
+    # checked itself against reality. predicted_new_nodes is the sum it
+    # forecast; node_estimate_note is set when it was wildly off so the
+    # predictor finally "notices".
+    predicted_new_nodes: int = 0
+    node_estimate_note: str | None = None
     # LLM provenance (Wave F-A6): was the analysis done by a live model or
     # the deterministic MockLLM fallback? "live" / "mock" / "mixed" / "none".
     llm_mode: str = "unknown"
@@ -59,6 +66,8 @@ class RunHealth:
             "degraded_capabilities": self.degraded_capabilities,
             "entities_total": self.entities_total,
             "zero_entities": self.zero_entities,
+            "predicted_new_nodes": self.predicted_new_nodes,
+            "node_estimate_note": self.node_estimate_note,
             "llm_mode": self.llm_mode,
             "llm_calls": self.llm_calls,
             "llm_cost_usd": round(self.llm_cost_usd, 4),
@@ -175,6 +184,10 @@ def summarize_run_health(
             })
         elif et == "phase_end":
             h.entities_total = max(h.entities_total, int(e.get("entities_count") or 0))
+        elif et == "simulation":
+            # Sum what the pre-flight simulator forecast across the run so
+            # we can reconcile it against actual entity yield (F-A7).
+            h.predicted_new_nodes += int(e.get("expected_new_nodes") or 0)
 
     # A capability is degraded when it was attempted and *failed* (errors
     # or degraded results) yet produced no usable data. A category that
@@ -191,6 +204,26 @@ def summarize_run_health(
             })
 
     h.zero_entities = h.entities_total == 0
+
+    # Reconcile the pre-flight simulation against reality (F-A7). The
+    # estimate is an uncalibrated category prior, so we only flag a gross
+    # miss: it forecast a meaningful number of nodes and the run produced
+    # far fewer (or none). The point is that the predictor finally notices.
+    pred = h.predicted_new_nodes
+    actual = h.entities_total
+    if pred >= 10 and actual == 0:
+        h.node_estimate_note = (
+            f"Pre-flight simulation forecast {pred} new graph nodes; the run "
+            "produced 0. The node estimate is an uncalibrated category "
+            "heuristic, not a forecast; treat it as a rough guess."
+        )
+    elif pred >= 10 and actual > 0 and pred >= 5 * actual:
+        h.node_estimate_note = (
+            f"Pre-flight simulation forecast {pred} new graph nodes; the run "
+            f"produced {actual} ({pred // max(actual, 1)}x over). The node "
+            "estimate is an uncalibrated category heuristic, not a forecast."
+        )
+
     h.caveats = _build_caveats(h)
     return h
 
@@ -241,6 +274,8 @@ def _build_caveats(h: RunHealth) -> list[str]:
             "Degraded capabilities (attempted, no usable data): "
             + ", ".join(sorted(other_degraded)) + "."
         )
+    if h.node_estimate_note:
+        caveats.append(h.node_estimate_note)
     return caveats
 
 
@@ -273,6 +308,10 @@ def render_run_health_md(health: RunHealth, campaign_id: str = "") -> str:
     lines.append(f"| Errored | {len(h.errors)} |")
     lines.append(f"| Skipped by policy | {len(h.policy_skipped)} |")
     lines.append(f"| Entities extracted | {h.entities_total} |")
+    if h.predicted_new_nodes:
+        lines.append(
+            f"| Entities (simulator forecast) | {h.predicted_new_nodes} (heuristic) |"
+        )
     lines.append("")
 
     lines.append("## Analysis engine")
