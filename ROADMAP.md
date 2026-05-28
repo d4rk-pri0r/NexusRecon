@@ -204,92 +204,96 @@ proves is not optional.
       engine section) with a blunt caveat when findings came from the
       deterministic fallback. Budget now enforces against the real shared
       tracker. Tests in `tests/unit/test_wave_f_cost_telemetry.py`.
-- [ ] **F-A7 Reconcile the pre-flight simulation with reality.** The
-      simulator predicted ~98 new nodes across phases; the run
-      produced zero entities, and its confidence was always "low".
-      Either calibrate `expected_new_nodes` against actual yield or
-      demote it from a gating signal to an explicit guess. A
-      predictor that is off by ~100 and never notices is worse than
-      none.
+- [x] **F-A7 Reconcile the pre-flight simulation with reality.** The
+      simulator already never gates on `expected_new_nodes` (its
+      recommendation looks only at tier/cost/pivot flags), but it
+      never checked the forecast against actual yield, so the ~98-vs-0
+      miss went unnoticed. `run_health` now sums the `simulation`
+      events' `expected_new_nodes` from the audit log, compares them
+      to `entities_total`, and sets `node_estimate_note` plus a caveat
+      when the forecast was a gross over-estimate (forecast >= 10 and
+      0 produced, or >= 5x the actual). It is labelled honestly as an
+      uncalibrated category heuristic, not a forecast. Validated on
+      the real ginandjuice.shop log (forecast 98, produced 0,
+      flagged). True calibration against historical yield is deferred
+      to the Fleet-Level Learning moonshot. Tests in
+      `tests/unit/test_wave_f_failure_detection.py`.
 
 ### F-B: reporting value and noise reduction
 
-- [ ] **F-B1 Findings vs. non-findings split.** Roughly 10 of the 36
-      were "we looked and found nothing" ("No MX Records", "No Code
-      or Secret Leakage", "Clean Reputation", "No Sensitive Data in
-      Paste Sites", "Limited Email Intelligence", etc.). Move these
-      out of the ranked findings list into a separate "Coverage /
-      what we checked" appendix in `nexusrecon/reports/engine.py`.
-      A pentester opening top_threads should see attack surface, not
-      a catalogue of dead ends. Crucially, route F-A1 `DEGRADED`
-      results here as "not assessed (tool failed)", never as a clean
-      negative.
-- [ ] **F-B2 Cross-phase finding dedup/merge.** The same fact was
-      emitted up to three times (SPF/DMARC x3, email naming x3, test
-      subdomain x3, dual A-records x2) because each phase re-derives
-      findings from the graph with no merge step. Add canonical-key
-      dedup in `nexusrecon/core/scoring.py` (merge by
-      title+affected_asset+category, keep highest confidence, union
-      the sources). This is the unchecked "findings deduplicated
-      across overlapping tools" beta blocker.
-- [ ] **F-B3 Confidence floor for findings; speculation is not
-      attack surface.** Six conf-0.2 "[POSSIBLE] ... Unverified"
-      cloud entries were minted from `aws_recon` / `gcp_recon` runs
-      that returned zero. Drop sub-threshold items below the findings
-      bar (footnote them under coverage), and stop generating
-      "POSSIBLE infrastructure" from a probe that found nothing. The
-      one real cloud signal (azure_m365_recon, Managed federation)
-      should not sit at the same tier as the noise.
-- [ ] **F-B4 Reports must derive presence from results, not from the
-      fact a tool ran.** `vendor_supply_chain` lists AWS / GCP /
-      M365 as "detected" and lists `github_recon` / `gitleaks` /
-      `trufflehog` as "code sources" purely because those tools were
-      invoked, all returned zero. `cloud_posture` renders empty
-      "unknown / 0" subsections; `CDN: None detected` is actually a
-      `wafw00f` failure. Fix the `engine.py` renderers to require a
-      positive result before asserting presence, and to omit empty
-      subsections.
-- [ ] **F-B5 Input hygiene on discovered identities.** A junk probe
-      address (`abcfoo@ginandjuice.shop`) propagated into the "100%
-      confidence flast naming convention" headline finding, got its
-      own phishing pretext bundle, and made it into the exec-summary
-      prose. Filter obviously synthetic/test identities before they
-      feed pattern analysis, pretext bundles, or findings.
-- [ ] **F-B6 Strip machine scaffolding from human reports + compute
-      scores once.** `executive_summary.md` contains a literal
-      `FINDINGS_JSON:[{...}]` blob (the `agent_executor` protocol
-      marker dumped verbatim) and invents Likelihood x Impact
-      integers that are blank in `attack_surface.md`. The reporter
-      (`nexusrecon/agents/master_reporter.py` /
-      `reports/executive_summary.py`) must consume parsed findings,
-      never raw agent output, and risk scores must be computed once
-      in `core/scoring.py` and rendered identically everywhere. Folds
-      into the unchecked "no LLM artifacts in prose" smoke check.
-- [ ] **F-B7 Recommendations must respect what the run already tried
-      and what is available.** Next-steps told the operator to "query
-      DeHashed immediately" (404'd x3 here), "use theHarvester" (not
-      installed), "run amass brute-force" (already ran 60s -> 0), and
-      "run nuclei" (already ran 140s -> 0). Generate next-steps from
-      run state + tool availability, not boilerplate. Recommending
-      tools that just failed or are disabled is exactly the
-      pentester busywork this project exists to remove.
-- [ ] **F-B8 Suppress or soften empty deliverables.** `harvested_
-      credentials.md` opens with "This file contains real
-      credentials. Treat as Secret." then reports "Total: 0".
-      Empty deliverables should either be omitted from the report
-      index or clearly state "nothing found, retained for
-      completeness", with no false-alarm header.
+- [x] **F-B1 Findings vs. non-findings split.** `score_findings_with_coverage()`
+      in `core/scoring.py` partitions into ranked attack surface vs.
+      a coverage list (absence-of-evidence notes like "No MX Records",
+      "Clean Reputation", "Limited Email Intelligence", restricted to
+      info severity so a real weakness like "DNSSEC Not Configured" is
+      never swept in). Phase 8 stashes `state["coverage_items"]`; the
+      engine renders a "Coverage / What We Checked" appendix in
+      `top_threads.md` (shown even when there are zero ranked threads,
+      the ginandjuice case). The appendix also lists DEGRADED tools
+      from the run-health summary as "not assessed" when available.
+      Tests in `tests/unit/test_wave_f_reporting_value.py`.
+- [x] **F-B2 Cross-phase finding dedup/merge.** `_dedup_ranked()` in
+      `core/scoring.py` collapses findings by canonical key
+      (normalised title stem + category + primary asset), keeping the
+      highest-confidence representative and unioning sources /
+      next-steps / assets. The title stem drops `[POSSIBLE]` and a
+      trailing ` - <qualifier>` so the three reworded SPF/DMARC
+      findings merge, while the primary asset in the key keeps
+      distinct subdomains apart. Fixed a latent bug where
+      `_score_agent_findings` dropped `affected_assets` entirely.
+- [x] **F-B3 Confidence floor for findings; speculation is not
+      attack surface.** Items below `COVERAGE_CONFIDENCE_FLOOR` (0.30)
+      or prefixed `[POSSIBLE]` are routed to coverage, not ranked
+      threads, so the conf-0.2 cloud guesses minted from zero-result
+      probes stop competing with the real signal.
+- [x] **F-B4 Reports must derive presence from results, not from the
+      fact a tool ran.** `engine.py` gained `_provider_has_evidence()`
+      / `_code_source_has_evidence()`: `vendor_supply_chain` lists a
+      cloud provider or code source only when its entry carries a
+      positive signal (not just that the tool ran), and
+      `cloud_posture` builds each subsection from positive fields and
+      omits the header entirely when empty (no more "Tenant ID:
+      unknown" or "S3 Buckets Found: 0").
+- [x] **F-B5 Input hygiene on discovered identities.** New
+      `core/identity_hygiene.py::is_probable_test_identity()` flags
+      synthetic/test/role addresses (`abcfoo@`, `noreply@`, junk-token
+      locals) while leaving real names safe (`barbara`, `testa`,
+      `foster` all pass via end-to-end junk-token decomposition).
+      Applied in `email_format` (before pattern inference) and the
+      phishing-package pretext bundles.
+- [x] **F-B6 Strip machine scaffolding from human reports.**
+      `engine.py::strip_agent_scaffolding()` removes any
+      `FINDINGS_JSON:[...]` block from agent prose before it is
+      rendered (executive summary, full-report analyst notes), so the
+      protocol marker never leaks into a deliverable. (Single-source
+      score rendering across reports remains a follow-up.)
+- [x] **F-B7 Recommendations must respect what the run already tried
+      and what is available.** `unavailable_tools_from_preflight()` +
+      `annotate_next_steps()` in `core/scoring.py` flag any next-step
+      that recommends a tool the preflight marked uninstalled, key-
+      less, or policy-disabled (theHarvester, DeHashed, Shodan in the
+      run). Wired into phase 8. Flagging "ran but unproductive" tools
+      (amass/nuclei) needs run-health and is a follow-up.
+- [x] **F-B8 Suppress or soften empty deliverables.**
+      `harvested_credentials.md` no longer opens with the "contains
+      real credentials" banner when empty; it states "No credentials
+      were harvested. File retained for completeness." instead.
 
 ### F-C: lock it in
 
-- [ ] **F-C1 Adopt ginandjuice.shop as a signal-quality regression
-      fixture.** Re-run after F-A/F-B and assert against the audit
-      log + reports: no `success=True` on a known-degraded tool, no
-      duplicate findings, no `FINDINGS_JSON` substring in any `.md`,
-      no presence claim sourced from a zero-result tool, and a
-      health summary that names the degraded capabilities. This is
-      the concrete version of the "Report quality smoke" beta blocker
-      and the "killer demo" example run.
+- [x] **F-C1 Adopt ginandjuice.shop as a signal-quality regression
+      fixture.** `tests/integration/test_wave_f_signal_quality_regression.py`
+      encodes the run's failure modes as a CI-safe fixture (the
+      campaign output dir is gitignored, so a live re-scan is not
+      suitable for CI) and asserts the combined F-A + F-B invariants:
+      a degraded tool is never counted as a clean negative, findings
+      dedup (the SPF/DMARC and test-subdomain dupes collapse), no
+      `FINDINGS_JSON` substring in any rendered `.md`, no AWS/GCP
+      presence claim from zero-result probes, empty deliverables carry
+      no false-alarm header, the junk identity gets no pretext bundle,
+      and the run-health summary names the degraded capabilities and
+      flags the 98-vs-0 node forecast. This is the concrete version of
+      the "Report quality smoke" beta blocker.
 
 ---
 

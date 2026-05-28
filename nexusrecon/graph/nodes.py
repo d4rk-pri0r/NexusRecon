@@ -17,7 +17,12 @@ from typing import Any
 import structlog
 
 from nexusrecon.core.config import get_config
-from nexusrecon.core.scoring import score_findings
+from nexusrecon.core.scoring import (
+    annotate_next_steps,
+    score_findings,
+    score_findings_with_coverage,
+    unavailable_tools_from_preflight,
+)
 from nexusrecon.graph.agent_executor import AgentExecutor
 from nexusrecon.graph.state import CampaignGraphState
 from nexusrecon.opsec.useragent import UserAgentPool
@@ -1577,12 +1582,25 @@ async def phase8_attack_surface(state: CampaignGraphState) -> CampaignGraphState
     log.info("Phase 8: Attack surface prioritization")
     state["current_phase"] = "phase8"
 
-    # Run the scoring engine across all intel sources
-    ranked_findings = score_findings(state)
+    # Run the scoring engine across all intel sources. Deduped + partitioned:
+    # ranked_findings is the real attack surface; coverage is the
+    # absence-of-evidence / below-floor noise that used to pad the report
+    # (Wave F-B1/B2/B3), surfaced separately as "what we checked".
+    ranked_findings, coverage_findings = score_findings_with_coverage(state)
+
+    # F-B7: annotate next-steps that recommend tools which can't run this
+    # campaign (uninstalled, no key, policy-disabled), using the preflight
+    # report, so the report stops generating busywork ("run theHarvester")
+    # for tools that already failed or are disabled.
+    unavailable = unavailable_tools_from_preflight(state.get("preflight"))
+    if unavailable:
+        for rf in ranked_findings:
+            rf.next_steps = annotate_next_steps(rf.next_steps, unavailable)
 
     # Store as ranked_threads (top 10 actionable items)
     top_threads = [rf.to_dict() for rf in ranked_findings[:10]]
     state["ranked_threads"] = top_threads
+    state["coverage_items"] = [rf.to_dict() for rf in coverage_findings]
 
     # Agent synthesis: Risk Analyst — gets the full ranked picture
     executor = _get_executor()

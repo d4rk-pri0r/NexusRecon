@@ -11,8 +11,28 @@ Results are normalised to [0, 1] and ranked descending.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any
+
+#: Confidence below which a finding is treated as speculation, not attack
+#: surface (Wave F-B3). The 2026-05-27 run minted six conf-0.2 "[POSSIBLE]"
+#: cloud entries from probes that returned nothing; those belong in coverage,
+#: not the ranked threads.
+COVERAGE_CONFIDENCE_FLOOR = 0.30
+
+#: Severity ordering for dedup merges (higher wins).
+_SEVERITY_RANK = {"critical": 4, "high": 3, "medium": 2, "low": 1, "info": 0}
+
+#: Substrings (lowercased title) that mark an absence-of-evidence note rather
+#: than attack surface (Wave F-B1). Kept tight so genuine informational
+#: weaknesses (e.g. "DNSSEC Not Configured") are NOT swept into coverage.
+_NON_FINDING_MARKERS = (
+    "no mx record", "no code", "no secret", "no sensitive", "no confirmed",
+    "no fingerprinted", "no malicious", "no data leak", "no leak detected",
+    "clean reputation", "queried - no", "queried — no", "none detected",
+    "no significant findings", "no sensitive data",
+)
 
 # ── Dataclass for a ranked finding ────────────────────────────────────────────
 
@@ -66,13 +86,56 @@ class RankedFinding:
 
 # ── Main scoring function ──────────────────────────────────────────────────────
 
-def score_findings(state: dict[str, Any]) -> list[RankedFinding]:
-    """
-    Consume campaign state and return a ranked list of RankedFinding objects.
-    Called from Phase 8 — reads vuln_intel, cloud_intel, code_intel, email_intel.
-    """
-    candidates: list[RankedFinding] = []
+def unavailable_tools_from_preflight(preflight: dict[str, Any] | None) -> dict[str, str]:
+    """Map tool name -> short reason for tools that cannot run this campaign,
+    read from the F-A3 preflight report (Wave F-B7).
 
+    Covers the missing-binary, missing-key, and policy-skipped buckets ── the
+    "this can't run" set. Tools that ran but were unproductive are not here;
+    they need run-health (post-run) and are out of scope for recommend-time.
+    """
+    if not isinstance(preflight, dict):
+        return {}
+    buckets = preflight.get("buckets") or {}
+    reasons = {
+        "missing_binary": "not installed",
+        "missing_key": "missing an API key",
+        "policy": "disabled by engagement policy",
+        "over_tier": "above the engagement tier",
+    }
+    out: dict[str, str] = {}
+    for bucket, label in reasons.items():
+        for tool_name in (buckets.get(bucket) or {}):
+            out[tool_name.lower()] = label
+    return out
+
+
+def annotate_next_steps(steps: list[str], unavailable: dict[str, str]) -> list[str]:
+    """Flag any next-step that recommends a tool which can't run this campaign
+    (Wave F-B7), so the report stops telling the operator to "run theHarvester"
+    when it isn't installed or "query DeHashed" when it's policy-disabled.
+
+    The step is kept (the underlying intent may still be valid by hand) but
+    annotated, never silently dropped.
+    """
+    if not unavailable or not steps:
+        return steps
+    out: list[str] = []
+    for step in steps:
+        low = step.lower()
+        hit = next(
+            (t for t in unavailable if re.search(rf"\b{re.escape(t)}\b", low)),
+            None,
+        )
+        if hit:
+            out.append(f"{step}  [unavailable this run: {hit} is {unavailable[hit]}]")
+        else:
+            out.append(step)
+    return out
+
+
+def _collect_candidates(state: dict[str, Any]) -> list[RankedFinding]:
+    candidates: list[RankedFinding] = []
     candidates.extend(_score_cves(state))
     candidates.extend(_score_cloud_buckets(state))
     candidates.extend(_score_secrets(state))
@@ -80,15 +143,155 @@ def score_findings(state: dict[str, Any]) -> list[RankedFinding]:
     candidates.extend(_score_nuclei_findings(state))
     candidates.extend(_score_open_exposures(state))
     candidates.extend(_score_agent_findings(state))
+    return candidates
 
-    # Normalise scores to [0,1]
-    if candidates:
-        max_score = max(c.score for c in candidates) or 1.0
-        for c in candidates:
+
+def score_findings(state: dict[str, Any]) -> list[RankedFinding]:
+    """
+    Consume campaign state and return a ranked list of RankedFinding objects.
+    Called from Phase 8 — reads vuln_intel, cloud_intel, code_intel, email_intel.
+
+    Findings are deduplicated (Wave F-B2) and absence-of-evidence /
+    below-confidence-floor items are split off into coverage (F-B1/F-B3), so
+    the returned list is the real, ranked attack surface. Use
+    :func:`score_findings_with_coverage` when the coverage list is also needed.
+    """
+    kept, _coverage = score_findings_with_coverage(state)
+    return kept
+
+
+def score_findings_with_coverage(
+    state: dict[str, Any],
+) -> tuple[list[RankedFinding], list[RankedFinding]]:
+    """Score, dedup, and partition findings into (ranked, coverage).
+
+    - ``ranked``: real attack surface, normalised to [0,1] and sorted.
+    - ``coverage``: absence-of-evidence notes (F-B1) and below-floor /
+      ``[POSSIBLE]`` speculation (F-B3), kept for the "what we checked"
+      appendix instead of competing for the operator's attention.
+
+    Dedup (F-B2) runs first so a fact emitted three times across phases
+    collapses to one entry carrying the union of sources and the highest
+    confidence/severity seen.
+    """
+    candidates = _dedup_ranked(_collect_candidates(state))
+
+    kept: list[RankedFinding] = []
+    coverage: list[RankedFinding] = []
+    for c in candidates:
+        if _is_below_floor(c) or _is_non_finding(c):
+            coverage.append(c)
+        else:
+            kept.append(c)
+
+    if kept:
+        max_score = max(c.score for c in kept) or 1.0
+        for c in kept:
             c.score = min(1.0, c.score / max_score)
 
-    candidates.sort(key=lambda x: (-x.score, x.severity))
-    return candidates
+    kept.sort(key=lambda x: (-x.score, x.severity))
+    coverage.sort(key=lambda x: (-x.score, x.severity))
+    return kept, coverage
+
+
+# ── Dedup + classification (Wave F-B1/B2/B3) ──────────────────────────────────
+
+def _is_below_floor(rf: RankedFinding) -> bool:
+    """F-B3: speculation ── explicitly ``[POSSIBLE]`` or below the floor."""
+    if (rf.title or "").strip().lower().startswith("[possible]"):
+        return True
+    return rf.confidence < COVERAGE_CONFIDENCE_FLOOR
+
+
+def _is_non_finding(rf: RankedFinding) -> bool:
+    """F-B1: absence-of-evidence note ("we looked and found nothing"),
+    not attack surface. Restricted to info severity so it never demotes a
+    real (if low) weakness."""
+    if rf.severity != "info":
+        return False
+    cat = (rf.category or "").replace("_", " ").lower()
+    if "gap" in cat:  # "reconnaissance gap"
+        return True
+    title = (rf.title or "").strip().lower()
+    if title.startswith("limited "):  # "Limited Email Intelligence", "...Footprint"
+        return True
+    return any(m in title for m in _NON_FINDING_MARKERS)
+
+
+def _primary_asset(rf: RankedFinding) -> str:
+    """First real affected asset (skipping ``dynamic/`` / ``graph_summary``
+    pseudo-assets), lowercased. Used in the dedup key so two distinct
+    subdomains never collapse together."""
+    for a in rf.affected_assets or []:
+        al = str(a).strip().lower()
+        if not al or al.startswith("dynamic/") or al.startswith("graph_summary"):
+            continue
+        return al
+    return ""
+
+
+def _canonical_key(rf: RankedFinding) -> tuple[str, str, str]:
+    """Merge key: normalised title stem + category + primary asset.
+
+    The title stem drops a ``[POSSIBLE]`` prefix and any trailing
+    `` - <qualifier>`` so the three reworded SPF/DMARC findings collapse,
+    while the primary asset in the key keeps distinct subdomains apart.
+    """
+    title = (rf.title or "").strip().lower()
+    if title.startswith("[possible]"):
+        title = title[len("[possible]"):].strip()
+    for sep in (" - ", " — ", " – "):
+        idx = title.find(sep)
+        if idx >= 12:  # only strip a suffix when a substantial stem remains
+            title = title[:idx]
+            break
+    title = re.sub(r"[^a-z0-9]+", " ", title).strip()
+    cat = re.sub(r"[^a-z0-9]+", " ", (rf.category or "").lower()).strip()
+    return (title, cat, _primary_asset(rf))
+
+
+def _union_lists(lists: list[list[str]]) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for lst in lists:
+        for item in lst or []:
+            if item not in seen:
+                seen.add(item)
+                out.append(item)
+    return out
+
+
+def _dedup_ranked(findings: list[RankedFinding]) -> list[RankedFinding]:
+    """F-B2: collapse findings sharing a canonical key into one, keeping the
+    highest-confidence representative and unioning sources / next-steps /
+    assets. Preserves first-seen order."""
+    groups: dict[tuple[str, str, str], list[RankedFinding]] = {}
+    order: list[tuple[str, str, str]] = []
+    for rf in findings:
+        k = _canonical_key(rf)
+        if k not in groups:
+            groups[k] = []
+            order.append(k)
+        groups[k].append(rf)
+
+    out: list[RankedFinding] = []
+    for k in order:
+        grp = groups[k]
+        if len(grp) == 1:
+            out.append(grp[0])
+            continue
+        rep = max(grp, key=lambda r: (r.confidence, r.score))
+        rep.score = max(r.score for r in grp)
+        rep.confidence = max(r.confidence for r in grp)
+        rep.severity = max(
+            (r.severity for r in grp),
+            key=lambda s: _SEVERITY_RANK.get(s, 0),
+        )
+        rep.sources = _union_lists([r.sources for r in grp])
+        rep.next_steps = _union_lists([r.next_steps for r in grp])
+        rep.affected_assets = _union_lists([r.affected_assets for r in grp])
+        out.append(rep)
+    return out
 
 
 # ── CVE scoring ────────────────────────────────────────────────────────────────
@@ -495,6 +698,11 @@ def _score_agent_findings(state: dict[str, Any]) -> list[RankedFinding]:
             severity=severity,
             confidence=confidence,
             description=f.get("description", ""),
+            # Carry affected_assets + next_steps through (previously dropped):
+            # the dedup key needs the asset to keep distinct subdomains apart,
+            # and the report needs the steps.
+            affected_assets=f.get("affected_assets", []) or [],
+            next_steps=f.get("next_steps", []) or [],
             sources=[f.get("source", "agent")],
         ))
 

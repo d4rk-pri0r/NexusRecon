@@ -12,9 +12,82 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import re
+
 import structlog
 
 log = structlog.get_logger(__name__)
+
+
+def strip_agent_scaffolding(text: str) -> str:
+    """Remove machine protocol scaffolding from agent prose before it lands
+    in a human report (Wave F-B6).
+
+    The agent executor emits ``FINDINGS_JSON:[...]`` for the findings
+    pipeline; when an agent's raw output is rendered verbatim, that marker
+    and its JSON array leak into the deliverable (the executive summary in
+    the 2026-05-27 run carried a literal ``FINDINGS_JSON:[{...}]`` blob).
+    This keeps only the human-readable prose: everything from the
+    ``FINDINGS_JSON:`` marker to the end of its JSON array is stripped.
+    """
+    if not text:
+        return text
+    marker = "FINDINGS_JSON:"
+    idx = text.find(marker)
+    while idx != -1:
+        after = text[idx + len(marker):].lstrip()
+        rest_offset = len(text) - len(after)
+        try:
+            _parsed, consumed = json.JSONDecoder().raw_decode(after)
+            end = rest_offset + consumed
+        except (json.JSONDecodeError, ValueError):
+            # Can't parse the array; drop to end of the line as a fallback.
+            nl = text.find("\n", idx)
+            end = len(text) if nl == -1 else nl
+        text = (text[:idx] + text[end:])
+        idx = text.find(marker)
+    # Collapse the blank gap the removal may leave behind.
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
+
+
+def _provider_has_evidence(data: Any) -> bool:
+    """True when a cloud_intel entry carries a positive signal, not just the
+    fact that a recon tool ran (Wave F-B4).
+
+    aws_recon / gcp_recon write a state entry even when they find nothing,
+    so keying "provider detected" on entry existence fabricates presence.
+    Require a non-empty evidence field instead.
+    """
+    if not isinstance(data, dict):
+        return False
+    evidence_keys = (
+        "openid_config", "user_realm", "onmicrosoft_domain", "s3_buckets",
+        "buckets", "public_buckets", "projects", "instances", "functions",
+        "account_id", "accounts", "services", "tenant_id",
+    )
+    for k in evidence_keys:
+        v = data.get(k)
+        if isinstance(v, (list, dict, tuple)) and v:
+            return True
+        if isinstance(v, str) and v and v.lower() != "unknown":
+            return True
+    return False
+
+
+def _code_source_has_evidence(data: Any) -> bool:
+    """True when a code_intel entry actually surfaced something (leaks,
+    findings, repos, dependencies) rather than merely being queried (F-B4)."""
+    if not isinstance(data, dict):
+        return False
+    for k in ("leaks", "findings", "repos", "repositories", "secrets"):
+        if data.get(k):
+            return True
+    inner = data.get("data")
+    if isinstance(inner, dict):
+        for k in ("dependencies", "packages", "repos", "results"):
+            if inner.get(k):
+                return True
+    return False
 
 
 class ReportEngine:
@@ -126,6 +199,7 @@ class ReportEngine:
 
         if not ranked_threads:
             lines.append("*No ranked threads available — ensure Phase 7 and Phase 8 completed successfully.*")
+            lines.extend(self._render_coverage_section(state))
             path = self.output_dir / "top_threads.md"
             path.write_text("\n".join(lines), encoding="utf-8")
             return str(path)
@@ -218,6 +292,8 @@ class ReportEngine:
             tpl = "✓" if t.get("has_nuclei_template") else ""
             lines.append(f"| {i} | {score_pct} | {sev} | {cat} | {title} | {kev} | {msf} | {tpl} |")
 
+        lines.extend(self._render_coverage_section(state))
+
         lines.extend([
             "",
             "---",
@@ -251,6 +327,49 @@ class ReportEngine:
         )
 
         return str(path)
+
+    def _render_coverage_section(self, state: dict[str, Any]) -> list[str]:
+        """Coverage / what-we-checked appendix (Wave F-B1).
+
+        Renders the absence-of-evidence and below-floor items the scoring
+        engine split out of the ranked threads, plus (when the run-health
+        summary is available) tools that were degraded or failed, labelled
+        as "not assessed" rather than a clean negative. The goal is an
+        honest record of scope that does NOT create follow-up work: a
+        pentester opening top_threads sees attack surface first, with the
+        dead ends quarantined here.
+        """
+        coverage = state.get("coverage_items", []) or []
+        run_health = state.get("run_health", {}) or {}
+        degraded = run_health.get("degraded", []) or []
+        if not coverage and not degraded:
+            return []
+
+        out = [
+            "",
+            "---",
+            "",
+            "## Coverage / What We Checked",
+            "",
+            "Items below are NOT attack surface. They record where we looked and",
+            "found nothing actionable, or where a tool could not complete. Kept for",
+            "an honest scope record, not as follow-up work.",
+            "",
+        ]
+        if degraded:
+            out.append("**Not assessed (tool failed or returned implausibly empty):**")
+            out.append("")
+            for d in degraded:
+                out.append(f"- `{d.get('tool', '?')}`: {d.get('reason', '')}")
+            out.append("")
+        if coverage:
+            out.append("**Checked, nothing actionable found:**")
+            out.append("")
+            for c in coverage:
+                conf = c.get("confidence", 0.0) or 0.0
+                out.append(f"- {c.get('title', '')} _(confidence {conf:.0%})_")
+            out.append("")
+        return out
 
     # ── Executive Summary ──────────────────────────────────────────────────────
 
@@ -343,12 +462,14 @@ class ReportEngine:
             None,
         )
         if analyst_msg and analyst_msg.get("analysis"):
-            lines.extend([
-                "## Analyst Assessment",
-                "",
-                analyst_msg["analysis"],
-                "",
-            ])
+            assessment = strip_agent_scaffolding(analyst_msg["analysis"])
+            if assessment:
+                lines.extend([
+                    "## Analyst Assessment",
+                    "",
+                    assessment,
+                    "",
+                ])
 
         lines.extend([
             "---",
@@ -531,7 +652,15 @@ class ReportEngine:
 
     def _phishing_package(self, state: dict[str, Any]) -> str:
         """Emails + pretext hooks + per-employee bundles + DMARC analysis."""
-        emails = state.get("email_intel", {}).get("emails", {})
+        from nexusrecon.core.identity_hygiene import is_probable_test_identity
+        # F-B5: never build a pretext bundle for an obviously synthetic/test
+        # address (abcfoo@, noreply@). They are not people; targeting them is
+        # wasted operator effort and pollutes the package.
+        emails = {
+            em: info
+            for em, info in state.get("email_intel", {}).get("emails", {}).items()
+            if not is_probable_test_identity(em)
+        }
         _raw_format = state.get("email_intel", {}).get("format", {})
         # Handle both legacy string format ("first.last@example.com") and
         # rich dict format ({"most_likely_pattern": ..., "most_likely_confidence": ...})
@@ -740,43 +869,70 @@ class ReportEngine:
             "",
         ]
 
+        # Build each provider subsection from POSITIVE signal only, and emit
+        # the header only when there is something to show (F-B4). The old
+        # renderer printed a "## aws" header with "S3 Buckets Found: 0" and
+        # an empty "## gcp" section purely because the recon tool ran; that
+        # is noise, and "Tenant ID: unknown" reads like a real value.
+        any_section = False
         for key, data in cloud_intel.items():
-            lines.append(f"## {key}")
-            lines.append("")
+            if not isinstance(data, dict):
+                continue
+            section: list[str] = []
 
-            if "openid_config" in data:
-                oc = data["openid_config"]
-                lines.append(f"- Tenant ID: {oc.get('tenant_id', 'unknown')}")
-                lines.append(f"- Issuer: {oc.get('issuer', 'unknown')}")
+            oc = data.get("openid_config") or {}
+            tid = oc.get("tenant_id")
+            if tid and str(tid).lower() != "unknown":
+                section.append(f"- Tenant ID: {tid}")
+            iss = oc.get("issuer")
+            if iss and str(iss).lower() != "unknown":
+                section.append(f"- Issuer: {iss}")
 
-            if "user_realm" in data:
-                ur = data["user_realm"]
-                lines.append(f"- Federation: {'Federated (ADFS)' if ur.get('is_federated') else 'Managed'}")
+            ur = data.get("user_realm")
+            if isinstance(ur, dict) and ur:
+                section.append(
+                    f"- Federation: {'Federated (ADFS)' if ur.get('is_federated') else 'Managed'}"
+                )
 
-            if "s3_buckets" in data:
-                lines.append(f"- S3 Buckets Found: {len(data['s3_buckets'])}")
-                for b in data["s3_buckets"]:
-                    lines.append(f"  - `{b.get('name', '')}` (public: {b.get('public', False)})")
+            acct = data.get("account_id")
+            if acct and str(acct).lower() != "unknown":
+                section.append(f"- Account ID: {acct}")
+            accounts = data.get("accounts") or []
+            if accounts:
+                section.append("- Accounts: " + ", ".join(str(a) for a in accounts))
+            services = data.get("services") or []
+            if services:
+                section.append("- Services: " + ", ".join(str(s) for s in services))
 
-            if "onmicrosoft_domain" in data:
-                onm = data["onmicrosoft_domain"]
-                if onm.get("domains"):
-                    # Defensive ``.get(...)`` ── some tenant-enum
-                    # tools surface entries with only ``tenant_id``
-                    # populated. A bare ``d['domain']`` raises
-                    # KeyError and tanks the whole cloud-posture
-                    # report mid-render.
-                    domain_strs = [
-                        str(d.get("domain") or d.get("tenant_id") or "?")
-                        for d in onm["domains"]
-                        if isinstance(d, dict)
-                    ]
-                    if domain_strs:
-                        lines.append(
-                            "- onmicrosoft.com domains: "
-                            + ", ".join(domain_strs),
-                        )
+            s3 = data.get("s3_buckets") or []
+            if s3:
+                section.append(f"- S3 Buckets Found: {len(s3)}")
+                for b in s3:
+                    section.append(f"  - `{b.get('name', '')}` (public: {b.get('public', False)})")
 
+            onm = data.get("onmicrosoft_domain") or {}
+            if isinstance(onm, dict) and onm.get("domains"):
+                domain_strs = [
+                    str(d.get("domain") or d.get("tenant_id") or "?")
+                    for d in onm["domains"]
+                    if isinstance(d, dict)
+                ]
+                if domain_strs:
+                    section.append("- onmicrosoft.com domains: " + ", ".join(domain_strs))
+
+            if section:
+                any_section = True
+                lines.append(f"## {key}")
+                lines.append("")
+                lines.extend(section)
+                lines.append("")
+
+        if not any_section:
+            lines.append(
+                "_No positive cloud or identity posture signal was collected. The "
+                "cloud recon tools ran but returned nothing actionable; see the "
+                "run health summary for tool status._"
+            )
             lines.append("")
 
         path = self.output_dir / "cloud_posture.md"
@@ -921,7 +1077,7 @@ class ReportEngine:
             for msg in agent_messages:
                 lines.append(f"### {msg.get('agent', 'unknown')} — {msg.get('phase', '')}")
                 lines.append("")
-                lines.append(msg.get("analysis", ""))
+                lines.append(strip_agent_scaffolding(msg.get("analysis", "")))
                 lines.append("")
 
         path = self.output_dir / "people_identity_map.md"
@@ -1019,20 +1175,25 @@ class ReportEngine:
             "",
         ]
 
-        # Identify cloud providers
+        # Identify cloud providers from POSITIVE evidence only (F-B4). The
+        # recon tools write a cloud_intel entry even when they find nothing,
+        # so keying on entry existence would falsely "detect" AWS/GCP/M365.
         providers = set()
-        for key in cloud_intel:
-            if "aws" in key.lower():
+        for key, data in cloud_intel.items():
+            if not _provider_has_evidence(data):
+                continue
+            kl = key.lower()
+            if "aws" in kl:
                 providers.add("AWS")
-            if "azure" in key.lower() or "m365" in key.lower():
+            if "azure" in kl or "m365" in kl:
                 providers.add("Microsoft 365 / Azure")
-            if "gcp" in key.lower():
+            if "gcp" in kl:
                 providers.add("Google Cloud")
 
         for provider in sorted(providers):
             lines.append(f"- **{provider}**")
         if not providers:
-            lines.append("- No cloud providers detected")
+            lines.append("- No third-party cloud providers confirmed from collected data")
         lines.append("")
 
         # CDN and hosting detection
@@ -1065,8 +1226,11 @@ class ReportEngine:
             lines.append(f"- {host}")
         lines.append("")
 
-        # GitHub/Code supply chain
-        code_sources = list(code_intel.keys())
+        # GitHub/Code supply chain. List a source only when it actually
+        # surfaced something (F-B4): the run's github_recon / gitleaks /
+        # trufflehog all returned zero, yet were listed as "code sources"
+        # purely because they were queried.
+        code_sources = [k for k, v in code_intel.items() if _code_source_has_evidence(v)]
         if code_sources:
             lines.append("## Code & Package Sources")
             lines.append("")
@@ -1413,6 +1577,28 @@ class ReportEngine:
 
     def _harvested_credentials(self, state: dict[str, Any]) -> str:
         creds = state.get("harvested_credentials", [])
+
+        # F-B8: no false-alarm "contains real credentials" banner on an empty
+        # file. The header only fires when there is actually something secret
+        # to protect; an empty run says so plainly.
+        if not creds:
+            lines = [
+                "# Harvested Credentials",
+                "",
+                f"**Campaign:** {self.campaign_id}",
+                f"**Generated:** {datetime.utcnow().isoformat()}",
+                "",
+                "No credentials were harvested. File retained for completeness.",
+                "",
+            ]
+            md_path = self.output_dir / "harvested_credentials.md"
+            md_path.write_text("\n".join(lines), encoding="utf-8")
+            json_path = self.output_dir / "harvested_credentials.json"
+            json_path.write_text(
+                json.dumps({"campaign_id": self.campaign_id, "credentials": []}, indent=2, default=str),
+                encoding="utf-8",
+            )
+            return str(md_path)
 
         lines = [
             "⚠ This file contains real credentials. Treat as Secret. Rotate before sharing.",

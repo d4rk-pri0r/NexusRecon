@@ -55,8 +55,17 @@ class EmailFormatTool(OSINTTool):
 
     async def run(self, target: str, **kwargs: Any) -> ToolResult:
         emails: list[str] = kwargs.get("emails", [])
+        # F-B5: drop obviously synthetic/test addresses before inferring the
+        # naming convention. A single junk address (e.g. abcfoo@) otherwise
+        # skews the pattern distribution and the headline confidence.
+        from nexusrecon.core.identity_hygiene import filter_test_identities
+        emails, dropped = filter_test_identities(emails)
         if not emails:
-            return ToolResult(success=True, source=self.name, data={"error": "No emails to analyze"}, result_count=0)
+            return ToolResult(
+                success=True, source=self.name,
+                data={"error": "No emails to analyze", "dropped_test_identities": dropped},
+                result_count=0,
+            )
 
         patterns_found: dict[str, int] = {}
         parsed = []
@@ -101,6 +110,7 @@ class EmailFormatTool(OSINTTool):
                 "most_likely_pattern": likely_pattern,
                 "most_likely_confidence": round(likely_confidence, 3),
                 "recommendation": self._recommendation(likely_pattern, likely_confidence),
+                "dropped_test_identities": dropped,
             },
             result_count=total,
         )
