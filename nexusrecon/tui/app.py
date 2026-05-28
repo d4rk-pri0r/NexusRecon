@@ -22,7 +22,7 @@ from nexusrecon.tui.command_palette import (
     ReportsSource,
     ToolsSource,
 )
-from nexusrecon.tui.themes import all_themes, resolve_theme_name
+from nexusrecon.tui.themes import THEMES, all_themes, resolve_theme_name
 
 
 class NexusReconApp(App):
@@ -71,10 +71,9 @@ class NexusReconApp(App):
         # ones. A broken user theme file is logged + skipped — never
         # blocks launch.
         themes = all_themes()
-        # Build a name → theme list so resolve_theme_name sees the
-        # user contributions too.
-        from nexusrecon.tui.themes import THEMES as _shipped_themes
-        _shipped_themes.update(themes)
+        # Merge user contributions into the shipped THEMES registry so
+        # resolve_theme_name sees them too.
+        THEMES.update(themes)
         for theme in themes.values():
             try:
                 self.register_theme(theme)
