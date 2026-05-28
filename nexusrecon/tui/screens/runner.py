@@ -466,8 +466,17 @@ class RunnerScreen(Screen):
             ),
         )
 
+        # Bind the OPSEC stack (stealth profile / rate limiter / proxy) so
+        # the scope's stealth_profile and NEXUS_PROXY_URL actually apply on
+        # the wire. ProxyRequiredError propagates to the worker's FATAL
+        # handler when require_proxy is set without a configured proxy.
+        from nexusrecon.core.config import get_config
+        from nexusrecon.opsec.setup import build_opsec
         scope_guard = ScopeGuard(scope_model)
-        get_registry().set_campaign_context(scope_guard, campaign.cache, campaign.audit_log)
+        opsec = build_opsec(scope_model, get_config())
+        get_registry().set_campaign_context(
+            scope_guard, campaign.cache, campaign.audit_log, **opsec
+        )
 
         # Preserve a copy of the scope file inside the campaign for audit
         try:

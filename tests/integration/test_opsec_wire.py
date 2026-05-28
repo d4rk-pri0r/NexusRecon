@@ -809,3 +809,82 @@ class TestOpsecManifest:
         assert elapsed >= 0.15, (
             f"jitter not observed across {N} calls: elapsed={elapsed:.3f}s"
         )
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Production binding: build_opsec actually wires the stack into the registry
+# ──────────────────────────────────────────────────────────────────────────
+
+
+from types import SimpleNamespace  # noqa: E402
+
+from nexusrecon.opsec.setup import ProxyRequiredError, build_opsec  # noqa: E402
+from nexusrecon.tools.base import (  # noqa: E402
+    Category,
+    OSINTTool,
+    Tier,
+    ToolResult,
+)
+
+
+def _fake_scope(profile: str = "high", require_proxy: bool = False):
+    return SimpleNamespace(
+        constraints=SimpleNamespace(stealth_profile=profile, require_proxy=require_proxy)
+    )
+
+
+def _fake_config(proxy_url=None, tor_proxy=None):
+    return SimpleNamespace(proxy_url=proxy_url, tor_proxy=tor_proxy)
+
+
+class _CtxProbe(OSINTTool):
+    name = "ctx_probe"
+    tier = Tier.T0
+    category = Category.WEB
+    requires_keys = []
+    target_types = ["domain"]
+    seen: list[dict] = []
+
+    async def run(self, target, **kwargs):
+        from nexusrecon.opsec.context import proxy_kwargs
+        type(self).seen.append(proxy_kwargs())
+        return ToolResult(success=True, source=self.name, data={}, result_count=0)
+
+
+class TestProductionOpsecBinding:
+    """The CLI/TUI used to bind only scope_guard/cache/audit, leaving the
+    OPSEC stack inert in production despite passing wire tests. build_opsec
+    is the helper both now use; these pin that it produces a live stack."""
+
+    def test_build_opsec_returns_profile_rate_limiter_proxy(self):
+        from nexusrecon.opsec.rate_limiter import RateLimiter
+        opsec = build_opsec(_fake_scope("paranoid"), _fake_config(proxy_url="socks5://127.0.0.1:9050"))
+        assert opsec["stealth_profile"].name.value == "paranoid"
+        assert isinstance(opsec["rate_limiter"], RateLimiter)
+        assert opsec["proxy_manager"].available is True
+
+    def test_no_proxy_configured_means_unavailable(self):
+        opsec = build_opsec(_fake_scope("loud"), _fake_config())
+        assert opsec["proxy_manager"].available is False
+
+    def test_require_proxy_without_proxy_raises(self):
+        with pytest.raises(ProxyRequiredError):
+            build_opsec(_fake_scope("paranoid", require_proxy=True), _fake_config())
+
+    def test_require_proxy_with_proxy_ok(self):
+        opsec = build_opsec(
+            _fake_scope("paranoid", require_proxy=True),
+            _fake_config(proxy_url="http://127.0.0.1:8080"),
+        )
+        assert opsec["proxy_manager"].available is True
+
+    def test_bound_stack_applies_proxy_on_execute(self):
+        # End-to-end: the build_opsec output, when bound, makes execute()
+        # propagate the configured proxy to the tool (the production path).
+        reg = ToolRegistry()
+        reg.register(_CtxProbe)
+        _CtxProbe.seen = []
+        opsec = build_opsec(_fake_scope("loud"), _fake_config(proxy_url="http://proxy.test:3128"))
+        reg.set_campaign_context(scope_guard=None, **opsec)
+        asyncio.run(reg.execute("ctx_probe", "example.com"))
+        assert _CtxProbe.seen[-1] == {"proxy": "http://proxy.test:3128"}

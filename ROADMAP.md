@@ -371,16 +371,31 @@ are documented as deferred.
       similar) with full report directory + dispatcher-log excerpt
       checked in under `examples/sample_run/`. The agentic value
       proposition needs evidence, not marketing copy.
-- [ ] **OPSEC wire verification.** Integration tests that run the
-      tool through `mitmproxy` / a capturing proxy and assert:
-      - `paranoid` profile produces 1-thread sequential requests
-        with 3-10s jitter.
-      - `NEXUS_PROXY_URL` routes every outbound request.
-      - User-Agent values actually rotate per request (or per
-        session) as documented.
-      - TLS fingerprints don't always look like one Python `httpx`
-        version (consider `curl_cffi` or similar JA3-friendly clients
-        for any tool aimed at production red-team use).
+- [x] **OPSEC wire verification.** Two parts, both landed:
+      - *Verification* (`tests/integration/test_opsec_wire.py`, 24
+        tests via `respx` + a localhost capture stand-in for
+        mitmproxy): `execute()` applies stealth jitter in the
+        profile's declared range, awaits the per-source rate limiter,
+        injects the proxy into the tool's `httpx.AsyncClient`, rotates
+        the User-Agent across calls, and unwinds the proxy ContextVar
+        between calls. A structural test pins that every
+        `BaseHTTPTool` calls `_proxy_kwargs()` and sets a UA.
+      - *Production binding* (the real gap the tests hid): the CLI and
+        TUI bound only scope_guard/cache/audit, so the stealth profile
+        and `NEXUS_PROXY_URL` were never applied to a real campaign's
+        traffic. `nexusrecon/opsec/setup.py::build_opsec()` now
+        constructs the stealth profile (from the engagement
+        `stealth_profile`), a rate limiter from it, and a proxy manager
+        from `NEXUS_PROXY_URL` / `NEXUS_TOR_PROXY`, and both entrypoints
+        bind them via `set_campaign_context`. `require_proxy` now
+        fails loud (`ProxyRequiredError`) when no proxy is configured.
+- [ ] **JA3 / TLS-fingerprint client.** Outbound TLS still looks like
+      one Python `httpx` version to every provider. Add an optional
+      JA3-friendly client (`curl_cffi` `impersonate=`, or similar) for
+      tools aimed at production red-team use, behind a profile/config
+      flag so the default stays dependency-light. Pulled out of the
+      OPSEC wire item because it is a client-swap feature, not a
+      verification gap.
 - [ ] **Report quality smoke.** Run 10 campaigns across varied
       target shapes (small biz, M365 enterprise, AWS-native startup,
       etc.). Pin failure modes as smoke tests:

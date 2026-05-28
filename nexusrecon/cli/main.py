@@ -276,10 +276,21 @@ def run(
         console.print(f"[bold red]Campaign setup failed:[/bold red] {e}")
         raise typer.Exit(1)
 
-    # Wire scope guard and campaign services into the tool registry
+    # Wire scope guard + campaign services + the OPSEC stack into the tool
+    # registry. Binding the stealth profile / rate limiter / proxy manager
+    # is what makes the scope's stealth_profile and NEXUS_PROXY_URL actually
+    # take effect on the wire (without this they were config-time fiction).
+    from nexusrecon.opsec.setup import ProxyRequiredError, build_opsec
     from nexusrecon.tools.registry import get_registry
     scope_guard = ScopeGuard(scope_model)
-    get_registry().set_campaign_context(scope_guard, campaign.cache, campaign.audit_log)
+    try:
+        opsec = build_opsec(scope_model, get_config())
+    except ProxyRequiredError as e:
+        console.print(f"[bold red]OPSEC: {e}[/bold red]")
+        raise typer.Exit(1)
+    get_registry().set_campaign_context(
+        scope_guard, campaign.cache, campaign.audit_log, **opsec
+    )
 
     if dry_run:
         console.print("[bold green]Dry run — scope is valid, campaign ready.[/bold green]")
