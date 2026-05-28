@@ -308,3 +308,51 @@ class TestRecommendationHygiene:
         u = unavailable_tools_from_preflight(None)
         steps = ["Query DeHashed"]
         assert annotate_next_steps(steps, u) == steps
+
+
+# ── F-B6: compute scores once (deterministic Likelihood x Impact) ────────────
+
+
+class TestDeterministicScoring:
+    def test_impact_from_severity(self):
+        from nexusrecon.core.scoring import impact_score
+        assert impact_score({"severity": "critical"}) == 10
+        assert impact_score({"severity": "info"}) == 1
+        assert impact_score({"severity": "medium"}) == 5
+
+    def test_likelihood_scales_with_confidence_and_exploit(self):
+        from nexusrecon.core.scoring import likelihood_score
+        low = likelihood_score({"confidence": 0.2})
+        high = likelihood_score({"confidence": 0.95})
+        assert 1 <= low < high <= 10
+        # KEV / weaponisation boosts likelihood.
+        boosted = likelihood_score({"confidence": 0.95, "in_kev": True})
+        assert boosted >= high
+        assert boosted <= 10
+
+    def test_likelihood_impact_tuple(self):
+        from nexusrecon.core.scoring import likelihood_impact
+        lk, im = likelihood_impact({"severity": "high", "confidence": 0.9})
+        assert 1 <= lk <= 10 and im == 8
+
+    def test_works_on_ranked_finding_object(self):
+        from nexusrecon.core.scoring import RankedFinding, likelihood_impact
+        rf = RankedFinding(title="x", category="cve", score=0.5, severity="critical",
+                           confidence=1.0, description="", in_kev=True)
+        lk, im = likelihood_impact(rf)
+        assert im == 10 and lk == 10  # conf 1.0 -> base 8, +2 KEV, capped at 10
+        # to_dict surfaces the computed dimensions for the report layer.
+        d = rf.to_dict()
+        assert d["impact"] == 10 and d["likelihood"] == 10
+
+    def test_attack_surface_renders_numbers_not_dashes(self, tmp_path):
+        from nexusrecon.reports.engine import ReportEngine
+        eng = ReportEngine("nr-test", "eng", "sha256:0", tmp_path)
+        state = {"findings": [
+            {"title": "Public bucket", "severity": "high", "confidence": 0.9,
+             "mitre_techniques": ["T1530"]},
+        ]}
+        body = open(eng._attack_surface(state)).read()
+        # Impact for high = 8; the row must carry real numbers, not "- | -".
+        assert "| 8 |" in body
+        assert "| - | - |" not in body

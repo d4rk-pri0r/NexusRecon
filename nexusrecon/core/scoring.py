@@ -24,6 +24,42 @@ COVERAGE_CONFIDENCE_FLOOR = 0.30
 #: Severity ordering for dedup merges (higher wins).
 _SEVERITY_RANK = {"critical": 4, "high": 3, "medium": 2, "low": 1, "info": 0}
 
+#: Severity -> impact (1-10), computed once here so every report renders the
+#: same number (Wave F-B6). Previously attack_surface.md left Likelihood/Impact
+#: blank while the LLM exec-summary invented its own integers.
+_SEVERITY_IMPACT = {"critical": 10, "high": 8, "medium": 5, "low": 3, "info": 1}
+
+
+def _finding_get(finding: Any, key: str, default: Any = None) -> Any:
+    """Read a field from either a RankedFinding or a plain finding dict."""
+    if isinstance(finding, dict):
+        return finding.get(key, default)
+    return getattr(finding, key, default)
+
+
+def impact_score(finding: Any) -> int:
+    """Deterministic impact (1-10) from severity. Single source of truth."""
+    return _SEVERITY_IMPACT.get(_finding_get(finding, "severity", "info"), 1)
+
+
+def likelihood_score(finding: Any) -> int:
+    """Deterministic likelihood (1-10): confidence scaled, boosted by
+    weaponisation signals (KEV / Metasploit / public exploit / nuclei
+    template). Computed once so reports agree."""
+    conf = float(_finding_get(finding, "confidence", 0.5) or 0.0)
+    base = max(1, round(conf * 8))
+    if _finding_get(finding, "in_kev") or _finding_get(finding, "has_metasploit"):
+        base += 2
+    elif _finding_get(finding, "has_exploit") or _finding_get(finding, "has_nuclei_template"):
+        base += 1
+    return max(1, min(10, base))
+
+
+def likelihood_impact(finding: Any) -> tuple[int, int]:
+    """Return ``(likelihood, impact)``, both 1-10. Use this everywhere a
+    report needs the numbers, instead of inventing them per-renderer."""
+    return likelihood_score(finding), impact_score(finding)
+
 #: Substrings (lowercased title) that mark an absence-of-evidence note rather
 #: than attack surface (Wave F-B1). Kept tight so genuine informational
 #: weaknesses (e.g. "DNSSEC Not Configured") are NOT swept into coverage.
@@ -81,6 +117,9 @@ class RankedFinding:
             "breach_sources": self.breach_sources,
             "cloud_provider": self.cloud_provider,
             "sources": self.sources,
+            # Deterministic risk dimensions, computed once (F-B6).
+            "likelihood": likelihood_score(self),
+            "impact": impact_score(self),
         }
 
 

@@ -943,6 +943,7 @@ class ReportEngine:
 
     def _attack_surface(self, state: dict[str, Any]) -> str:
         """Likelihood × impact matrix with PRE-ATT&CK mapping."""
+        from nexusrecon.core.scoring import likelihood_impact
         findings = state.get("findings", [])
 
         lines = [
@@ -956,10 +957,14 @@ class ReportEngine:
 
         for i, f in enumerate(findings, 1):
             mitre = ", ".join(f.get("mitre_techniques", [])) or "-"
+            # F-B6: compute Likelihood/Impact once in core/scoring.py and
+            # render the real numbers, instead of the old blank "- | -" that
+            # let the LLM exec-summary invent its own inconsistent integers.
+            likelihood, impact = likelihood_impact(f)
             lines.append(
                 f"| {i} | {f.get('severity', 'info').upper()} | "
                 f"{f.get('confidence', 0):.0%} | {f.get('title', '')} | "
-                f"{mitre} | - | - |"
+                f"{mitre} | {likelihood} | {impact} |"
             )
 
         path = self.output_dir / "attack_surface.md"

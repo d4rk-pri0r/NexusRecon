@@ -261,12 +261,17 @@ proves is not optional.
       `foster` all pass via end-to-end junk-token decomposition).
       Applied in `email_format` (before pattern inference) and the
       phishing-package pretext bundles.
-- [x] **F-B6 Strip machine scaffolding from human reports.**
-      `engine.py::strip_agent_scaffolding()` removes any
+- [x] **F-B6 Strip machine scaffolding from human reports + compute
+      scores once.** `engine.py::strip_agent_scaffolding()` removes any
       `FINDINGS_JSON:[...]` block from agent prose before it is
       rendered (executive summary, full-report analyst notes), so the
-      protocol marker never leaks into a deliverable. (Single-source
-      score rendering across reports remains a follow-up.)
+      protocol marker never leaks into a deliverable. Likelihood and
+      Impact are now computed once in
+      `core/scoring.py::likelihood_impact()` (impact from severity,
+      likelihood from confidence + weaponisation signals) and surfaced
+      via `RankedFinding.to_dict()`; `attack_surface.md` renders the
+      real numbers instead of the old blank `- | -` that let the LLM
+      exec-summary invent its own inconsistent integers.
 - [x] **F-B7 Recommendations must respect what the run already tried
       and what is available.** `unavailable_tools_from_preflight()` +
       `annotate_next_steps()` in `core/scoring.py` flag any next-step
