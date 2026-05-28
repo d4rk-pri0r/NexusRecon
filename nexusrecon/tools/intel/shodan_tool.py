@@ -17,6 +17,9 @@ class ShodanTool(BaseHTTPTool):
     tier = Tier.T0
     category = Category.INFRASTRUCTURE
     requires_keys = ["shodan_api_key"]
+    # Shodan has no usable unauthenticated tier; every query consumes a
+    # paid plan's credits. Skipped when allow_paid_apis is false (F-A2).
+    paid_api = True
     description = "Shodan host search, service enumeration, and historical data"
     target_types = ["domain", "ip"]
     dynamic_trigger_hints = ["open port found", "internet-facing service exposed", "banner found"]

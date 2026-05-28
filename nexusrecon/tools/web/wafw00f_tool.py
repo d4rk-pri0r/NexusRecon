@@ -162,9 +162,35 @@ class WafW00fTool(OSINTTool):
                     "evidence": "; ".join(evidence_parts[:3]),
                 })
 
+        # Reachability signal for the plausibility floor (F-A1): both
+        # probes swallow connection errors and fall through to an empty
+        # result, so "0 WAFs" is ambiguous without knowing whether we ever
+        # got an HTTP response. Record it so assess_result can tell a real
+        # "no WAF" from a probe that never reached the host.
+        reachable = benign_status != 0 or mal_status != 0
         return ToolResult(
             success=True,
             source=self.name,
-            data={"target": target, "wafs_detected": wafs_detected},
+            data={
+                "target": target,
+                "wafs_detected": wafs_detected,
+                "reachable": reachable,
+                "http_status": benign_status or mal_status,
+            },
             result_count=len(wafs_detected),
         )
+
+    def assess_result(self, result: ToolResult, target: str, target_type: str = "domain") -> str | None:
+        # A genuine "no WAF detected" (reachable host, zero signatures
+        # matched) is a legitimate negative ── do not flag it. Only flag
+        # the case where neither probe reached the host, because then the
+        # empty wafs_detected list reflects a failed probe, not absence of
+        # a WAF, and reporting "no WAF" would be actively misleading.
+        d = result.data or {}
+        if not d.get("reachable"):
+            return (
+                "WAF probes could not reach the host (no HTTP response); "
+                "an empty WAF result here reflects a failed probe, not the "
+                "absence of a WAF"
+            )
+        return None

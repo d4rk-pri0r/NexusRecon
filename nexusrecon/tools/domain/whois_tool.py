@@ -49,3 +49,19 @@ class WHOISTool(OSINTTool):
             )
         except Exception as e:
             return ToolResult(success=False, source=self.name, error=str(e))
+
+    def assess_result(self, result: ToolResult, target: str, target_type: str = "domain") -> str | None:
+        # result_count is already 0 only when every WHOIS field (registrar,
+        # dates, nameservers, status) came back empty. For an in-scope
+        # domain that resolves, that is not real privacy redaction ── a
+        # privacy-protected domain still exposes registrar + nameservers.
+        # All-empty almost always means a WHOIS library/rate-limit/parse
+        # failure, so flag it instead of emitting a misleading
+        # "WHOIS Privacy / Registration Anomaly" finding.
+        if result.result_count == 0:
+            return (
+                "WHOIS returned no registrar, dates, or nameservers for the "
+                "domain; likely a WHOIS library, rate-limit, or parse failure "
+                "rather than genuine privacy redaction"
+            )
+        return None

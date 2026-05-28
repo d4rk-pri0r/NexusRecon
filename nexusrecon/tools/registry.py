@@ -248,6 +248,62 @@ class ToolRegistry:
     def available_tools(self) -> list[OSINTTool]:
         return [t for t in self._tools.values() if t.is_available()]
 
+    def availability_report(self) -> dict[str, Any]:
+        """Wave F-A3: bucket every registered tool by whether it can run
+        for the bound campaign, and *why not* when it can't.
+
+        Computed at campaign start so the operator learns up front that
+        ``theHarvester`` is not installed or that ``shodan`` is disabled
+        by policy ── instead of reverse-engineering it from a 100-line
+        audit log after a 12-minute run. Each tool lands in exactly one
+        bucket, checked in is_available() order (binary, then key) before
+        the engagement gates (policy, then tier):
+
+          - ``active``: will run.
+          - ``missing_binary``: a required CLI binary is not on PATH.
+          - ``missing_key``: a required API key/secret is unset.
+          - ``policy``: disabled by an engagement constraint
+            (allow_paid_apis / allow_breach_db_lookup off).
+          - ``over_tier``: the tool's tier exceeds the engagement max_tier.
+          - ``stubbed``: registered for discoverability but not functional.
+
+        Buckets map tool name -> short reason string. ``active`` maps to
+        an empty string. The scope guard (if bound) supplies the policy
+        and tier verdicts; without it only binary/key/stub gates apply.
+        """
+        import shutil
+
+        buckets: dict[str, dict[str, str]] = {
+            "active": {}, "missing_binary": {}, "missing_key": {},
+            "policy": {}, "over_tier": {}, "stubbed": {},
+        }
+        guard = self._scope_guard
+        for tool in self._tools.values():
+            if tool.stubbed:
+                buckets["stubbed"][tool.name] = "registered but not yet implemented"
+                continue
+            if tool.binary_required and shutil.which(tool.binary_required) is None:
+                buckets["missing_binary"][tool.name] = f"binary '{tool.binary_required}' not on PATH"
+                continue
+            missing = [k for k in tool.requires_keys if not tool.config.get_secret(k)]
+            if missing:
+                buckets["missing_key"][tool.name] = "missing key(s): " + ", ".join(k.upper() for k in missing)
+                continue
+            if guard is not None and not guard.is_tool_allowed_by_constraints(
+                tool.category.value, getattr(tool, "paid_api", False)
+            ):
+                reason = ("breach-DB lookups disabled" if tool.category.value == "breach"
+                          else "paid APIs disabled")
+                buckets["policy"][tool.name] = reason
+                continue
+            if guard is not None and not guard.is_tier_allowed(tool.tier.value):
+                buckets["over_tier"][tool.name] = f"{tool.tier.value} exceeds engagement max tier"
+                continue
+            buckets["active"][tool.name] = ""
+
+        counts = {name: len(items) for name, items in buckets.items()}
+        return {"counts": counts, "buckets": buckets}
+
     async def execute(
         self,
         tool_name: str,
@@ -261,11 +317,36 @@ class ToolRegistry:
         Replaces calling tool.run() directly.  All phase nodes should call
         this method so that scope, caching, and auditing are always applied.
         """
-        from nexusrecon.core.scope import OutOfScopeError, TierViolationError
+        from nexusrecon.core.scope import (
+            ConstraintViolationError,
+            OutOfScopeError,
+            TierViolationError,
+        )
 
         tool = self.get(tool_name)
         if tool is None:
             return ToolResult(success=False, source=tool_name, error=f"Tool '{tool_name}' not registered")
+
+        # ── Engagement-constraint gate (Wave F-A2) ──────────────────────────────
+        # Policy check runs BEFORE the availability check so the operator
+        # learns a tool was disabled by the engagement (paid APIs off,
+        # breach-DB lookups off) rather than only "prerequisites not met"
+        # when a key also happens to be missing. Distinct from scope/tier:
+        # the target is in bounds and the tier is permitted; the engagement
+        # simply turned the capability off. Skipped, not blocked.
+        if self._scope_guard is not None:
+            try:
+                self._scope_guard.check_constraints(
+                    tool_name, tool.category.value, getattr(tool, "paid_api", False)
+                )
+            except ConstraintViolationError as exc:
+                if self._audit_log:
+                    self._audit_log.log_policy_skip(tool_name, target, exc.reason)
+                log.info(
+                    "Policy skip - tool disabled by engagement constraint",
+                    tool=tool_name, constraint=exc.constraint,
+                )
+                return ToolResult(success=False, source=tool_name, error=str(exc))
 
         if not tool.is_available():
             return ToolResult(success=False, source=tool_name, error=f"Tool '{tool_name}' prerequisites not met")
@@ -341,6 +422,27 @@ class ToolRegistry:
         runtime_ms = int((time.monotonic() - t0) * 1000)
         result.runtime_ms = runtime_ms
 
+        # ── Result-plausibility floor (Wave F-A1) ───────────────────────────────
+        # Distinguish "ran and genuinely found nothing" from "ran but
+        # silently failed to do its job". Only successful, non-cached
+        # results are assessed; genuine errors already carry their reason.
+        # The per-tool assess_result() inspects the result and returns a
+        # reason when emptiness is implausible for this target; we record
+        # it on the result so reports and the run-health summary never
+        # present a silent failure as a clean negative.
+        if result.success and not result.cached and not result.degraded:
+            try:
+                degraded_reason = tool.assess_result(result, target, target_type)
+            except Exception:
+                degraded_reason = None
+            if degraded_reason:
+                result.degraded = True
+                result.degraded_reason = degraded_reason
+                log.warning(
+                    "Tool result degraded - implausibly empty, likely a silent failure",
+                    tool=tool_name, target=target, reason=degraded_reason,
+                )
+
         # TUI-8: record into in-memory invocation history so the
         # Tools detail pane can show "recent invocations / avg
         # duration / last error" without re-reading the audit log.
@@ -363,10 +465,17 @@ class ToolRegistry:
                 raw = json.dumps(result.data, default=str)
                 response_hash = "sha256:" + hashlib.sha256(raw.encode()).hexdigest()
                 self._audit_log.log_tool_result(
-                    tool_name, target, response_hash, runtime_ms, result.result_count
+                    tool_name, target, response_hash, runtime_ms, result.result_count,
+                    degraded=result.degraded, degraded_reason=result.degraded_reason,
                 )
             else:
-                self._audit_log.log_tool_error(tool_name, target, result.error or "(no error message provided by tool)")
+                # Never drop the reason (Wave F-A4): a tool that returns
+                # success=False with no error string still gets a concrete,
+                # greppable message instead of a silent blank in the trail.
+                self._audit_log.log_tool_error(
+                    tool_name, target,
+                    result.error or f"{tool_name} reported failure without an error message",
+                )
 
         return result
 

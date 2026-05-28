@@ -42,6 +42,23 @@ class TierViolationError(Exception):
         )
 
 
+class ConstraintViolationError(Exception):
+    """Raised when a tool is disallowed by an engagement constraint.
+
+    Distinct from scope/tier violations: the target is in scope and the
+    tier is permitted, but the engagement turned off a capability the
+    tool depends on (paid APIs, breach-DB lookups). The tool is skipped,
+    not blocked for legal reasons ── audited as ``policy_skipped`` rather
+    than ``scope_violation``.
+    """
+
+    def __init__(self, tool_name: str, constraint: str, reason: str) -> None:
+        self.tool_name = tool_name
+        self.constraint = constraint
+        self.reason = reason
+        super().__init__(f"POLICY SKIP: {tool_name} - {reason}")
+
+
 class ScopeGuard:
     """
     Validates tool targets and tier levels against the engagement scope.
@@ -211,6 +228,52 @@ class ScopeGuard:
             self.check_tier(tool_tier, "check")
             return True
         except TierViolationError:
+            return False
+
+    # ── Engagement-constraint checks (Wave F-A2) ──────────────────────────────
+
+    def check_constraints(
+        self,
+        tool_name: str,
+        category: str,
+        paid_api: bool,
+    ) -> None:
+        """Raise ConstraintViolationError if an engagement constraint
+        forbids this tool, independent of scope and tier.
+
+        Two gates today, both driven by ``scope.constraints``:
+
+        - ``allow_breach_db_lookup: false`` blocks any breach-category
+          tool (DeHashed, LeakCheck, Hudson Rock, etc.). The operator
+          said no breach-DB lookups; that includes free-tier ones.
+        - ``allow_paid_apis: false`` blocks tools flagged ``paid_api``
+          (Shodan and friends) even when a key is configured globally.
+
+        Primitives, not the tool object, keep this legal-critical module
+        free of any dependency on ``tools.base``.
+        """
+        c = self.scope.constraints
+        if category == "breach" and not c.allow_breach_db_lookup:
+            raise ConstraintViolationError(
+                tool_name,
+                "allow_breach_db_lookup",
+                "breach-database lookups are disabled for this engagement "
+                "(allow_breach_db_lookup: false)",
+            )
+        if paid_api and not c.allow_paid_apis:
+            raise ConstraintViolationError(
+                tool_name,
+                "allow_paid_apis",
+                "paid-API tools are disabled for this engagement "
+                "(allow_paid_apis: false)",
+            )
+
+    def is_tool_allowed_by_constraints(self, category: str, paid_api: bool) -> bool:
+        """Non-raising version of check_constraints (for preflight surfaces)."""
+        try:
+            self.check_constraints("check", category, paid_api)
+            return True
+        except ConstraintViolationError:
             return False
 
     # ── Cloud tenant checks ───────────────────────────────────────────────────

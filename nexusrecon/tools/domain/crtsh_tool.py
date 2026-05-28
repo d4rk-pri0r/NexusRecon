@@ -5,7 +5,13 @@ from typing import Any
 
 import httpx
 
-from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
+from nexusrecon.tools.base import (
+    Category,
+    OSINTTool,
+    Tier,
+    ToolResult,
+    http_get_with_retry,
+)
 from nexusrecon.tools.registry import register_tool
 
 
@@ -24,7 +30,9 @@ class CRTShTool(OSINTTool):
             # Deduplicate: use identity column which is a hash of the certificate
             url = f"https://crt.sh/?q=%.{target}&output=json&deduplicate=y"
             async with httpx.AsyncClient(timeout=15.0, http2=True) as client:
-                resp = await client.get(url)
+                # crt.sh flaps with 502s; retry transient failures so one
+                # upstream hiccup doesn't silently gut subdomain enumeration.
+                resp = await http_get_with_retry(client, url)
 
                 if resp.status_code == 200:
                     try:

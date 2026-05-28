@@ -75,6 +75,216 @@ What's still beta-status about it:
 
 ---
 
+## Next wave (Wave F): trustworthy signal + failure honesty
+
+This wave is the current top priority. It does not add tools or
+phases; it makes the existing pipeline tell the truth about what it
+did and surface only what is worth a pentester's attention.
+
+**Scope note:** Wave F is correctness baseline work, the bar for the
+tool not being broken, not a GA gate. Finishing it does not mean
+`1.0` / GA. The "Path to `1.0.0`" section below is still the GA
+checklist and sits on top of this wave, not in place of it.
+
+**Evidence base: the 2026-05-27 `ginandjuice.shop` run**
+(`nr-20260527-194140-04f5cc30`). On paper: 9 phases completed, 36
+findings, 8 medium, a confident multi-section executive summary.
+Reading the audit log against the reports tells a different story:
+
+- 12 `tool_error` events; ~23 tools returned `success=True` with
+  `result_count=0`; `entities_count=0` for every phase; `$0.00`
+  LLM cost reported throughout.
+- Several zero-result "successes" are silent failures, not real
+  negatives: `nuclei` ran 140s and found nothing on a deliberately
+  vulnerable shop; `sslyze` returned 0 against a live HTTPS host;
+  `wafw00f` reported no WAF on a CDN-fronted site; `whois` returned
+  0 for a registered domain and became a "WHOIS Privacy / Anomaly"
+  finding.
+- `shodan` and `dehashed` were dispatched and errored even though
+  the scope set `allow_paid_apis: false` and
+  `allow_breach_db_lookup: false`. `theHarvester` errored twice
+  (binary not installed) with no preflight warning.
+- Of the 36 findings, roughly 4 are genuinely actionable. The rest
+  are absence-of-data notes, conf-0.2 speculation, and the same few
+  facts counted two or three times.
+
+The throughline: today the framework cannot distinguish "looked and
+found nothing" from "the tool failed to do its job," and it renders
+both, plus low-confidence guesses and duplicate facts, as ranked
+findings. This wave closes that gap. It also finally lands the
+unchecked "Report quality smoke" beta blocker below, which this run
+proves is not optional.
+
+### F-A: failure detection and run honesty
+
+- [x] **F-A1 Result-plausibility floor per tool.** Added an
+      `assess_result()` hook to `nexusrecon/tools/base.py::OSINTTool`
+      plus `degraded` / `degraded_reason` on `ToolResult`. The
+      registry calls it after every successful, non-cached run and
+      records the verdict in the audit log's `tool_result` event. A
+      zero-result run that should not be zero is now flagged
+      `degraded` instead of passing as a clean `success`. Seed
+      checks shipped: `sslyze` (no protocols and no cert = handshake
+      failure, keyed on data not the vuln count), `whois` (no fields
+      at all for a resolving domain), `wafw00f` (now records a
+      `reachable` signal; an unreachable probe is degraded, a real
+      "no WAF" is not), `nuclei` (now captures the previously
+      discarded subprocess exit code: non-zero with no findings is a
+      hard failure, and stderr failure markers flag degraded; a clean
+      empty scan is left as a valid negative). Tests in
+      `tests/unit/test_wave_f_failure_detection.py`.
+- [x] **F-A2 Gate dispatch on engagement constraints, not just
+      keys/binaries.** Added `ScopeGuard.check_constraints()` in
+      `nexusrecon/core/scope.py` and a gate in the tool registry's
+      `execute()` chokepoint (`nexusrecon/tools/registry.py`), which
+      every phase already routes through. Breach-category tools are
+      skipped when `allow_breach_db_lookup: false`; tools flagged
+      `paid_api` are skipped when `allow_paid_apis: false`. Skips are
+      audited as `policy_skipped` (new event) before invocation, so
+      `shodan` (now `paid_api = True`) and `dehashed` (breach
+      category) no longer fire and 403/404 in a constraints-off
+      engagement. `max_tier` was already enforced via `check_tier`.
+      The paid-tool flag is deliberately conservative (only tools
+      with no usable free tier) so a paid-off engagement never
+      silently loses free recon; widening the `paid_api` marking
+      across the other metered APIs is a follow-up. Tests in
+      `tests/unit/test_wave_f_failure_detection.py`.
+- [x] **F-A3 Preflight availability report.** `ToolRegistry`
+      `availability_report()` buckets every tool into active /
+      missing_binary / missing_key / policy / over_tier / stubbed
+      (each with a reason). `run_campaign()` emits it as a `preflight`
+      event, audit-logs it (`preflight_summary`), and stashes it in
+      `state["preflight"]` before the first phase, so the operator
+      sees `theHarvester` is uninstalled and `shodan` is policy-off up
+      front. TUI/CLI rendering of the event can follow; the data and
+      audit record land now. Tests in
+      `tests/unit/test_wave_f_failure_detection.py`.
+- [x] **F-A4 Retry + distinguish transient upstream failures.**
+      Added `http_get_with_retry()` in `nexusrecon/tools/base.py`:
+      bounded exponential backoff on 5xx (502/503/504) and on
+      timeout/transport errors, returning the last response on
+      exhaustion so the failure is still classified and reported (the
+      retry never hides it). 429 and 4xx are deliberately not retried.
+      Adopted in `crtsh` and `certstream_recent`, the load-bearing
+      passive sources that 502'd in the run. The registry now logs a
+      concrete message when a tool returns failure with no error
+      string, so nothing reaches the trail as a silent blank. When a
+      load-bearing source still fails, F-A5 flags its capability as
+      degraded (the ginandjuice replay shows `certificate` degraded
+      from the crt.sh 502s). Tests in
+      `tests/unit/test_wave_f_failure_detection.py`.
+- [x] **F-A5 Run-level health summary.** `nexusrecon/core/run_health.py`
+      reads the audit log back into a `RunHealth`: productive vs.
+      empty-ok vs. degraded vs. errored vs. policy-skipped counts,
+      plus `degraded_capabilities` (a category attempted but with no
+      usable data, distinguishing real failure from a clean empty)
+      and a `zero_entities` flag. `_build_caveats` emits blunt
+      warnings: active-scanning-unverified, zero-entities-despite-
+      successes, error/degraded/policy counts. `run_campaign()` writes
+      `run_health.md`, stashes `state["run_health"]`, and folds it
+      into the `campaign_complete` event. Validated against the real
+      ginandjuice.shop log (6 productive / 23 empty / 12 errors / zero
+      entities / breach+certificate degraded). Folding the block into
+      the master_report body is a small follow-up (the report engine
+      currently runs inside the phase loop). Tests in
+      `tests/unit/test_wave_f_failure_detection.py`.
+- [ ] **F-A6 Make cost/telemetry trustworthy.** Every phase reported
+      `$0.00`, so we cannot tell whether the analyst LLM actually ran
+      or silently fell back to the `mock_llm` canned-findings path in
+      `agent_executor.py`. Wire real token accounting through
+      `nexusrecon/core/cost_tracker.py`, and have the report state
+      explicitly whether findings came from a live model or the
+      deterministic fallback. Budget enforcement is meaningless while
+      cost reads zero.
+- [ ] **F-A7 Reconcile the pre-flight simulation with reality.** The
+      simulator predicted ~98 new nodes across phases; the run
+      produced zero entities, and its confidence was always "low".
+      Either calibrate `expected_new_nodes` against actual yield or
+      demote it from a gating signal to an explicit guess. A
+      predictor that is off by ~100 and never notices is worse than
+      none.
+
+### F-B: reporting value and noise reduction
+
+- [ ] **F-B1 Findings vs. non-findings split.** Roughly 10 of the 36
+      were "we looked and found nothing" ("No MX Records", "No Code
+      or Secret Leakage", "Clean Reputation", "No Sensitive Data in
+      Paste Sites", "Limited Email Intelligence", etc.). Move these
+      out of the ranked findings list into a separate "Coverage /
+      what we checked" appendix in `nexusrecon/reports/engine.py`.
+      A pentester opening top_threads should see attack surface, not
+      a catalogue of dead ends. Crucially, route F-A1 `DEGRADED`
+      results here as "not assessed (tool failed)", never as a clean
+      negative.
+- [ ] **F-B2 Cross-phase finding dedup/merge.** The same fact was
+      emitted up to three times (SPF/DMARC x3, email naming x3, test
+      subdomain x3, dual A-records x2) because each phase re-derives
+      findings from the graph with no merge step. Add canonical-key
+      dedup in `nexusrecon/core/scoring.py` (merge by
+      title+affected_asset+category, keep highest confidence, union
+      the sources). This is the unchecked "findings deduplicated
+      across overlapping tools" beta blocker.
+- [ ] **F-B3 Confidence floor for findings; speculation is not
+      attack surface.** Six conf-0.2 "[POSSIBLE] ... Unverified"
+      cloud entries were minted from `aws_recon` / `gcp_recon` runs
+      that returned zero. Drop sub-threshold items below the findings
+      bar (footnote them under coverage), and stop generating
+      "POSSIBLE infrastructure" from a probe that found nothing. The
+      one real cloud signal (azure_m365_recon, Managed federation)
+      should not sit at the same tier as the noise.
+- [ ] **F-B4 Reports must derive presence from results, not from the
+      fact a tool ran.** `vendor_supply_chain` lists AWS / GCP /
+      M365 as "detected" and lists `github_recon` / `gitleaks` /
+      `trufflehog` as "code sources" purely because those tools were
+      invoked, all returned zero. `cloud_posture` renders empty
+      "unknown / 0" subsections; `CDN: None detected` is actually a
+      `wafw00f` failure. Fix the `engine.py` renderers to require a
+      positive result before asserting presence, and to omit empty
+      subsections.
+- [ ] **F-B5 Input hygiene on discovered identities.** A junk probe
+      address (`abcfoo@ginandjuice.shop`) propagated into the "100%
+      confidence flast naming convention" headline finding, got its
+      own phishing pretext bundle, and made it into the exec-summary
+      prose. Filter obviously synthetic/test identities before they
+      feed pattern analysis, pretext bundles, or findings.
+- [ ] **F-B6 Strip machine scaffolding from human reports + compute
+      scores once.** `executive_summary.md` contains a literal
+      `FINDINGS_JSON:[{...}]` blob (the `agent_executor` protocol
+      marker dumped verbatim) and invents Likelihood x Impact
+      integers that are blank in `attack_surface.md`. The reporter
+      (`nexusrecon/agents/master_reporter.py` /
+      `reports/executive_summary.py`) must consume parsed findings,
+      never raw agent output, and risk scores must be computed once
+      in `core/scoring.py` and rendered identically everywhere. Folds
+      into the unchecked "no LLM artifacts in prose" smoke check.
+- [ ] **F-B7 Recommendations must respect what the run already tried
+      and what is available.** Next-steps told the operator to "query
+      DeHashed immediately" (404'd x3 here), "use theHarvester" (not
+      installed), "run amass brute-force" (already ran 60s -> 0), and
+      "run nuclei" (already ran 140s -> 0). Generate next-steps from
+      run state + tool availability, not boilerplate. Recommending
+      tools that just failed or are disabled is exactly the
+      pentester busywork this project exists to remove.
+- [ ] **F-B8 Suppress or soften empty deliverables.** `harvested_
+      credentials.md` opens with "This file contains real
+      credentials. Treat as Secret." then reports "Total: 0".
+      Empty deliverables should either be omitted from the report
+      index or clearly state "nothing found, retained for
+      completeness", with no false-alarm header.
+
+### F-C: lock it in
+
+- [ ] **F-C1 Adopt ginandjuice.shop as a signal-quality regression
+      fixture.** Re-run after F-A/F-B and assert against the audit
+      log + reports: no `success=True` on a known-degraded tool, no
+      duplicate findings, no `FINDINGS_JSON` substring in any `.md`,
+      no presence claim sourced from a zero-result tool, and a
+      health summary that names the degraded capabilities. This is
+      the concrete version of the "Report quality smoke" beta blocker
+      and the "killer demo" example run.
+
+---
+
 ## Path to `1.0.0`: GA launch
 
 The remaining work between today and `1.0.0` is mostly polish +

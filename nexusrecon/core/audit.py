@@ -149,9 +149,18 @@ class AuditLog:
         runtime_ms: int,
         result_count: int,
         cached: bool = False,
+        degraded: bool = False,
+        degraded_reason: str | None = None,
     ) -> str:
-        """Log the result of a tool invocation."""
-        return self._append_raw({
+        """Log the result of a tool invocation.
+
+        ``degraded`` (Wave F-A1) marks a call that completed but produced
+        an implausibly empty result ── a silent failure, not a clean
+        negative. ``success`` stays True; the run-health summary reads
+        ``degraded`` to avoid reporting "found nothing" when the tool
+        never actually did its job.
+        """
+        entry: dict[str, Any] = {
             "event_type": "tool_result",
             "success": True,
             "tool_name": tool_name,
@@ -160,7 +169,11 @@ class AuditLog:
             "runtime_ms": runtime_ms,
             "result_count": result_count,
             "cached": cached,
-        })
+            "degraded": degraded,
+        }
+        if degraded and degraded_reason:
+            entry["degraded_reason"] = degraded_reason
+        return self._append_raw(entry)
 
     def log_tool_error(self, tool_name: str, target: str, error: str) -> str:
         """Log a tool error."""
@@ -170,6 +183,35 @@ class AuditLog:
             "tool_name": tool_name,
             "target": target,
             "error": error,
+        })
+
+    def log_policy_skip(self, tool_name: str, target: str, reason: str) -> str:
+        """Log a tool skipped by an engagement constraint (Wave F-A2).
+
+        Distinct from ``tool_error`` (the tool tried and failed) and
+        ``scope_violation`` (the target was out of bounds): the tool was
+        never invoked because a constraint (paid APIs off, breach-DB
+        lookups off) forbade it. Surfaces in the run-health summary so the
+        operator sees *why* a capability was absent.
+        """
+        return self._append_raw({
+            "event_type": "policy_skipped",
+            "tool_name": tool_name,
+            "target": target,
+            "reason": reason,
+        })
+
+    def log_preflight(self, counts: dict[str, int], buckets: dict[str, dict[str, str]]) -> str:
+        """Log the tool-availability preflight (Wave F-A3).
+
+        Records which tools are active vs. skipped (and why) before the
+        first phase runs, so the audit trail shows the operator knew the
+        run's capability surface up front.
+        """
+        return self._append_raw({
+            "event_type": "preflight_summary",
+            "counts": counts,
+            "buckets": buckets,
         })
 
     def log_scope_violation(self, target: str, reason: str, tool_name: str) -> str:

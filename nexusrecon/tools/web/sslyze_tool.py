@@ -155,3 +155,19 @@ class SSLyzeTool(OSINTTool):
             data={"target": target, **result},
             result_count=vuln_count,
         )
+
+    def assess_result(self, result: ToolResult, target: str, target_type: str = "domain") -> str | None:
+        # result_count counts vulnerabilities, so 0 is the *expected*
+        # output for a well-configured host (grade A) ── never key the
+        # degraded check on it. The real failure signal is the absence of
+        # any TLS data at all: a live HTTPS host always yields supported
+        # protocols and a certificate, so an empty scan means the handshake
+        # or connection failed, not that the host has no TLS.
+        d = result.data or {}
+        if not d.get("supported_protocols") and not d.get("cert_chain"):
+            return (
+                "TLS scan returned no protocols and no certificate for an "
+                "HTTPS host; the handshake or connection likely failed "
+                "rather than the host having a clean TLS posture"
+            )
+        return None

@@ -14,6 +14,8 @@ tier limits, caching, rate limiting, and audit logging.
 from __future__ import annotations
 
 import abc
+import asyncio
+import random
 import subprocess
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -76,6 +78,17 @@ class ToolResult:
     result_count: int = 0
     tier: str = "T0"
     metadata: dict[str, Any] = field(default_factory=dict)
+    #: Wave F-A1: the tool ran without raising, but its output is
+    #: implausibly empty for this target ── i.e. a silent failure
+    #: masquerading as a clean negative (sslyze returning no TLS data
+    #: on an HTTPS host, whois returning no fields for a resolving
+    #: domain, nuclei exiting non-zero, a WAF probe that never reached
+    #: the host). ``success`` stays True (the call completed); consumers
+    #: and the run-health summary read ``degraded`` to avoid reporting
+    #: "found nothing" when the truth is "did not actually assess".
+    #: Set centrally by the registry from :meth:`OSINTTool.assess_result`.
+    degraded: bool = False
+    degraded_reason: str | None = None
 
 
 class OSINTTool(abc.ABC):
@@ -114,6 +127,15 @@ class OSINTTool(abc.ABC):
     # it with a ``[STUB]`` prefix. Set to True on tools whose ``run()``
     # is a placeholder; clear when a real implementation lands.
     stubbed: bool = False
+    # Wave F-A2: True when running this tool necessarily consumes a paid
+    # / metered API (Shodan, Censys, paid breach DBs, etc.). The registry
+    # skips paid tools as ``policy_skipped`` when the engagement sets
+    # ``allow_paid_apis: false`` ── even if a key is configured globally.
+    # Breach databases are gated separately via ``category == BREACH`` and
+    # ``allow_breach_db_lookup``; a paid breach DB sets BOTH. Keep this
+    # conservative: only mark tools with no usable free/unauthenticated
+    # tier, so a paid-APIs-off engagement never silently loses free recon.
+    paid_api: bool = False
 
     def __init__(self) -> None:
         self.config = get_config()
@@ -142,6 +164,32 @@ class OSINTTool(abc.ABC):
             import shutil
             return shutil.which(self.binary_required) is not None
         return True
+
+    def assess_result(
+        self,
+        result: "ToolResult",
+        target: str,
+        target_type: str = "domain",
+    ) -> str | None:
+        """Wave F-A1: judge whether a *successful* result is plausible.
+
+        Called by the registry after ``run()`` returns ``success=True``.
+        Return a short reason string when the result is implausibly empty
+        for this target ── i.e. the tool almost certainly failed to do its
+        job rather than genuinely finding nothing (a TLS scan with no cert,
+        a WHOIS with no fields for a live domain, a scanner that exited with
+        an error). The registry sets ``result.degraded`` + ``degraded_reason``
+        from the return value. Return ``None`` (the default) to express no
+        opinion ── most tools, and any tool whose emptiness is a legitimate
+        negative, should leave this unimplemented.
+
+        Keep overrides conservative: a false ``degraded`` is noise, so only
+        flag emptiness that a healthy run could not produce. Inspect
+        ``result.data`` rather than ``result_count`` where the count means
+        something other than "did the tool work" (e.g. sslyze counts
+        vulnerabilities, not scan success).
+        """
+        return None
 
     def run_subprocess(
         self,
@@ -285,3 +333,51 @@ class BaseHTTPTool(OSINTTool):
 
 # Convenience for type hints
 T = TypeVar("T", bound=OSINTTool)
+
+
+# ── Transient-failure retry (Wave F-A4) ──────────────────────────────────────
+
+#: HTTP statuses that are transient server-side failures worth retrying.
+#: Deliberately excludes 429 (rate limit ── stealth profiles back off via the
+#: rate limiter; auto-retrying would fight that) and all 4xx (deterministic).
+TRANSIENT_RETRY_STATUSES: tuple[int, ...] = (502, 503, 504)
+
+
+async def http_get_with_retry(
+    client: httpx.AsyncClient,
+    url: str,
+    *,
+    retries: int = 2,
+    backoff_base: float = 0.5,
+    retry_statuses: tuple[int, ...] = TRANSIENT_RETRY_STATUSES,
+    **kwargs: Any,
+) -> httpx.Response:
+    """GET with bounded exponential backoff on transient failures.
+
+    Retries on the configured 5xx statuses and on connect/read timeouts and
+    transport errors, up to ``retries`` extra attempts (so ``retries=2`` means
+    three tries total). Backoff is ``backoff_base * 2**attempt`` plus a little
+    jitter. Load-bearing passive sources (crt.sh, certstream) flap with 502s;
+    a single retry usually clears them, and without it one upstream hiccup
+    silently guts subdomain enumeration for the whole campaign.
+
+    On exhaustion this returns the last response (e.g. the final 502) so the
+    caller still classifies and reports it ── the retry never hides the
+    failure, it just gives the upstream a chance to recover first. Timeouts /
+    transport errors are re-raised after the last attempt so the caller's
+    existing ``except`` path records the reason.
+    """
+    resp: httpx.Response | None = None
+    for attempt in range(retries + 1):
+        try:
+            resp = await client.get(url, **kwargs)
+        except (httpx.TimeoutException, httpx.TransportError):
+            if attempt < retries:
+                await asyncio.sleep(backoff_base * (2 ** attempt) + random.uniform(0, 0.25))
+                continue
+            raise
+        if resp.status_code in retry_statuses and attempt < retries:
+            await asyncio.sleep(backoff_base * (2 ** attempt) + random.uniform(0, 0.25))
+            continue
+        return resp
+    return resp  # exhausted retries on a transient status; hand back the last

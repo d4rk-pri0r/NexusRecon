@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 # (phase_id, display_name, tier_floor)
@@ -91,6 +92,21 @@ async def run_campaign(
                 # Never let a misbehaving listener break the campaign.
                 pass
 
+    # ── Preflight tool-availability report (Wave F-A3) ──────────────────────
+    # Surface the capability surface BEFORE the first phase: which tools
+    # will run, and which are skipped for a missing binary, a missing key,
+    # or an engagement policy. The operator learns up front rather than
+    # grepping the audit log after the run.
+    try:
+        from nexusrecon.tools.registry import get_registry
+        preflight = get_registry().availability_report()
+        if getattr(campaign, "audit_log", None):
+            campaign.audit_log.log_preflight(preflight["counts"], preflight["buckets"])
+        _emit({"type": "preflight", **preflight})
+        state["preflight"] = preflight
+    except Exception as pf_err:
+        state.setdefault("errors", []).append(f"preflight: {pf_err}")
+
     s = state
     for phase_id, phase_name, phase_fn in phases:
         if _PHASE_TIER_FLOOR.get(phase_id, 0) > max_tier:
@@ -167,11 +183,47 @@ async def run_campaign(
                 "error": str(e),
             })
 
+    # ── Run-level health summary (Wave F-A5) ────────────────────────────────
+    # Read the audit log back and tell the operator how the run actually
+    # went: degraded/failed tools, policy skips, degraded capabilities, and
+    # whether the graph stayed empty. Written as run_health.md, stashed in
+    # state, and folded into the campaign_complete event so a confident
+    # report is never mistaken for a complete one.
+    run_health: dict[str, Any] = {}
+    try:
+        from nexusrecon.core.run_health import (
+            read_entries,
+            render_run_health_md,
+            summarize_run_health,
+        )
+        from nexusrecon.tools.registry import get_registry
+
+        audit = getattr(campaign, "audit_log", None)
+        if audit is not None and getattr(audit, "log_path", None):
+            name_to_cat = {
+                name: tool.category.value
+                for name, tool in get_registry()._tools.items()
+            }
+            health = summarize_run_health(read_entries(audit.log_path), name_to_cat)
+            run_health = health.to_dict()
+            s["run_health"] = run_health
+            campaign_dir = getattr(campaign, "campaign_dir", None)
+            if campaign_dir is not None:
+                reports_dir = Path(campaign_dir) / "reports"
+                reports_dir.mkdir(parents=True, exist_ok=True)
+                (reports_dir / "run_health.md").write_text(
+                    render_run_health_md(health, s.get("campaign_id", "")),
+                    encoding="utf-8",
+                )
+    except Exception as hl_err:
+        s.setdefault("errors", []).append(f"run_health: {hl_err}")
+
     _emit({
         "type": "campaign_complete",
         "campaign_id": s.get("campaign_id"),
         "total_findings": len(s.get("findings", [])),
         "total_cost_usd": float(s.get("llm_cost_usd", 0.0)),
+        "run_health": run_health,
         "timestamp": datetime.utcnow().isoformat(),
     })
     return s

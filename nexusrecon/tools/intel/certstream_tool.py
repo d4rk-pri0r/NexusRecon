@@ -8,7 +8,13 @@ import httpx
 from dateutil import parser as dateutil_parser
 
 from nexusrecon.opsec.useragent import random_ua
-from nexusrecon.tools.base import Category, OSINTTool, Tier, ToolResult
+from nexusrecon.tools.base import (
+    Category,
+    OSINTTool,
+    Tier,
+    ToolResult,
+    http_get_with_retry,
+)
 from nexusrecon.tools.registry import register_tool
 
 _HEADERS = {
@@ -52,7 +58,10 @@ class CertStreamTool(OSINTTool):
 
         try:
             async with httpx.AsyncClient(headers=_HEADERS, timeout=30.0, follow_redirects=True) as client:
-                resp = await client.get(
+                # crt.sh flaps with 502s; retry transient failures before
+                # giving up on this load-bearing certificate source.
+                resp = await http_get_with_retry(
+                    client,
                     "https://crt.sh/",
                     params={"q": f"%.{target}", "output": "json"},
                 )
