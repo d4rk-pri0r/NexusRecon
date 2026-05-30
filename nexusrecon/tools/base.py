@@ -29,6 +29,33 @@ from nexusrecon.core.config import get_config
 log = structlog.get_logger(__name__)
 
 
+# ── Optional JA3 / TLS-fingerprint client (production red-team) ──────────────
+# curl_cffi is an OPTIONAL extra (``pip install nexusrecon[tls]``). Import it
+# once here so the names exist as module attributes for the make_http_client
+# factory (and so tests can monkeypatch them), while a missing extra degrades
+# to plain httpx with no error at install or runtime. Nothing below is touched
+# unless an active tls_impersonate target routes a tool through the factory.
+try:
+    from curl_cffi.curl import CurlError as _CurlError  # type: ignore[import-not-found]
+    from curl_cffi.requests import AsyncSession  # type: ignore[import-not-found]
+    from curl_cffi.requests.errors import (
+        RequestsError as _CurlRequestsError,  # type: ignore[import-not-found]  # noqa: E501
+    )
+
+    _HAS_CURL_CFFI = True
+except Exception:  # pragma: no cover - only on installs without the [tls] extra
+    AsyncSession = None  # type: ignore[assignment,misc]
+    # Empty tuples are safe in ``except`` clauses (they catch nothing); the
+    # adapter is never constructed when the extra is absent anyway.
+    _CurlRequestsError = ()  # type: ignore[assignment]
+    _CurlError = ()  # type: ignore[assignment]
+    _HAS_CURL_CFFI = False
+
+# Latched so the "asked for impersonation but curl_cffi is missing" warning
+# fires once per process instead of once per request.
+_tls_fallback_warned = False
+
+
 class Tier(StrEnum):
     T0 = "T0"
     T1 = "T1"
@@ -167,7 +194,7 @@ class OSINTTool(abc.ABC):
 
     def assess_result(
         self,
-        result: "ToolResult",
+        result: ToolResult,
         target: str,
         target_type: str = "domain",
     ) -> str | None:
@@ -381,3 +408,167 @@ async def http_get_with_retry(
             continue
         return resp
     return resp  # exhausted retries on a transient status; hand back the last
+
+
+# ── TLS-impersonation client factory (Wave: production red-team) ─────────────
+
+# httpx-only client kwargs with no curl_cffi equivalent. Dropped (with a debug
+# note) under impersonation rather than passed through. ``http2`` in particular
+# has no curl_cffi kwarg (it negotiates ALPN itself), so a site that needs it
+# should stay on plain httpx rather than be migrated to the factory.
+_HTTPX_ONLY_CLIENT_KWARGS = (
+    "http2", "transport", "limits", "event_hooks", "mounts", "app",
+)
+
+
+def make_http_client(**kwargs: Any) -> Any:
+    """Return an outbound HTTP client honouring the active TLS-impersonation
+    target. The seam OPSEC-aware tools use instead of constructing
+    ``httpx.AsyncClient`` directly.
+
+    Behaviour:
+
+      - No impersonation target active (the default), OR the optional
+        ``curl_cffi`` extra is not installed: returns a plain
+        ``httpx.AsyncClient(**kwargs)``, byte-for-byte today's client, so the
+        default install is unchanged and existing respx-based tests keep
+        working. A target-set-but-extra-missing case logs once then degrades.
+      - An impersonation target is active AND ``curl_cffi`` is installed:
+        returns an httpx-compatible adapter over
+        ``curl_cffi.requests.AsyncSession(impersonate=<target>, ...)`` so the
+        TLS ClientHello matches a real browser. ``base_url`` / ``params`` /
+        ``headers`` / ``timeout`` / ``proxy`` are preserved; curl_cffi
+        transport and timeout errors are re-raised as their httpx equivalents
+        so ``http_get_with_retry`` and per-tool ``except`` paths fire unchanged.
+
+    The target comes from the per-campaign ``tls_impersonate`` ContextVar set by
+    ``registry.execute()`` (sourced from the stealth profile or the
+    ``NEXUS_TLS_IMPERSONATE`` override). Accepts the same kwargs as
+    ``httpx.AsyncClient``; httpx-only kwargs are dropped with a debug log.
+    """
+    from nexusrecon.opsec.context import get_current_tls_impersonate
+
+    target = get_current_tls_impersonate()
+    if not target:
+        return httpx.AsyncClient(**kwargs)
+
+    if not _HAS_CURL_CFFI:
+        global _tls_fallback_warned
+        if not _tls_fallback_warned:
+            _tls_fallback_warned = True
+            log.warning(
+                "tls_impersonate requested but curl_cffi is not installed; "
+                "falling back to plain httpx (TLS fingerprint NOT impersonated). "
+                "Install the extra: pip install nexusrecon[tls]",
+                target=target,
+            )
+        return httpx.AsyncClient(**kwargs)
+
+    return _ImpersonateClient(target, **kwargs)
+
+
+class _ImpersonateResponse:
+    """Thin httpx-``Response``-shaped view over a curl_cffi response.
+
+    Delegates every attribute to the wrapped curl_cffi ``Response`` (which
+    already exposes ``status_code`` / ``headers`` / ``text`` / ``content`` /
+    ``json()`` / ``url``) and only synthesises the httpx-isms curl_cffi lacks
+    (``is_success`` / ``is_error`` / ``raise_for_status``), so
+    ``BaseHTTPTool.classify_response`` (which reads ``resp.is_success``) works
+    unchanged.
+    """
+
+    __slots__ = ("_raw",)
+
+    def __init__(self, raw: Any) -> None:
+        self._raw = raw
+
+    @property
+    def is_success(self) -> bool:
+        return 200 <= int(self._raw.status_code) < 300
+
+    @property
+    def is_error(self) -> bool:
+        return int(self._raw.status_code) >= 400
+
+    def raise_for_status(self) -> _ImpersonateResponse:
+        if int(self._raw.status_code) >= 400:
+            raise httpx.HTTPError(f"HTTP {self._raw.status_code}")
+        return self
+
+    def __getattr__(self, name: str) -> Any:
+        # Reached only for names not defined on this class (status_code,
+        # headers, text, content, json, url, ok, cookies, ...).
+        return getattr(self._raw, name)
+
+
+class _ImpersonateClient:
+    """``httpx.AsyncClient``-shaped adapter over curl_cffi's ``AsyncSession``.
+
+    Supports both client lifecycle styles in the tools tree: the
+    ``async with make_http_client(...) as client:`` form and the bare
+    ``client = ...`` + ``await client.aclose()`` form. Only the request surface
+    the OPSEC-aware tools use (``get`` / ``post``) is implemented; curl_cffi
+    transport and timeout errors are translated to ``httpx.TransportError`` /
+    ``httpx.TimeoutException`` so the retry helper and tool ``except`` paths
+    behave identically to the plain-httpx path.
+    """
+
+    # curl error code for an operation timeout (CURLE_OPERATION_TIMEDOUT).
+    _CURL_TIMEOUT_CODE = 28
+
+    def __init__(self, impersonate: str, **httpx_kwargs: Any) -> None:
+        session_kwargs = self._map_client_kwargs(httpx_kwargs)
+        session_kwargs["impersonate"] = impersonate
+        self._session = AsyncSession(**session_kwargs)
+
+    @staticmethod
+    def _map_client_kwargs(kwargs: dict[str, Any]) -> dict[str, Any]:
+        mapped = dict(kwargs)
+        dropped = [k for k in _HTTPX_ONLY_CLIENT_KWARGS if k in mapped]
+        for key in dropped:
+            mapped.pop(key, None)
+        if dropped:
+            log.debug(
+                "dropped httpx-only kwargs under TLS impersonation",
+                dropped=dropped,
+            )
+        # httpx 'follow_redirects' -> curl_cffi 'allow_redirects'. Both accept
+        # 'proxy' as a URL string, so the {'proxy': url} from proxy_kwargs()
+        # passes through unchanged and the campaign proxy is preserved.
+        if "follow_redirects" in mapped:
+            mapped["allow_redirects"] = mapped.pop("follow_redirects")
+        return mapped
+
+    async def __aenter__(self) -> _ImpersonateClient:
+        return self
+
+    async def __aexit__(self, *exc: Any) -> None:
+        await self.aclose()
+
+    async def aclose(self) -> None:
+        await self._session.close()
+
+    # Some construction sites call .close() rather than .aclose().
+    close = aclose
+
+    async def get(self, url: str, **kwargs: Any) -> _ImpersonateResponse:
+        return await self._request("GET", url, **kwargs)
+
+    async def post(self, url: str, **kwargs: Any) -> _ImpersonateResponse:
+        return await self._request("POST", url, **kwargs)
+
+    async def _request(
+        self, method: str, url: str, **kwargs: Any,
+    ) -> _ImpersonateResponse:
+        if "follow_redirects" in kwargs:
+            kwargs["allow_redirects"] = kwargs.pop("follow_redirects")
+        try:
+            raw = await self._session.request(method, url, **kwargs)
+        except _CurlRequestsError as exc:  # type: ignore[misc]
+            if getattr(exc, "code", None) == self._CURL_TIMEOUT_CODE:
+                raise httpx.TimeoutException(str(exc)) from exc
+            raise httpx.TransportError(str(exc)) from exc
+        except _CurlError as exc:  # type: ignore[misc]
+            raise httpx.TransportError(str(exc)) from exc
+        return _ImpersonateResponse(raw)

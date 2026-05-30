@@ -3,10 +3,14 @@ from __future__ import annotations
 
 from typing import Any
 
-import httpx
-
 from nexusrecon.opsec.useragent import random_ua
-from nexusrecon.tools.base import BaseHTTPTool, Category, Tier, ToolResult
+from nexusrecon.tools.base import (
+    BaseHTTPTool,
+    Category,
+    Tier,
+    ToolResult,
+    make_http_client,
+)
 from nexusrecon.tools.registry import register_tool
 
 
@@ -31,7 +35,7 @@ class ShodanTool(BaseHTTPTool):
 
         results: dict[str, Any] = {}
         try:
-            async with httpx.AsyncClient(
+            async with make_http_client(
                 base_url="https://api.shodan.io",
                 params={"key": key},
                 headers={"User-Agent": random_ua()},

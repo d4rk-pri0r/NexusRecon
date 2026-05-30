@@ -41,6 +41,14 @@ class StealthProfile:
     prefer_tor: bool = False
     proxy_rotate: bool = False     # rotate per request if multiple available
 
+    # TLS fingerprint (JA3) impersonation target. None keeps the default
+    # plain-httpx client (today's behaviour). A browser target string such
+    # as "chrome120" routes OPSEC-aware tools through curl_cffi's
+    # impersonating client (when the optional nexusrecon[tls] extra is
+    # installed) so the TLS ClientHello matches a real browser instead of
+    # python-httpx. Falls back to httpx when the extra is absent.
+    tls_impersonate: str | None = None
+
     # UA rotation
     rotate_user_agent: bool = True
     ua_rotate_interval: int = 10   # rotate after N requests

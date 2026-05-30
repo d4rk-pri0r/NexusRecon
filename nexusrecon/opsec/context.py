@@ -86,3 +86,35 @@ def proxy_context(url: str | None) -> Iterator[None]:
         yield
     finally:
         _current_proxy_url.reset(token)
+
+
+# ContextVar of Optional[str] for the active JA3 / TLS-impersonation
+# target. ``None`` means the default plain-httpx client; a string is a
+# curl_cffi impersonate target such as ``"chrome120"``. Mirrors the proxy
+# ContextVar: the registry sets it around ``tool.run()`` and the
+# ``make_http_client`` factory reads it at client construction. Unlike the
+# proxy (a per-request kwarg), impersonation changes the client class, so
+# it is consumed by the factory, not spread as a kwarg.
+_current_tls_impersonate: ContextVar[str | None] = ContextVar(
+    "nexus_opsec_tls_impersonate", default=None
+)
+
+
+def get_current_tls_impersonate() -> str | None:
+    """Return the TLS-impersonation target set by the enclosing
+    ``tls_impersonate_context``, or None for the default httpx client."""
+    return _current_tls_impersonate.get()
+
+
+@contextmanager
+def tls_impersonate_context(target: str | None) -> Iterator[None]:
+    """Set the TLS-impersonation target for the duration of the ``with``
+    block. ``None`` (the default) is a no-op: ``make_http_client`` returns
+    a plain ``httpx.AsyncClient``. Entered alongside ``proxy_context`` in
+    ``registry.execute()`` so it unwinds with the same per-call scope and
+    never leaks across campaigns."""
+    token = _current_tls_impersonate.set(target)
+    try:
+        yield
+    finally:
+        _current_tls_impersonate.reset(token)

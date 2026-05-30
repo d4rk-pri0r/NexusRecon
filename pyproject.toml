@@ -103,6 +103,15 @@ avatar = [
 neo4j = ["neo4j>=5.20.0"]
 censys = ["censys>=2.2.0"]
 pdf = ["weasyprint>=62.0"]
+# Optional JA3 / TLS-fingerprint impersonation client. Outbound TLS
+# otherwise looks like one Python httpx version to every provider. With
+# this extra installed AND a tls_impersonate profile/config flag set,
+# OPSEC-aware tools route through curl_cffi's browser-impersonating
+# client instead of plain httpx. Kept opt-in so the default install
+# stays dependency-light: the make_http_client factory falls back to
+# httpx when curl_cffi is absent or the flag is off. Install via:
+# pip install nexusrecon[tls]
+tls = ["curl_cffi>=0.7.0"]
 
 [project.scripts]
 nexusrecon = "nexusrecon.cli.main:app"

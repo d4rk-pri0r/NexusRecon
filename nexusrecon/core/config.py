@@ -78,6 +78,12 @@ class NexusConfig(BaseSettings):
     # ── OPSEC ───────────────────────────────────────────────────
     proxy_url: str | None = Field(default=None, alias="NEXUS_PROXY_URL")
     tor_proxy: str | None = Field(default=None, alias="NEXUS_TOR_PROXY")
+    # Opt-in JA3 / TLS-fingerprint impersonation target (e.g. "chrome120").
+    # None or empty keeps the default plain-httpx client. When set, it
+    # overrides the active stealth profile's tls_impersonate. Requires the
+    # optional nexusrecon[tls] extra (curl_cffi) to take effect; otherwise
+    # the make_http_client factory logs once and falls back to httpx.
+    tls_impersonate: str | None = Field(default=None, alias="NEXUS_TLS_IMPERSONATE")
     dns_resolvers: str = Field(default="1.1.1.1,8.8.8.8", alias="NEXUS_DNS_RESOLVERS")
 
     # ── Storage ─────────────────────────────────────────────────

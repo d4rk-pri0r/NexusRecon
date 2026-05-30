@@ -4,10 +4,14 @@ from __future__ import annotations
 import base64
 from typing import Any
 
-import httpx
-
 from nexusrecon.opsec.useragent import random_ua
-from nexusrecon.tools.base import BaseHTTPTool, Category, Tier, ToolResult
+from nexusrecon.tools.base import (
+    BaseHTTPTool,
+    Category,
+    Tier,
+    ToolResult,
+    make_http_client,
+)
 from nexusrecon.tools.registry import register_tool
 
 
@@ -28,7 +32,7 @@ class VirusTotalTool(BaseHTTPTool):
             return ToolResult(success=False, source=self.name, error="VIRUSTOTAL_API_KEY not set")
 
         try:
-            async with httpx.AsyncClient(
+            async with make_http_client(
                 base_url="https://www.virustotal.com/api/v3",
                 headers={"x-apikey": key, "User-Agent": random_ua()},
                 timeout=15.0,

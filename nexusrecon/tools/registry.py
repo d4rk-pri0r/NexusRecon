@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any
 
 import structlog
 
-from nexusrecon.opsec.context import proxy_context
+from nexusrecon.opsec.context import proxy_context, tls_impersonate_context
 from nexusrecon.tools.base import OSINTTool, ToolResult
 
 if TYPE_CHECKING:
@@ -144,13 +144,13 @@ class ToolRegistry:
         deque's ``maxlen``. This is purely an in-memory surface —
         durable provenance lives in the audit log."""
         from collections import deque
-        from datetime import datetime, timezone
+        from datetime import UTC, datetime
         bucket = self._invocation_history.get(tool_name)
         if bucket is None:
             bucket = deque(maxlen=self._invocation_history_cap)
             self._invocation_history[tool_name] = bucket
         bucket.append({
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "runtime_ms": int(runtime_ms),
             "success": bool(success),
             "error": error,
@@ -415,9 +415,23 @@ class ToolRegistry:
         if self._proxy_manager is not None and self._proxy_manager.available:
             proxy_url = self._proxy_manager.get_proxy_for_source(tool_name)
 
+        # ── OPSEC: propagate the JA3/TLS-impersonation target the same way, so
+        # a tool routing through make_http_client picks up the browser profile.
+        # An explicit NEXUS_TLS_IMPERSONATE override wins; otherwise the bound
+        # stealth profile's tls_impersonate applies. getattr-with-default keeps
+        # an older profile object (no field) from crashing.
+        tls_target: str | None = None
+        try:
+            from nexusrecon.core.config import get_config
+            tls_target = getattr(get_config(), "tls_impersonate", None)
+        except Exception:
+            tls_target = None
+        if not tls_target:
+            tls_target = getattr(self._stealth_profile, "tls_impersonate", None)
+
         # ── Execute ────────────────────────────────────────────────────────────
         t0 = time.monotonic()
-        with proxy_context(proxy_url):
+        with tls_impersonate_context(tls_target), proxy_context(proxy_url):
             result = await tool.run(target, target_type=target_type, **kwargs)
         runtime_ms = int((time.monotonic() - t0) * 1000)
         result.runtime_ms = runtime_ms

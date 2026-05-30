@@ -389,13 +389,42 @@ are documented as deferred.
         from `NEXUS_PROXY_URL` / `NEXUS_TOR_PROXY`, and both entrypoints
         bind them via `set_campaign_context`. `require_proxy` now
         fails loud (`ProxyRequiredError`) when no proxy is configured.
-- [ ] **JA3 / TLS-fingerprint client.** Outbound TLS still looks like
-      one Python `httpx` version to every provider. Add an optional
-      JA3-friendly client (`curl_cffi` `impersonate=`, or similar) for
-      tools aimed at production red-team use, behind a profile/config
-      flag so the default stays dependency-light. Pulled out of the
-      OPSEC wire item because it is a client-swap feature, not a
-      verification gap.
+- [x] **JA3 / TLS-fingerprint client.** Outbound TLS otherwise looks
+      like one Python `httpx` version to every provider. Shipped as an
+      opt-in capability: `nexusrecon/tools/base.py::make_http_client()`
+      returns a plain `httpx.AsyncClient` by default (byte-for-byte
+      today's path) and, only when a `tls_impersonate` target is active
+      AND the optional `nexusrecon[tls]` extra (`curl_cffi`) is
+      installed, returns an httpx-compatible adapter over
+      `curl_cffi.requests.AsyncSession(impersonate=...)` so the JA3 / TLS
+      ClientHello matches a real browser. The target is gated two ways,
+      mirroring the proxy precedent: a `StealthProfile.tls_impersonate`
+      field (per-engagement, default None on every shipped profile) and a
+      `NEXUS_TLS_IMPERSONATE` config override (wins when set). It rides a
+      `_current_tls_impersonate` ContextVar entered alongside
+      `proxy_context` in `registry.execute()`, so it unwinds per call and
+      never leaks across campaigns. The adapter preserves the campaign
+      proxy, the rotating User-Agent, base_url, params, and timeout, and
+      re-raises curl_cffi transport/timeout errors as their httpx
+      equivalents so `http_get_with_retry` is unchanged. When the extra
+      is absent (the default install) or the flag is off, behaviour is
+      exactly httpx, with a one-time warning if impersonation was
+      requested but `curl_cffi` is missing. Reference tools `shodan` and
+      `virustotal` route through the factory. `curl_cffi` stays out of the
+      core dependency list. Tests in `tests/unit/test_ja3_tls_client.py`
+      (fallback matrix, adapter mapping, exception translation, wire
+      preservation through the registry, gate defaults, and a
+      dependency-hygiene guard).
+- [ ] **JA3 client adoption (follow-up).** The factory exists; only the
+      two reference tools (`shodan`, `virustotal`) route through it so
+      far. The other HTTP tools adopt `make_http_client` incrementally:
+      the roughly 60 sites that do not yet inject the campaign proxy
+      still emit a plain-httpx JA3 even with the flag on (the same as
+      today, so a known incremental gap, not a silent regression).
+      Migrate the remaining OPSEC-relevant sites, and make the
+      User-Agent pool consistent with the active impersonate target so a
+      `chrome120` TLS fingerprint does not ship with a Firefox UA string
+      (that mismatch is itself a fingerprint).
 - [x] **Report quality smoke.** `tests/unit/test_report_quality_smoke.py`
       runs the real `ReportEngine` against 9 synthetic target-shape
       fixtures (small business, M365 enterprise, AWS-native startup,
