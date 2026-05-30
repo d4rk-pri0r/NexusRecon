@@ -10,6 +10,14 @@ This isn't a synthetic walkthrough or a contrived test target ── it's
 what the framework actually produced against a real corporate external
 surface, with PII redacted and per-employee findings withheld.
 
+> **Provenance note.** This run predates the Wave F (signal quality +
+> failure honesty) and OPSEC-binding work. The three items under "Known
+> framework issues this run surfaced" below have since been fixed, so
+> read that section as a record of what this run caught at the time, not
+> as current behaviour. See [`docs/killer-demo.md`](../../docs/killer-demo.md)
+> for the runbook and the publishing checklist, and for what a refreshed
+> run would now show.
+
 ---
 
 ## What's in this directory

@@ -352,9 +352,17 @@ peer" bar.
 
 ### Distribution
 
-- [ ] **Fresh-VM install verification.** Test `./install.sh` on
-      M-series macOS, Linux x86_64, Linux arm64. Document any
-      platform-specific failures. Confirm `pipx install nexusrecon`
+- [ ] **Fresh-VM install verification.** Harness shipped:
+      `scripts/verify_install.sh` is a standalone, CI-safe post-install
+      check (package import + version, CLI on PATH, the F-A3
+      `availability_report` tool bucketing, optional-extra presence, and
+      a binary inventory) that prints one matrix-ready `RESULT:` line.
+      [`docs/install-verification.md`](docs/install-verification.md)
+      carries the platform coverage matrix. The M-series macOS row is
+      verified (PASS, 80/97 tools active, 11/13 binaries present). The
+      Linux x86_64 and Linux arm64 rows still need a run on that hardware
+      (or a VM), plus `pipx install nexusrecon` confirmed once the
+      package is published, to close this out.
 
 ---
 
@@ -366,11 +374,21 @@ are documented as deferred.
 
 ### Beta blockers (must ship before public beta)
 
-- [ ] **Killer demo committed.** Real campaign against a known-
-      vulnerable public target (`juice-shop.herokuapp.com` or
-      similar) with full report directory + dispatcher-log excerpt
-      checked in under `examples/sample_run/`. The agentic value
-      proposition needs evidence, not marketing copy.
+- [x] **Killer demo committed.** A real, redacted campaign against
+      `gitlab.com` (under GitLab's public HackerOne program) is checked
+      in under [`examples/sample_run/`](examples/sample_run/): the
+      scope of record, a `dispatcher_trace.md` of every tool fire /
+      result / error, the first ~60 hash-chained `audit_excerpt.jsonl`
+      entries, and the redacted narrative + asset-inventory reports.
+      The README documents provenance, the redaction posture
+      (aggregate-only, no per-employee data, no credentials, no phishing
+      drafts, tenant ID redacted), the per-tool tally, the findings, and
+      the LLM cost. [`docs/killer-demo.md`](docs/killer-demo.md) adds the
+      reproduce runbook and a reusable publishing checklist. The
+      committed run predates Wave F + the OPSEC binding (a provenance
+      note flags this), so refreshing it against the current codebase to
+      capture the run-health banner, the provenance-checked findings, and
+      the enforced stealth cadence is an optional follow-up, not a gate.
 - [x] **OPSEC wire verification.** Two parts, both landed:
       - *Verification* (`tests/integration/test_opsec_wire.py`, 24
         tests via `respx` + a localhost capture stand-in for
@@ -494,10 +512,12 @@ are documented as deferred.
       mislabelled (real subprocess implementation existed). Fixed.
       `gcp_recon` partial stubs (Firebase / Cloud Run) are flagged
       inline in the per-feature output.
-- [ ] **Fresh-VM install verification.** Test `./install.sh` on
-      M-series macOS, Linux x86_64, Linux arm64. Document any
-      platform-specific failures. Confirm `pipx install nexusrecon`
-      works once we publish the package.
+- [ ] **Fresh-VM install verification.** Tracked in the GA "Path to
+      `1.0.0`" Distribution section above: `scripts/verify_install.sh`
+      plus the coverage matrix in
+      [`docs/install-verification.md`](docs/install-verification.md);
+      macOS row verified, the two Linux rows pending a run on that
+      hardware.
 - [ ] **First-run UX polish.**
       - [x] TUI tells the operator on launch how many tools are active
         vs. skipped, and *why*. The dashboard Tool health card now
