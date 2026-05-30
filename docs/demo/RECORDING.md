@@ -113,11 +113,15 @@ ls -lh docs/demo/nexusrecon.gif      # ~1-3 MB at the default geometry
 Open the gif in a viewer and confirm:
 
 1. The dashboard banner is visible.
-2. The sidebar cursor moves on each `Down` event.
-3. The Tools filter narrows the centre list.
-4. The EditKeyModal title shows `GITHUB_TOKEN` (or whichever key
+2. The Tool health card reads honestly, e.g. `N tools, M active,
+   K need keys, J need install` (binaries and keys reported as
+   separate reasons, not lumped together), with the `Needs install:`
+   hint naming any tools whose CLI binary is missing.
+3. The sidebar cursor moves on each `Down` event.
+4. The Tools filter narrows the centre list.
+5. The EditKeyModal title shows `GITHUB_TOKEN` (or whichever key
    the editable-target heuristic picked).
-5. The Config screen shows only LLM / OPSEC / Storage / Debug
+6. The Config screen shows only LLM / OPSEC / Storage / Debug
    categories — no tool API-key categories.
 
 If any of those drift (UI redesign, new beta, etc.), edit the tape

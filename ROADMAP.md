@@ -469,10 +469,25 @@ are documented as deferred.
       M-series macOS, Linux x86_64, Linux arm64. Document any
       platform-specific failures. Confirm `pipx install nexusrecon`
       works once we publish the package.
-- [ ] **First-run UX polish.** TUI tells the operator on launch
-      how many tools are active vs. Skipped-for-missing-keys.
-      Record a 90-second gif of `nexusrecon` → wizard → results
-      and embed it in the README.
+- [ ] **First-run UX polish.**
+      - [x] TUI tells the operator on launch how many tools are active
+        vs. skipped, and *why*. The dashboard Tool health card now
+        sources its counts from the F-A3 `availability_report`, so a tool
+        skipped for a missing CLI binary ("need install") is reported
+        distinctly from one skipped for a missing API key ("need keys")
+        instead of lumping both under "missing keys" (which sent a
+        fresh-install operator hunting for a key when the fix for
+        `maigret` / `amass` was a package install). A `Needs install:`
+        hint names the tools whose binary is absent. The legacy welcome
+        shim shares the same honest breakdown. Tests in
+        `tests/unit/test_tui_first_run_ux.py`.
+      - [ ] Record the 90-second wizard-to-results gif. The reproducible
+        recording setup is committed (`docs/demo/nexusrecon.tape`,
+        `docs/demo/RECORDING.md`, `make demo`) and the README embed is
+        pre-wired at `docs/demo/nexusrecon.gif`. The binary itself is a
+        one-command maintainer step (`make demo`, which needs vhs + ttyd
+        + ffmpeg + a local monospace font) that cannot run in CI, so it
+        stays open until recorded on a workstation.
 - [ ] **Report footer hygiene (follow-up).** Split out of "Report
       quality smoke", which pinned the scope_hash + version footer on
       the canonical narrative deliverables (executive summary, full

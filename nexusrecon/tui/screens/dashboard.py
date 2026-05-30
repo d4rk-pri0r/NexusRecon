@@ -296,29 +296,70 @@ def _whats_new(limit: int = 4) -> str:
     return "\n".join(lines)
 
 
+def _tool_availability_counts() -> dict[str, int]:
+    """Bucket counts for the launch tool-health summary, sourced from the
+    registry's F-A3 ``availability_report`` so a tool skipped for a missing
+    *binary* is reported distinctly from one skipped for a missing *key*.
+
+    The previous breakdown computed ``skipped = total - active - stubbed``
+    and labelled all of it "missing keys", which told a fresh-install
+    operator to go hunting for an API key when the real fix for, say,
+    ``maigret`` or ``amass`` was a package install. ``availability_report``
+    already classifies each tool precisely (binary, then key, then the
+    engagement gates), so reuse it. No engagement scope is bound at
+    dashboard time, so the policy / over_tier buckets are always zero here;
+    they populate once a campaign applies its constraints.
+    """
+    from nexusrecon.tools.registry import get_registry
+    return dict(get_registry().availability_report()["counts"])
+
+
 def _tool_breakdown() -> str:
     try:
-        from nexusrecon.tools.registry import get_registry
-        registry = get_registry()
-        total = 0
-        active = 0
-        stubbed = 0
-        for tool in registry._tools.values():
-            total += 1
-            if getattr(tool, "stubbed", False):
-                stubbed += 1
-                continue
-            if tool.is_available():
-                active += 1
-        skipped = total - active - stubbed
+        counts = _tool_availability_counts()
+        total = sum(counts.values())
+        active = counts.get("active", 0)
+        need_keys = counts.get("missing_key", 0)
+        need_install = counts.get("missing_binary", 0)
+        stubbed = counts.get("stubbed", 0)
         parts = [f"{total} tools", f"{active} active"]
-        if skipped:
-            parts.append(f"{skipped} skipped (missing keys)")
+        if need_keys:
+            parts.append(f"{need_keys} need keys")
+        if need_install:
+            parts.append(f"{need_install} need install")
         if stubbed:
             parts.append(f"{stubbed} stub(s)")
         return " · ".join(parts)
     except Exception:
         return ""
+
+
+def _missing_binaries() -> list[str]:
+    """Names of tools skipped because a required CLI binary is not on PATH.
+
+    Unlike missing keys (configurable from the TUI Config screen), these are
+    fixed with a package install, so they get their own hint line rather
+    than being folded into the key-gap leaderboard (which deliberately
+    excludes binaries as non-actionable from inside the TUI)."""
+    try:
+        from nexusrecon.tools.registry import get_registry
+        buckets = get_registry().availability_report()["buckets"]
+        return sorted(buckets.get("missing_binary", {}).keys())
+    except Exception:
+        return []
+
+
+def _render_missing_binaries(limit: int = 4) -> str:
+    """One-line "these tools need a binary installed" hint for the Tool
+    health card. Empty string when nothing is missing so the card layout
+    collapses cleanly."""
+    names = _missing_binaries()
+    if not names:
+        return ""
+    shown = ", ".join(names[:limit])
+    extra = len(names) - limit
+    suffix = f" (+{extra} more)" if extra > 0 else ""
+    return f"[dim]Needs install:[/dim] {shown}{suffix}"
 
 
 def _top_key_gaps(limit: int = 3) -> list[tuple[str, int]]:
@@ -566,6 +607,15 @@ class DashboardScreen(Screen):
                                 _render_tool_gaps(),
                                 id="dashboard-tool-gaps",
                             )
+                            # Missing binaries are a separate "why" from
+                            # missing keys: not configurable from the TUI,
+                            # fixed with a package install. Named here so the
+                            # operator knows up front (instead of after a run)
+                            # which capabilities a fresh install is missing.
+                            yield Static(
+                                _render_missing_binaries(),
+                                id="dashboard-tool-binaries",
+                            )
                             yield Static(
                                 "[dim]Press [bold]t[/bold] to browse + "
                                 "configure tools.[/dim]",
@@ -640,6 +690,12 @@ class DashboardScreen(Screen):
         try:
             self.query_one("#dashboard-tool-gaps", Static).update(
                 _render_tool_gaps(),
+            )
+        except Exception:
+            pass
+        try:
+            self.query_one("#dashboard-tool-binaries", Static).update(
+                _render_missing_binaries(),
             )
         except Exception:
             pass

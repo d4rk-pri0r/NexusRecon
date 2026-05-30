@@ -9,7 +9,8 @@
 #
 # What this captures:
 #   1. Launching the TUI.
-#   2. Dashboard with sidebar nav + Tool health card + Top gaps.
+#   2. Dashboard with sidebar nav + Tool health card (active / need keys /
+#      need install breakdown) + Top gaps + Needs-install hint.
 #   3. Arrow-key navigation into the Tools browser.
 #   4. Tools filter, per-tool detail, per-key configured/missing markers.
 #   5. The Config screen showing only app-wide settings (no tool keys).

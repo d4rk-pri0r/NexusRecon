@@ -63,26 +63,23 @@ def _quick_stats() -> str:
 
 
 def _tool_availability_breakdown() -> str:
-    """``N active · M skipped (missing keys)`` — original TUI-1 string
-    format (slightly different from the dashboard's
-    ``_tool_breakdown`` which leads with the total count)."""
+    """``N active · M missing keys · K missing binaries``. The original
+    TUI-1 string format (leads with active, no total, unlike the
+    dashboard's ``_tool_breakdown``), now sourced from the F-A3
+    ``availability_report`` so a missing binary is not mislabelled as a
+    missing key."""
     try:
         from nexusrecon.tools.registry import get_registry
-        registry = get_registry()
-        total = 0
-        active = 0
-        stubbed = 0
-        for tool in registry._tools.values():
-            total += 1
-            if getattr(tool, "stubbed", False):
-                stubbed += 1
-                continue
-            if tool.is_available():
-                active += 1
-        skipped = total - active - stubbed
+        counts = get_registry().availability_report()["counts"]
+        active = counts.get("active", 0)
+        need_keys = counts.get("missing_key", 0)
+        need_install = counts.get("missing_binary", 0)
+        stubbed = counts.get("stubbed", 0)
         parts = [f"{active} active"]
-        if skipped:
-            parts.append(f"{skipped} skipped (missing keys)")
+        if need_keys:
+            parts.append(f"{need_keys} missing keys")
+        if need_install:
+            parts.append(f"{need_install} missing binaries")
         if stubbed:
             parts.append(f"{stubbed} stub(s)")
         return " · ".join(parts)
