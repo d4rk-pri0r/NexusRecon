@@ -396,14 +396,43 @@ are documented as deferred.
       flag so the default stays dependency-light. Pulled out of the
       OPSEC wire item because it is a client-swap feature, not a
       verification gap.
-- [ ] **Report quality smoke.** Run 10 campaigns across varied
-      target shapes (small biz, M365 enterprise, AWS-native startup,
-      etc.). Pin failure modes as smoke tests:
-      - No "As a large language model" / "I'd be happy to help"
-        artifacts in any generated prose.
-      - Findings deduplicated across overlapping tools.
-      - Every CVE citation resolves to a real CVE record.
-      - Scope hash + tool versions in every report footer.
+- [x] **Report quality smoke.** `tests/unit/test_report_quality_smoke.py`
+      runs the real `ReportEngine` against 9 synthetic target-shape
+      fixtures (small business, M365 enterprise, AWS-native startup,
+      mixed-cloud + breaches, empty, GCP-native, degraded/partial-failure,
+      Phase D/E heavy, gov/.gov) with the LLM executor stubbed (a live
+      10-campaign run is not CI-viable: real spend plus hours of
+      wall-clock, and the campaign output dir is gitignored). All four
+      failure modes are pinned as smoke tests:
+      - No "As a large language model" / "I'd be happy to help" (or eight
+        other disclaimer phrases) in any generated `.md`.
+      - Findings deduplicated across overlapping tools (cross-source
+        class: same CVE in `enriched_cves` AND KEV collapses to one
+        ranked finding; same email from two breach DBs collapses to one),
+        on top of the Wave F-B2 dedup regression.
+      - Every CVE citation resolves to a real CVE record. The original
+        check was format-only (`CVE-YYYY-NNNN` shape), so a correctly
+        formatted but fabricated `CVE-2099-99999` shipped clean. Closed
+        with a provenance guard: `engine.collect_state_cves()` builds the
+        allow-list of CVEs the run actually collected (scanning the
+        evidence slots, excluding LLM-prose slots so a hallucination
+        cannot self-authorise), and `scrub_unsourced_cves()` redacts any
+        CVE token absent from that set at the three LLM-prose embed sites
+        (master report brief, executive-summary analyst assessment,
+        people-map analyst notes); the Obsidian export inherits the scrub
+        because it re-reads the scrubbed `master_report.md`. A parametrised
+        subset invariant asserts rendered CVEs are a subset of collected
+        CVEs for every fixture, and two adversarial-stub tests confirm a
+        fabricated CVE injected into agent prose is redacted while a
+        genuinely sourced CVE survives (verified load-bearing: both fail
+        with the guard neutered).
+      - Scope hash + tool versions in every report footer (scope_hash
+        plus `Tooling: NexusRecon vX.Y.Z` in the executive summary and
+        full report, and `nexusrecon_version` next to `scope_hash` in the
+        JSON deliverables). Broadening the footer to the remaining
+        deliverables (credential exposure paths, spear-phishing intel,
+        `run_health.md`, and the PDF's hardcoded version string) is
+        tracked separately as metadata hygiene, not part of this blocker.
 - [x] **`BaseHTTPTool` helper.** Extract the
       "401/403 = auth fail, 429 = rate limit, other non-200 = error"
       pattern from the 9 individual fix commits into a single base
@@ -444,6 +473,19 @@ are documented as deferred.
       how many tools are active vs. Skipped-for-missing-keys.
       Record a 90-second gif of `nexusrecon` → wizard → results
       and embed it in the README.
+- [ ] **Report footer hygiene (follow-up).** Split out of "Report
+      quality smoke", which pinned the scope_hash + version footer on
+      the canonical narrative deliverables (executive summary, full
+      report) and the JSON deliverables. Extend the same pair to the
+      remaining `.md` deliverables that carry neither field
+      (`credential_exposure_paths.md`, `spear_phishing_intelligence.md`,
+      `run_health.md`) and fix the PDF footer, which hardcodes
+      `NexusRecon v1.0.0` instead of `self.nexusrecon_version`. Metadata
+      hygiene, not a correctness gate. A related item: the report
+      builders render em-dashes and box-drawing glyphs into operator
+      prose, which reads as an AI tell in delivered documents; sweep
+      those out of the generated deliverables (separate from the repo
+      docs scrub).
 
 ### Done (already in 0.5.x)
 

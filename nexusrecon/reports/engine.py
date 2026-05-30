@@ -50,6 +50,73 @@ def strip_agent_scaffolding(text: str) -> str:
     return re.sub(r"\n{3,}", "\n\n", text).strip()
 
 
+# Canonical CVE token: ``CVE-YYYY-NNNN`` (4+ trailing digits). Matches the
+# pattern the report-quality smoke suite validates against.
+_CVE_TOKEN_RE = re.compile(r"\bCVE-\d{4}-\d{4,}\b", re.IGNORECASE)
+
+# State slots that hold free-form LLM / agent prose rather than collected
+# evidence. CVEs appearing ONLY here are not provenance for the allow-list:
+# they are exactly the model-authored text we validate against evidence, so
+# letting them seed the allow-list would make a hallucinated citation
+# self-authorising.
+_LLM_PROSE_STATE_KEYS = frozenset({"agent_messages"})
+
+
+def collect_state_cves(state: dict[str, Any]) -> frozenset[str]:
+    """Return every CVE id that legitimately appears in the campaign's
+    collected evidence, upper-cased, as the allow-list for report prose.
+
+    CVEs live in many evidence slots: ``vuln_intel.enriched_cves`` keys, KEV /
+    NVD match entries, nuclei ``cve_ids``, and the free-text titles and
+    descriptions of scored findings (e.g. ``"xz-utils backdoor
+    (CVE-2024-3094)"``). Rather than enumerate every slot (and silently miss
+    one when a new enrichment source lands), serialise the evidence and scan
+    it: any CVE the run actually collected is, by definition, somewhere in the
+    evidence it produced. ``agent_messages`` and other LLM-prose slots are
+    excluded so a model that fabricates a CVE in its own analysis cannot
+    thereby authorise that CVE. Over-collecting elsewhere is safe (it only
+    ever permits a real, sourced id); under-collecting would redact a
+    legitimate citation.
+    """
+    if not state:
+        return frozenset()
+    evidence = {k: v for k, v in state.items() if k not in _LLM_PROSE_STATE_KEYS}
+    try:
+        blob = json.dumps(evidence, default=str)
+    except (TypeError, ValueError):
+        blob = str(evidence)
+    return frozenset(m.upper() for m in _CVE_TOKEN_RE.findall(blob))
+
+
+def scrub_unsourced_cves(text: str, allowed: frozenset[str], *, agent: str = "") -> str:
+    """Redact any CVE id in ``text`` that is not in the ``allowed`` evidence set.
+
+    LLM agent prose (the master-report brief, the executive-summary analyst
+    assessment, the people-map analyst notes) is embedded verbatim into
+    deliverables. A model can fabricate or transpose a correctly-formatted CVE
+    id the run never collected; ``strip_agent_scaffolding`` does not catch it.
+    Any CVE token whose upper-cased form is absent from ``allowed`` is replaced
+    with a neutral marker and the redaction is logged, so a hallucinated
+    citation never ships while the surrounding narrative and any genuinely
+    sourced CVE survive.
+    """
+    if not text:
+        return text
+
+    def _replace(match: "re.Match[str]") -> str:
+        token = match.group(0)
+        if token.upper() in allowed:
+            return token
+        log.warning(
+            "redacted unsourced CVE from agent prose",
+            cve=token,
+            agent=agent or "unknown",
+        )
+        return "[unverified CVE redacted]"
+
+    return _CVE_TOKEN_RE.sub(_replace, text)
+
+
 def _provider_has_evidence(data: Any) -> bool:
     """True when a cloud_intel entry carries a positive signal, not just the
     fact that a recon tool ran (Wave F-B4).
@@ -462,7 +529,11 @@ class ReportEngine:
             None,
         )
         if analyst_msg and analyst_msg.get("analysis"):
-            assessment = strip_agent_scaffolding(analyst_msg["analysis"])
+            assessment = scrub_unsourced_cves(
+                strip_agent_scaffolding(analyst_msg["analysis"]),
+                collect_state_cves(state),
+                agent="risk_analyst",
+            )
             if assessment:
                 lines.extend([
                     "## Analyst Assessment",
@@ -1077,12 +1148,19 @@ class ReportEngine:
 
         # Agent analysis
         if agent_messages:
+            allowed_cves = collect_state_cves(state)
             lines.append("## Analyst Notes")
             lines.append("")
             for msg in agent_messages:
                 lines.append(f"### {msg.get('agent', 'unknown')} — {msg.get('phase', '')}")
                 lines.append("")
-                lines.append(strip_agent_scaffolding(msg.get("analysis", "")))
+                lines.append(
+                    scrub_unsourced_cves(
+                        strip_agent_scaffolding(msg.get("analysis", "")),
+                        allowed_cves,
+                        agent=str(msg.get("agent", "")),
+                    )
+                )
                 lines.append("")
 
         path = self.output_dir / "people_identity_map.md"
@@ -2230,7 +2308,11 @@ class ReportEngine:
                     state=state,
                 )
             )
-            body_md = str(result.get("output", "")).strip()
+            body_md = scrub_unsourced_cves(
+                str(result.get("output", "")).strip(),
+                collect_state_cves(state),
+                agent="master_reporter",
+            )
         except Exception as exc:
             log.warning("master_reporter agent failed", error=str(exc))
             body_md = (

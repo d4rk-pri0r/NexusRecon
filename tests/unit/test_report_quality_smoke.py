@@ -58,7 +58,7 @@ from unittest.mock import patch
 
 import pytest
 
-from nexusrecon.reports.engine import ReportEngine
+from nexusrecon.reports.engine import ReportEngine, collect_state_cves
 from nexusrecon import __version__ as NEXUS_VERSION
 
 
@@ -143,6 +143,11 @@ _CVE_SHAPED_RE = re.compile(
     r"\bCVE-[0-9Xx]+-[0-9Xx]+\b",
     re.IGNORECASE,
 )
+# Case-insensitive canonical-CVE matcher for the provenance subset test.
+# Mirrors engine.collect_state_cves so a lower-cased citation in next-steps
+# text (e.g. the nuclei "-id cve-2021-44228" arg) still resolves to the
+# upper-cased sourced id.
+_CVE_CI_RE = re.compile(r"\bCVE-\d{4}-\d{4,}\b", re.IGNORECASE)
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -416,6 +421,241 @@ def _state_empty() -> dict[str, Any]:
     }
 
 
+def _state_gcp_native_only() -> dict[str, Any]:
+    """GCP-only cloud shape: no Azure, no AWS. GCP otherwise appears
+    only as a secondary provider inside the mixed fixture, so a
+    GCP-only rendering path is never exercised in isolation."""
+    return {
+        "seeds": ["dataflow.io"],
+        "completed_phases": [
+            "phase1", "phase2", "phase3", "phase4", "phase5",
+            "phase6", "phase7", "phase8", "phase9",
+        ],
+        "subdomain_intel": {
+            "api.dataflow.io": {"sources": ["crtsh"]},
+            "console.dataflow.io": {"sources": ["amass"]},
+        },
+        "email_intel": {
+            "emails": {
+                "dev@dataflow.io": {"sources": ["hunter"], "role": "Engineer"},
+            },
+        },
+        "cloud_intel": {
+            "gcp/projects": {
+                "attribution_confidence": 0.9,
+                "projects": [{"id": "dataflow-prod", "number": "112233445566"}],
+            },
+            "gcp/storage": {
+                "attribution_confidence": 0.85,
+                "buckets": [{"name": "dataflow-public-assets", "public": True}],
+            },
+        },
+        "findings": [
+            {
+                "title": "Public GCS bucket: dataflow-public-assets",
+                "severity": "high",
+                "description": "Bucket grants allUsers read.",
+                "source": "gcp_recon",
+                "confidence": 0.9,
+                "category": "cloud",
+                "affected_assets": ["gs://dataflow-public-assets"],
+            },
+            {
+                "title": "CVE-2022-3786 in openssl-3.0.5 on api.dataflow.io",
+                "severity": "high",
+                "description": "OpenSSL X.509 punycode buffer overflow.",
+                "source": "httpx",
+                "confidence": 0.7,
+                "category": "vulnerability",
+                "affected_assets": ["api.dataflow.io"],
+            },
+        ],
+        "ranked_threads": [],
+        "vuln_intel": {
+            "enriched_cves": {
+                "CVE-2022-3786": {
+                    "tech": "openssl", "cvss": 7.5, "epss": 0.1,
+                    "in_kev": False, "has_exploit": False,
+                    "description": "OpenSSL punycode overflow",
+                },
+            },
+        },
+    }
+
+
+def _state_degraded_partial_failure() -> dict[str, Any]:
+    """A run where tools ran-but-degraded (errors populated, partial
+    phases, a handshake/502/exit-1 cluster) yet still surfaced one real
+    CVE. Exercises the full report set + the footer and CVE-provenance
+    invariants on a degraded shape the Wave F run-health test never
+    drives through ``generate_all``."""
+    return {
+        "seeds": ["flaky-target.test"],
+        "completed_phases": ["phase1", "phase2", "phase3"],
+        "errors": [
+            {"tool": "sslyze", "error": "handshake failed", "degraded": True},
+            {"tool": "crtsh", "error": "502 Bad Gateway"},
+            {"tool": "nuclei", "error": "exit 1, no findings"},
+        ],
+        "subdomain_intel": {"www.flaky-target.test": {"sources": ["amass"]}},
+        "email_intel": {"emails": {}},
+        "cloud_intel": {},
+        "findings": [
+            {
+                "title": "CVE-2023-44487 (HTTP/2 Rapid Reset) on www.flaky-target.test",
+                "severity": "high",
+                "description": "Server advertises HTTP/2; Rapid Reset DoS applies.",
+                "source": "httpx",
+                "confidence": 0.6,
+                "category": "vulnerability",
+                "affected_assets": ["www.flaky-target.test"],
+            },
+        ],
+        "ranked_threads": [],
+        "vuln_intel": {
+            "enriched_cves": {
+                "CVE-2023-44487": {
+                    "tech": "http2", "cvss": 7.5, "epss": 0.4,
+                    "in_kev": True, "has_exploit": True,
+                    "description": "HTTP/2 Rapid Reset",
+                },
+            },
+            "kev": {"vulnerabilities": [{"cveID": "CVE-2023-44487"}]},
+        },
+    }
+
+
+def _state_phase_de_heavy() -> dict[str, Any]:
+    """Populated Phase D punch list + Phase E relationship graph, pretext
+    scores, and a generated spear-phishing draft. The mixed fixture
+    carries these structures but empty; this one stresses the
+    phase7_5 / phase7_7 render paths with real content."""
+    candidate = {
+        "sender_identity_id": "id-colleague-1",
+        "sender_label": "Dana Boss",
+        "sender_plausibility": 0.81,
+        "rationale": "Frequent GitHub co-author on the target's main repo.",
+        "sources": ["github_social"],
+        "topic": "Q3 infra migration sign-off",
+        "combined_score": 0.74,
+        "timing_score": 0.66,
+        "timing_anchor": {
+            "title": "Target spoke at FOSDEM on platform migration",
+            "published_at": "2026-02-01",
+            "source": "conference_speaker",
+            "url": "https://fosdem.org/2026/schedule/",
+        },
+    }
+    return {
+        "seeds": ["devhouse.io"],
+        "completed_phases": [
+            "phase1", "phase2", "phase2_5", "phase3", "phase4",
+            "phase5", "phase6", "phase7", "phase7_5", "phase7_7",
+            "phase8", "phase9",
+        ],
+        "subdomain_intel": {"git.devhouse.io": {"sources": ["crtsh"]}},
+        "email_intel": {
+            "emails": {
+                "target@devhouse.io": {"sources": ["hunter"], "role": "Staff Engineer"},
+            },
+        },
+        "cloud_intel": {},
+        "findings": [
+            {
+                "title": "Employee email in DeHashed breach corpus",
+                "severity": "medium",
+                "description": "target@devhouse.io present in two breach sets.",
+                "source": "dehashed",
+                "confidence": 0.8,
+                "category": "identity",
+                "affected_assets": ["target@devhouse.io"],
+            },
+        ],
+        "ranked_threads": [],
+        "credential_punch_list": [
+            {"identity_id": "id-target", "service": "github",
+             "exposure_source": "DeHashed", "risk_score": 0.6},
+            {"identity_id": "id-target", "service": "okta",
+             "exposure_source": "Snusbase", "risk_score": 0.5},
+        ],
+        "relationship_graph": {
+            "edge_count": 1,
+            "edges": [
+                {"source_identity": "id-target",
+                 "target_identity": "id-colleague-1",
+                 "interaction_type": "co_author", "strength": 0.8},
+            ],
+            "by_source": {"id-target": ["id-colleague-1"]},
+            "by_target": {"id-colleague-1": ["id-target"]},
+        },
+        "pretext_scores": [candidate],
+        "spear_phishing_intelligence": {
+            "summary": {
+                "target_count": 1, "candidate_count": 1,
+                "score_min": 0.74, "score_median": 0.74, "score_max": 0.74,
+            },
+            "targets": {
+                "id-target": {
+                    "target_identity_id": "id-target",
+                    "target_label": "Target Engineer",
+                    "top_candidates": [candidate],
+                    "draft": (
+                        "Subject: Quick sign-off on the Q3 infra migration\n\n"
+                        "Hi, following up after FOSDEM. Can you confirm the "
+                        "platform migration runbook before Friday? Thanks."
+                    ),
+                },
+            },
+        },
+    }
+
+
+def _state_gov_dotgov() -> dict[str, Any]:
+    """A .gov target shape. The engine should treat the TLD generically;
+    this pins that an authorized .gov engagement renders cleanly across
+    the report set (no special-casing crash, footers + provenance hold)."""
+    return {
+        "seeds": ["agency.gov"],
+        "completed_phases": [
+            "phase1", "phase2", "phase3", "phase4", "phase5",
+            "phase6", "phase7", "phase8", "phase9",
+        ],
+        "subdomain_intel": {
+            "portal.agency.gov": {"sources": ["crtsh"]},
+            "vpn.agency.gov": {"sources": ["amass"]},
+        },
+        "email_intel": {
+            "emails": {
+                "officer@agency.gov": {"sources": ["hunter"], "role": "Program Officer"},
+            },
+        },
+        "cloud_intel": {},
+        "findings": [
+            {
+                "title": "CVE-2021-26855 (ProxyLogon) on portal.agency.gov",
+                "severity": "critical",
+                "description": "Exchange SSRF, KEV-listed and actively exploited.",
+                "source": "nuclei",
+                "confidence": 0.85,
+                "category": "vulnerability",
+                "affected_assets": ["portal.agency.gov"],
+                "mitre_techniques": ["T1190"],
+            },
+        ],
+        "ranked_threads": [],
+        "vuln_intel": {
+            "enriched_cves": {
+                "CVE-2021-26855": {
+                    "tech": "exchange", "cvss": 9.8, "epss": 0.9,
+                    "in_kev": True, "has_exploit": True,
+                    "has_metasploit": True, "description": "ProxyLogon",
+                },
+            },
+            "kev": {"vulnerabilities": [{"cveID": "CVE-2021-26855"}]},
+        },
+    }
+
+
 # A list of ``(name, fixture_fn)`` for parametrised tests. Adding
 # a new target shape = adding one tuple.
 FIXTURES = [
@@ -424,6 +664,10 @@ FIXTURES = [
     ("aws_native_startup", _state_aws_native_startup),
     ("mixed_cloud_with_breaches", _state_mixed_cloud_with_breaches),
     ("empty", _state_empty),
+    ("gcp_native_only", _state_gcp_native_only),
+    ("degraded_partial_failure", _state_degraded_partial_failure),
+    ("phase_de_heavy", _state_phase_de_heavy),
+    ("gov_dotgov", _state_gov_dotgov),
 ]
 
 
@@ -732,4 +976,176 @@ class TestEngineCarriesVersion:
         assert 'self.nexusrecon_version = "unknown"' in engine_src, (
             "ReportEngine fallback string changed ── downstream "
             "consumers may key off the literal 'unknown'."
+        )
+
+
+# ──────────────────────────────────────────────────────────────────────
+# CVE provenance — bullet 3: "every CVE citation resolves to a real CVE
+# record"
+# ──────────────────────────────────────────────────────────────────────
+
+
+class TestCVEProvenance:
+    """The original beta-blocker bullet says every CVE citation must
+    *resolve to a real CVE record*. The existing format check
+    (``test_cve_references_match_canonical_format``) only validates
+    ``CVE-YYYY-NNNN`` shape — a correctly-formatted but fabricated
+    ``CVE-2099-99999`` passes it clean.
+
+    Hitting NVD/MITRE per CVE is not CI-safe (network + rate limits), so
+    we pin the meaningful, deterministic guarantee instead: every CVE id
+    rendered into a deliverable must trace back to a CVE the run actually
+    collected (present in the input *evidence*). The three LLM-prose
+    embed sites (master report brief, executive-summary analyst
+    assessment, people-map analyst notes) are the only paths that can
+    inject an unsourced CVE; the engine's ``scrub_unsourced_cves`` guard
+    redacts any CVE token absent from ``collect_state_cves``.
+    """
+
+    @pytest.mark.parametrize("name,fixture_fn", FIXTURES)
+    def test_rendered_cves_trace_to_input_state(
+        self, name: str, fixture_fn, engine: ReportEngine,
+    ):
+        """Subset invariant across every deliverable: the set of CVEs
+        rendered must be a subset of the CVEs present in the input
+        evidence. Green on the benign stub (no LLM CVEs) and on the
+        genuinely-sourced fixtures (the AWS/GCP/gov CVEs all trace to
+        ``vuln_intel`` / finding titles)."""
+        state = fixture_fn()
+        sourced = collect_state_cves(state)
+        paths = engine.generate_all(state)
+        for kind, p in paths.items():
+            path = Path(p)
+            if path.suffix.lower() not in (".md", ".markdown", ".json"):
+                continue
+            rendered = {m.upper() for m in _CVE_CI_RE.findall(path.read_text())}
+            unsourced = rendered - sourced
+            assert not unsourced, (
+                f"[{name}] {kind} ({path.name}) cites CVE(s) absent from "
+                f"input evidence: {sorted(unsourced)} — sourced set is "
+                f"{sorted(sourced)}"
+            )
+
+    def test_collect_state_cves_is_comprehensive(self):
+        """The allow-list must collect CVEs wherever they legitimately
+        live in evidence — not just ``enriched_cves`` keys. Guards
+        against a later 'just scan enriched_cves' narrowing that would
+        false-positive on finding-title and description-substring CVEs
+        the subset assertion depends on."""
+        state = {
+            "vuln_intel": {
+                "enriched_cves": {"CVE-2021-44228": {"tech": "log4j"}},
+                "kev": {"vulnerabilities": [{"cveID": "CVE-2014-0160"}]},
+                "nvd/apache": {"matches": [{"id": "CVE-2017-5638"}]},
+                "nuclei_scan": {"findings": [{"cve_ids": ["CVE-2019-11043"]}]},
+            },
+            "findings": [
+                {"title": "CVE-2024-3094 in xz-utils", "severity": "critical"},
+            ],
+            "cloud_intel": {
+                "note": {"description": "linked to CVE-2023-23397 exploitation"},
+            },
+        }
+        got = collect_state_cves(state)
+        for cve in (
+            "CVE-2021-44228", "CVE-2014-0160", "CVE-2017-5638",
+            "CVE-2019-11043", "CVE-2024-3094", "CVE-2023-23397",
+        ):
+            assert cve in got, f"{cve} not collected from its evidence slot"
+
+    def test_agent_messages_do_not_seed_the_allowlist(self):
+        """A CVE that appears ONLY in LLM agent prose must NOT become an
+        allow-listed source — otherwise a hallucination would authorise
+        itself and defeat the scrub."""
+        state = {
+            "agent_messages": [
+                {"agent": "risk_analyst", "phase": "phase8",
+                 "analysis": "I assess CVE-2099-12345 is critical."},
+            ],
+            "vuln_intel": {"enriched_cves": {"CVE-2021-44228": {}}},
+        }
+        got = collect_state_cves(state)
+        assert "CVE-2021-44228" in got
+        assert "CVE-2099-12345" not in got, (
+            "agent prose seeded the CVE allow-list — a hallucination "
+            "would self-authorise"
+        )
+
+    def test_hallucinated_cve_in_master_report_prose_is_redacted(
+        self, engine: ReportEngine,
+    ):
+        """Negative test for the highest-risk path: a fabricated CVE in
+        master_reporter agent output must not survive into
+        master_report.md (nor the obsidian variant, which re-reads the
+        scrubbed file), while a genuinely-sourced CVE is preserved."""
+        fab = "CVE-2099-99999"
+        sourced_cve = "CVE-2021-44228"  # genuinely in the AWS fixture evidence
+
+        class _FabricatingExecutor:
+            def __init__(self, *args, **kwargs) -> None:
+                pass
+
+            async def run_agent(
+                self, agent_name, task_data=None, task_prompt="", state=None,
+            ):
+                if agent_name == "master_reporter":
+                    return {"output": (
+                        "## 2. Executive Brief\n\n"
+                        f"The campaign confirmed {sourced_cve} (Log4Shell) in the "
+                        f"build cache. It also surfaced {fab}, which the run never "
+                        "actually collected.\n\n"
+                        "## 10. Recommendations\n\n"
+                        f"1. Remediate {sourced_cve} and {fab} immediately.\n"
+                    )}
+                return {"output": "stub", "agent": agent_name, "findings": []}
+
+        state = _state_aws_native_startup()
+        state["generate_obsidian"] = True
+        with patch(
+            "nexusrecon.graph.agent_executor.AgentExecutor", _FabricatingExecutor,
+        ):
+            paths = engine.generate_all(state)
+
+        master = Path(paths["master_report"]).read_text()
+        assert fab not in master, (
+            "hallucinated CVE leaked into master_report.md — "
+            "scrub_unsourced_cves did not fire on the master_reporter embed"
+        )
+        assert sourced_cve in master, (
+            "a genuinely-sourced CVE was wrongly scrubbed from master_report.md"
+        )
+        obs = Path(paths["master_report_obsidian"]).read_text()
+        assert fab not in obs, "obsidian export propagated the hallucinated CVE"
+
+    def test_hallucinated_cve_in_analyst_prose_is_redacted(
+        self, engine: ReportEngine,
+    ):
+        """The two strip-only prose embeds: a fabricated CVE injected via
+        ``state['agent_messages']`` must not survive into
+        executive_summary.md (risk_analyst assessment) or
+        people_identity_map.md (phase2/phase4 analyst notes)."""
+        fab = "CVE-2098-88888"
+        sourced_cve = "CVE-2021-44228"
+        state = _state_aws_native_startup()
+        state["agent_messages"] = [
+            {"agent": "risk_analyst", "phase": "phase8",
+             "analysis": (
+                 f"Primary risk is {sourced_cve} (Log4Shell). I also flag "
+                 f"{fab} as critical."
+             )},
+            {"agent": "identity_analyst", "phase": "phase2",
+             "analysis": f"Org note: exposure tied to {fab} surfaced in review."},
+        ]
+        paths = engine.generate_all(state)
+
+        exec_md = Path(paths["executive_summary"]).read_text()
+        assert fab not in exec_md, (
+            "hallucinated CVE leaked into executive_summary.md analyst assessment"
+        )
+        assert sourced_cve in exec_md, (
+            "sourced CVE wrongly scrubbed from executive_summary.md"
+        )
+        people_md = Path(paths["people_map"]).read_text()
+        assert fab not in people_md, (
+            "hallucinated CVE leaked into people_identity_map.md analyst notes"
         )
