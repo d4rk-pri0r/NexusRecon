@@ -888,3 +888,89 @@ class TestProductionOpsecBinding:
         reg.set_campaign_context(scope_guard=None, **opsec)
         asyncio.run(reg.execute("ctx_probe", "example.com"))
         assert _CtxProbe.seen[-1] == {"proxy": "http://proxy.test:3128"}
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Phase 6 active-probing OPSEC (registry.opsec_http_get)
+# ──────────────────────────────────────────────────────────────────────────
+
+
+class TestPhase6ActiveProbingOpsec:
+    """Phase 6 alt-port and content-path probing (``/.git/config``, ``/.env``,
+    ``/admin`` across subdomains) routes through ``registry.opsec_http_get`` so
+    the campaign's most exposed traffic inherits the proxy, JA3, rate limiter,
+    and jitter. It used to fire a raw ``httpx.AsyncClient`` outside the registry,
+    deanonymising the operator on a paranoid engagement. These pin the wiring."""
+
+    async def test_opsec_http_get_injects_proxy_when_bound(self):
+        registry = ToolRegistry()
+        registry.set_campaign_context(
+            scope_guard=None,  # type: ignore[arg-type]
+            proxy_manager=ProxyManager(proxy_url="http://capture.local:8080"),
+        )
+        inits: list[dict] = []
+        real_init = httpx.AsyncClient.__init__
+
+        def _capture_init(self, *args, **kwargs):
+            inits.append(kwargs)
+            real_init(self, *args, **kwargs)
+
+        with respx.mock, patch.object(httpx.AsyncClient, "__init__", _capture_init):
+            respx.get("https://target.local/.env").mock(return_value=Response(200))
+            resp = await registry.opsec_http_get(
+                "https://target.local/.env", source="phase6_active"
+            )
+        assert resp.status_code == 200
+        proxied = [k for k in inits if k.get("proxy") == "http://capture.local:8080"]
+        assert proxied, f"opsec_http_get did not inject the campaign proxy: {inits}"
+
+    async def test_opsec_http_get_no_proxy_when_unbound(self):
+        registry = ToolRegistry()  # no campaign context bound
+        inits: list[dict] = []
+        real_init = httpx.AsyncClient.__init__
+
+        def _capture_init(self, *args, **kwargs):
+            inits.append(kwargs)
+            real_init(self, *args, **kwargs)
+
+        with respx.mock, patch.object(httpx.AsyncClient, "__init__", _capture_init):
+            respx.get("https://target.local/admin").mock(return_value=Response(200))
+            resp = await registry.opsec_http_get(
+                "https://target.local/admin", source="phase6_active"
+            )
+        assert resp.status_code == 200
+        assert all("proxy" not in k for k in inits), (
+            "an unproxied campaign must not force a proxy on active probing"
+        )
+
+    async def test_opsec_http_get_awaits_rate_limiter(self):
+        limiter = SourceRateLimiter(
+            source_rates={"phase6_active": 5.0, "default": 5.0},
+            burst_detection_enabled=False,
+        )
+        bucket = limiter._get_bucket("phase6_active")
+        bucket.capacity = 1.0
+        bucket._tokens = 1.0
+        registry = ToolRegistry()
+        registry.set_campaign_context(scope_guard=None, rate_limiter=limiter)  # type: ignore[arg-type]
+        with respx.mock:
+            respx.get(url__startswith="https://t.local").mock(
+                return_value=Response(200)
+            )
+            t0 = time.monotonic()
+            await registry.opsec_http_get("https://t.local/a", source="phase6_active")
+            await registry.opsec_http_get("https://t.local/b", source="phase6_active")
+            elapsed = time.monotonic() - t0
+        assert elapsed >= 0.1, f"expected rate-limit delay, elapsed={elapsed:.3f}s"
+
+    async def test_opsec_http_get_degrades_without_context(self):
+        """No stealth/proxy bound: a plain httpx GET, byte-for-byte the previous
+        behaviour, so the default install is unchanged."""
+        registry = ToolRegistry()
+        with respx.mock:
+            respx.get("https://t.local/robots.txt").mock(
+                return_value=Response(200, text="ok")
+            )
+            resp = await registry.opsec_http_get("https://t.local/robots.txt")
+        assert resp.status_code == 200
+        assert resp.text == "ok"

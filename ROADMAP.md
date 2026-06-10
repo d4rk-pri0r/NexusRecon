@@ -84,15 +84,19 @@ exists actually deliver on its claim.
        genuinely extracted none. Regression guard:
        `tests/unit/test_campaign_runner_phases.py`. Done 2026-06-09.
 
-3. [ ] **Close the phase6 deanonymization gap.** Active web-probing
-       (`/.git/config`, `/.env`, `/admin`) in `graph/nodes.py` fires raw
+3. [~] **Close the phase6 deanonymization gap.** Active web-probing
+       (`/.git/config`, `/.env`, `/admin`) in `graph/nodes.py` fired raw
        `httpx.AsyncClient` outside `registry.execute()`, bypassing proxy, JA3,
        rate limiter, and jitter simultaneously, on the campaign's most exposed
-       traffic. Route it through the registry so it inherits the OPSEC stack, or
-       relabel "proxy injection" as partial and warn loudly at preflight. Also
-       inject proxy env into subprocess tools (subfinder, amass, nuclei) and
-       bind OPSEC context in `resume()`. This is the only finding that could get
-       a client-engagement operator burned.
+       traffic. Done: phase6 alt-port and content-path probing now routes through
+       a new `registry.opsec_http_get()` that mirrors the `execute()` OPSEC
+       envelope (per-source rate limiter, stealth jitter, proxy injection via
+       `proxy_kwargs()`, JA3/TLS impersonation), degrading to plain httpx when no
+       context is bound. Wire-verified in
+       `tests/integration/test_opsec_wire.py::TestPhase6ActiveProbingOpsec`.
+       Remaining (follow-up): inject proxy env into subprocess tools (subfinder,
+       amass, nuclei) and bind OPSEC context in `resume()`. The phase6 hole, the
+       one that could get a client-engagement operator burned, is closed.
 
 4. [ ] **Make the graph carry real entities and real edges.** On a default run
        `EntityGraph.from_state()` instantiates 5 of 17 entity types and draws no

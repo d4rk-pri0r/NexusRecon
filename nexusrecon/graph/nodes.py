@@ -800,30 +800,34 @@ async def phase6_active(state: CampaignGraphState) -> CampaignGraphState:
     infra_intel = dict(state.get("infra_intel", {}))
     subdomains = list(state.get("subdomain_intel", {}).keys())
 
-    import httpx as _httpx
-
     registry = get_registry()
     ua_pool = UserAgentPool()
     sem = asyncio.Semaphore(25)  # F-017: shared semaphore caps concurrent HTTP connections
 
+    # Active probing routes through registry.opsec_http_get so it inherits the
+    # campaign OPSEC envelope (proxy, JA3/TLS impersonation, per-source rate
+    # limiter, stealth jitter). Previously these fired a raw httpx client outside
+    # the registry, deanonymising the operator on the campaign's most exposed
+    # traffic. Without a bound stealth/proxy context it degrades to plain httpx.
     # Alt-port probing — parallelized with semaphore, rotated UA
     alt_ports = [8080, 8443, 3000, 8000, 9090, 9443, 5000, 4443, 10443]
 
     async def _probe_alt_port(sub: str, port: int) -> tuple[str, int, dict | None]:
         async with sem:
             try:
-                async with _httpx.AsyncClient(timeout=5.0) as client:
-                    resp = await client.get(
-                        f"https://{sub}:{port}",
-                        headers={"User-Agent": ua_pool.get()},
-                    )
-                    if resp.status_code < 500:
-                        return sub, port, {
-                            "port": port,
-                            "status": resp.status_code,
-                            "server": resp.headers.get("server", ""),
-                            "title": _extract_title(resp.text),
-                        }
+                resp = await registry.opsec_http_get(
+                    f"https://{sub}:{port}",
+                    source="phase6_active",
+                    headers={"User-Agent": ua_pool.get()},
+                    timeout=5.0,
+                )
+                if resp.status_code < 500:
+                    return sub, port, {
+                        "port": port,
+                        "status": resp.status_code,
+                        "server": resp.headers.get("server", ""),
+                        "title": _extract_title(resp.text),
+                    }
             except Exception:
                 pass
         return sub, port, None
@@ -855,17 +859,19 @@ async def phase6_active(state: CampaignGraphState) -> CampaignGraphState:
     async def _probe_path(sub: str, path: str) -> tuple[str, str, dict | None]:
         async with sem:
             try:
-                async with _httpx.AsyncClient(timeout=5.0, follow_redirects=False) as client:
-                    resp = await client.get(
-                        f"https://{sub}{path}",
-                        headers={"User-Agent": ua_pool.get()},
-                    )
-                    if resp.status_code not in (404, 410):
-                        return sub, path, {
-                            "path": path,
-                            "status": resp.status_code,
-                            "size": len(resp.content),
-                        }
+                resp = await registry.opsec_http_get(
+                    f"https://{sub}{path}",
+                    source="phase6_active",
+                    headers={"User-Agent": ua_pool.get()},
+                    timeout=5.0,
+                    follow_redirects=False,
+                )
+                if resp.status_code not in (404, 410):
+                    return sub, path, {
+                        "path": path,
+                        "status": resp.status_code,
+                        "size": len(resp.content),
+                    }
             except Exception:
                 pass
         return sub, path, None

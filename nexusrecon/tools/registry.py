@@ -493,6 +493,78 @@ class ToolRegistry:
 
         return result
 
+    async def opsec_http_get(
+        self,
+        url: str,
+        *,
+        source: str = "active_probe",
+        headers: dict[str, str] | None = None,
+        timeout: float = 5.0,
+        follow_redirects: bool = False,
+    ) -> Any:
+        """OPSEC-aware HTTP GET for ad-hoc probing that is not a registered tool.
+
+        Phase 6 active enumeration (alt-port and content-path probing of
+        ``/.git/config``, ``/.env``, ``/admin`` across subdomains) used to fire a
+        raw ``httpx.AsyncClient`` outside ``execute()``, bypassing the proxy,
+        JA3/TLS impersonation, the per-source rate limiter, and stealth jitter on
+        the campaign's most exposed traffic. An operator who trusted the proxy
+        claim on a paranoid engagement could be deanonymised by their own active
+        phase.
+
+        This applies the same OPSEC envelope as ``execute()``: it awaits the
+        per-source rate limiter, sleeps the stealth-profile jitter, and routes
+        the request through ``make_http_client`` inside the proxy + TLS
+        impersonation context so the proxy and browser fingerprint are honoured.
+        Without a bound campaign context (no ``set_campaign_context``) it degrades
+        to a plain httpx GET, byte-for-byte the previous behaviour.
+
+        Mirrors the execute() envelope deliberately rather than refactoring it, to
+        keep the load-bearing tool path untouched. Exceptions propagate so the
+        caller's existing try/except records them as a no-result probe.
+        """
+        # ── OPSEC: rate-limit per source (token bucket) ──────────────────────
+        if self._rate_limiter is not None:
+            await self._rate_limiter.wait(source)
+
+        # ── OPSEC: stealth-profile jitter ────────────────────────────────────
+        if self._stealth_profile is not None:
+            dmin = float(getattr(self._stealth_profile, "request_delay_min", 0.0) or 0.0)
+            dmax = float(getattr(self._stealth_profile, "request_delay_max", 0.0) or 0.0)
+            if dmax > 0.0 and dmax >= dmin:
+                await asyncio.sleep(random.uniform(dmin, dmax))
+
+        # ── OPSEC: resolve proxy + JA3 target exactly as execute() does ──────
+        proxy_url: str | None = None
+        if self._proxy_manager is not None and self._proxy_manager.available:
+            proxy_url = self._proxy_manager.get_proxy_for_source(source)
+
+        tls_target: str | None = None
+        try:
+            from nexusrecon.core.config import get_config
+            tls_target = getattr(get_config(), "tls_impersonate", None)
+        except Exception:
+            tls_target = None
+        if not tls_target:
+            tls_target = getattr(self._stealth_profile, "tls_impersonate", None)
+
+        from nexusrecon.opsec.context import proxy_kwargs
+        from nexusrecon.tools.base import make_http_client
+
+        with tls_impersonate_context(tls_target), proxy_context(proxy_url):
+            # make_http_client auto-applies the TLS target from its ContextVar,
+            # but the proxy must be passed as an httpx kwarg (the same contract
+            # BaseHTTPTool tools honour via self._proxy_kwargs()). proxy_kwargs()
+            # reads the proxy_context just entered: {"proxy": url} when bound,
+            # {} otherwise so an unproxied campaign stays unproxied.
+            client_kwargs: dict[str, Any] = {
+                "timeout": timeout,
+                "follow_redirects": follow_redirects,
+            }
+            client_kwargs.update(proxy_kwargs())
+            async with make_http_client(**client_kwargs) as client:
+                return await client.get(url, headers=headers or {})
+
 
 # ── Decorator ────────────────────────────────────────────────────────────────
 
