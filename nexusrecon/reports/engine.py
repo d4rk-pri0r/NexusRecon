@@ -1400,64 +1400,37 @@ class ReportEngine:
     # ── Entity Graph HTML (pyvis) ──────────────────────────────────────────────
 
     def _entity_graph_html(self, state: dict[str, Any]) -> str:
-        """Interactive HTML entity graph using pyvis."""
-        from networkx import DiGraph
-        from pyvis.network import Network
+        """Interactive HTML entity graph, rendered from the real EntityGraph.
 
-        entity_graph = state.get("entity_graph", {})
-        if not entity_graph:
-            # Create a minimal graph from available data
-            entity_graph = {
-                "subdomains": list(state.get("subdomain_intel", {}).keys())[:100],
-                "emails": list(state.get("email_intel", {}).get("emails", {}).keys())[:100],
-            }
-
-        G = DiGraph()
-
-        # Add root target
-        seeds = state.get("seeds", [])
-        for seed in seeds:
-            G.add_node(seed, label=seed, color="#ff0000", size=30, group="seed")
-
-        # Add subdomains
-        for sub in entity_graph.get("subdomains", [])[:200]:
-            G.add_node(sub, label=sub, color="#0066cc", size=10, group="subdomain")
-            for seed in seeds:
-                if seed in sub:
-                    G.add_edge(seed, sub)
-
-        # Add emails
-        for em in entity_graph.get("emails", [])[:200]:
-            G.add_node(em, label=em, color="#009900", size=8, group="email")
-            domain = em.split("@")[-1] if "@" in em else ""
-            for seed in seeds:
-                if domain and seed in domain:
-                    G.add_edge(seed, em)
-
-        # Add confirmed leads as nodes
-        for lead in state.get("confirmed_leads", [])[:20]:
-            lead_node = f"lead:{lead[:50]}"
-            G.add_node(lead_node, label=lead[:50], color="#ff6600", size=12, group="lead")
-            for seed in seeds:
-                G.add_edge(seed, lead_node)
-
-        net = Network(height="750px", width="100%", directed=True, notebook=False)
-        net.from_nx(G)
-
-        # Style
-        net.set_options("""
-        {
-          "physics": {
-            "enabled": true,
-            "solver": "forceAtlas2Based",
-            "forceAtlas2Based": {"gravitationalConstant": -50, "centralGravity": 0.01, "springLength": 100}
-          },
-          "interaction": {"hover": true, "tooltipDelay": 200}
-        }
-        """)
+        Rebuilds the graph via ``EntityGraph.from_state`` (the same builder
+        phase4 / phase8 use) and delegates to its ``export_pyvis_html``, which
+        colours nodes by the full entity-type map (domain, subdomain, ip,
+        email, technology, secret, cve, person, ...) and labels edges by
+        relationship type (HAS_SUBDOMAIN, RESOLVES_TO, HAS_TECH, CITES,
+        BLOCKS, ...). The previous implementation read
+        ``entity_graph["subdomains"]`` / ``["emails"]``, keys that the graph's
+        ``to_dict()`` never emits, so once a real graph was present it silently
+        rendered only the seeds plus lead strings. Rebuilding here guarantees
+        the deliverable reflects the actual nodes and edges.
+        """
+        from nexusrecon.core.entity_graph import EntityGraph
 
         path = self.output_dir / "entity_graph.html"
-        net.write_html(str(path))
+        try:
+            graph = EntityGraph.from_state(state)
+            out = graph.export_pyvis_html(path)
+            if out:
+                return out
+        except Exception as e:  # noqa: BLE001 - never let the graph break a report
+            log.warning("entity graph export failed, writing minimal fallback", error=str(e))
+
+        # Fallback so the deliverable always exists (pyvis missing, or an
+        # unexpected graph error). A minimal valid HTML document.
+        path.write_text(
+            "<!DOCTYPE html><html><head><title>Entity Graph</title></head>"
+            "<body><p>Entity graph unavailable for this run.</p></body></html>",
+            encoding="utf-8",
+        )
         return str(path)
 
     # ── PDF Report ─────────────────────────────────────────────────────────────

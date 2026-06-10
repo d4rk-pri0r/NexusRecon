@@ -98,16 +98,23 @@ exists actually deliver on its claim.
        amass, nuclei) and bind OPSEC context in `resume()`. The phase6 hole, the
        one that could get a client-engagement operator burned, is closed.
 
-4. [ ] **Make the graph carry real entities and real edges.** On a default run
-       `EntityGraph.from_state()` instantiates 5 of 17 entity types and draws no
-       CITES/BLOCKS edges, so hypotheses land as disconnected text and the
-       "explain this finding as a graph traversal" capability does not exist.
-       Instantiate IP/domain/secret/technology in `from_state`, draw real
-       CITES/BLOCKS edges in phase4 by threading actual `cites` ids, and point
-       `reports/engine.py` at `nodes`/`edges` plus `export_pyvis_html` so the
-       report's graph reflects reality instead of rendering only seeds. Until
-       this lands, stop advertising "17+ types, traversable relationships,
-       per-source provenance."
+4. [x] **Make the graph carry real entities and real edges.** On a default run
+       `EntityGraph.from_state()` instantiated 5 of 17 entity types and drew no
+       CITES/BLOCKS edges, so hypotheses landed as disconnected text and the
+       "explain this finding as a graph traversal" capability did not exist.
+       Done: `from_state` now builds a domain backbone (DOMAIN nodes +
+       HAS_SUBDOMAIN edges), IP and technology nodes from the httpx active-probe
+       output (RESOLVES_TO / HAS_TECH), and secret nodes from code-leak output
+       (CONTAINS_SECRET, stored as a non-sensitive rule+file label, never the
+       raw secret). The reasoning layer now connects to evidence: each
+       hypothesis/lead draws mention-based CITES edges to the entities it names,
+       and each open question BLOCKS the leads/hypotheses it shares an entity
+       with. `reports/engine.py::_entity_graph_html` now rebuilds the real graph
+       and delegates to `export_pyvis_html` (the full type-colour map + edge
+       labels) instead of reading keys `to_dict()` never emitted. Regression:
+       `tests/unit/test_step_0_0_graph_wireup.py::TestEntityGraphEnrichment`.
+       Follow-up: thread per-source `ProvenanceRecord` writers (still unwired)
+       before re-advertising "per-source provenance."
 
 5. [ ] **Broaden degraded-tool detection.** Today only 4 of 97 tools override
        `assess_result` (whois/nuclei/sslyze/wafw00f), so a silent failure in

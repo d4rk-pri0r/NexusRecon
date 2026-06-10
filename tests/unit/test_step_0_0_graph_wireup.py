@@ -468,3 +468,110 @@ class TestMigrationFromTruncatedFormat:
         assert len(hyps) == 1
         assert hyps[0]["statement"] == "Pretext likely"
         assert hyps[0]["generated_by"] == "correlation"
+
+
+# ──────────────────────────────────────────────────────────────────────
+# from_state enrichment: richer entity types + real edges (perfect-it #4)
+# ──────────────────────────────────────────────────────────────────────
+
+
+class TestEntityGraphEnrichment:
+    """``from_state`` used to build an edge-poor bag of ~5 infra types with
+    disconnected reasoning text. These pin the enrichment: a domain backbone,
+    IP / technology / secret nodes from the real intel buckets, and CITES /
+    BLOCKS edges so the reasoning layer connects to its evidence."""
+
+    def _rel_types(self, g) -> set[str]:
+        return {d.get("rel_type") for _, _, d in g.graph.edges(data=True)}
+
+    def _edge_exists(self, g, src_val, dst_val, rel_type) -> bool:
+        idx = {data.get("value"): nid for nid, data in g.graph.nodes(data=True)}
+        s, t = idx.get(src_val), idx.get(dst_val)
+        if s is None or t is None:
+            return False
+        return any(
+            d.get("rel_type") == rel_type
+            for _, tgt, d in g.graph.out_edges(s, data=True)
+            if tgt == t
+        )
+
+    def _state(self, **overrides: Any) -> dict[str, Any]:
+        base: dict[str, Any] = {
+            "campaign_id": "c1", "engagement_id": "e1",
+            "seeds": ["acme.com"],
+            "subdomain_intel": {"www.acme.com": {"sources": ["crtsh"]}},
+            "email_intel": {"emails": {}},
+            "cloud_intel": {}, "code_intel": {}, "vuln_intel": {},
+            "infra_intel": {}, "hypotheses": [], "confirmed_leads": [],
+            "open_questions": [],
+        }
+        base.update(overrides)
+        return base
+
+    def test_domain_backbone_and_has_subdomain_edge(self):
+        g = EntityGraph.from_state(self._state())
+        domains = {d["value"] for d in g.get_entities_by_type(EntityType.DOMAIN)}
+        assert "acme.com" in domains
+        assert self._edge_exists(g, "acme.com", "www.acme.com", "has_subdomain")
+
+    def test_ip_and_technology_from_infra_intel(self):
+        state = self._state(infra_intel={
+            "www.acme.com": {"results": [{"a": ["1.2.3.4"], "tech": ["nginx", "React"]}]},
+        })
+        g = EntityGraph.from_state(state)
+        assert {e["value"] for e in g.get_entities_by_type(EntityType.IP_ADDRESS)} == {"1.2.3.4"}
+        assert {e["value"] for e in g.get_entities_by_type(EntityType.TECHNOLOGY)} == {"nginx", "React"}
+        assert self._edge_exists(g, "www.acme.com", "1.2.3.4", "resolves_to")
+        assert self._edge_exists(g, "www.acme.com", "nginx", "has_tech")
+
+    def test_non_ip_host_is_not_added_as_ip(self):
+        # A hostname in the 'host' field must not be misclassified as an IP.
+        state = self._state(infra_intel={
+            "www.acme.com": {"results": [{"host": "www.acme.com", "a": ["10.0.0.1"]}]},
+        })
+        g = EntityGraph.from_state(state)
+        assert {e["value"] for e in g.get_entities_by_type(EntityType.IP_ADDRESS)} == {"10.0.0.1"}
+
+    def test_secret_label_is_non_sensitive_and_linked_to_repo(self):
+        state = self._state(code_intel={
+            "gitleaks/acme.com": {"leaks": [
+                {"RuleID": "aws-key", "File": "cfg.py", "Secret": "AKIAVERYSECRET"},
+            ]},
+        })
+        g = EntityGraph.from_state(state)
+        secrets = g.get_entities_by_type(EntityType.SECRET)
+        assert len(secrets) == 1
+        # The raw secret value never enters the graph.
+        import json
+        assert "AKIAVERYSECRET" not in json.dumps(g.to_dict())
+        assert self._edge_exists(g, "gitleaks/acme.com", secrets[0]["value"], "contains_secret")
+
+    def test_hypothesis_cites_mentioned_evidence(self):
+        state = self._state(
+            hypotheses=["www.acme.com likely exposes an admin panel"],
+        )
+        g = EntityGraph.from_state(state)
+        # The hypothesis node CITES the subdomain it names.
+        assert "cites" in self._rel_types(g)
+        hyp = g.get_entities_by_type(EntityType.HYPOTHESIS)[0]
+        assert self._edge_exists(g, hyp["value"], "www.acme.com", "cites")
+
+    def test_open_question_blocks_lead_sharing_an_entity(self):
+        state = self._state(
+            confirmed_leads=["Exposed service on www.acme.com"],
+            open_questions=["Is www.acme.com behind a WAF?"],
+        )
+        g = EntityGraph.from_state(state)
+        assert "blocks" in self._rel_types(g)
+
+    def test_enrichment_is_idempotent(self):
+        state = self._state(
+            infra_intel={"www.acme.com": {"results": [{"a": ["1.2.3.4"], "tech": ["nginx"]}]}},
+            code_intel={"gitleaks/acme.com": {"leaks": [{"RuleID": "k", "File": "f"}]}},
+            hypotheses=["www.acme.com is interesting"],
+        )
+        g1 = EntityGraph.from_state(state)
+        n1, e1 = g1.graph.number_of_nodes(), g1.graph.number_of_edges()
+        g2 = EntityGraph.from_state(state)
+        assert g2.graph.number_of_nodes() == n1
+        assert g2.graph.number_of_edges() == e1

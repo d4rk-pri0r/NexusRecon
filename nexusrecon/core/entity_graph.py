@@ -1088,6 +1088,27 @@ class EntityGraph:
             campaign_id=campaign_id or state.get("campaign_id", ""),
             engagement_id=engagement_id or state.get("engagement_id", ""),
         )
+        # Id maps so later passes can draw real edges between entities (the
+        # graph was previously an edge-poor dedup bag; these let us connect
+        # subdomains to their domain, to their resolved IPs and technologies,
+        # and repos to their leaked secrets).
+        sub_to_id: dict[str, str] = {}
+        domain_to_id: dict[str, str] = {}
+        repo_to_id: dict[str, str] = {}
+
+        def _ensure_domain(d: str, source: str) -> str | None:
+            if not isinstance(d, str) or not d:
+                return None
+            did = domain_to_id.get(d)
+            if did is None:
+                did = g.add_domain(d, source=source)
+                domain_to_id[d] = did
+            return did
+
+        # Seed domains as first-class DOMAIN nodes (the graph backbone).
+        for seed in (state.get("seeds") or []):
+            _ensure_domain(seed, "scope")
+
         # Subdomains: each key in subdomain_intel is a subdomain;
         # the values may carry source-tool info. We harvest the
         # source list if present, defaulting to a generic marker.
@@ -1106,7 +1127,13 @@ class EntityGraph:
             # Best-effort parent domain inference: last two labels.
             parts = sub.split(".")
             parent = ".".join(parts[-2:]) if len(parts) >= 2 else sub
-            g.add_subdomain(sub, parent=parent, source=source)
+            sid = g.add_subdomain(sub, parent=parent, source=source)
+            sub_to_id[sub] = sid
+            # Connect the subdomain to its parent domain node so the graph is
+            # traversable from the seed down rather than a flat list.
+            did = _ensure_domain(parent, source)
+            if did is not None and did != sid:
+                g.relate(did, sid, RelationshipType.HAS_SUBDOMAIN, source_tool=source)
 
         # Emails: email_intel.emails is a dict keyed by address.
         email_intel = state.get("email_intel") or {}
@@ -1154,7 +1181,7 @@ class EntityGraph:
             # Generic placeholder — code tools store richer info
             # under the key but the graph only needs the slug
             # for cross-referencing in this Step 0.0 wire-up.
-            g.add_repository(
+            repo_to_id[key] = g.add_repository(
                 key, platform="github", source="phase3",
             )
 
@@ -1168,21 +1195,122 @@ class EntityGraph:
             if isinstance(cve_id, str) and cve_id.startswith("CVE-"):
                 g.add_cve(cve_id, source="phase6")
 
-        # Reasoning artifacts → first-class nodes. The cite/
-        # block edges are NOT inferred here (we don't know which
-        # entities each hypothesis was based on without re-
-        # running the correlation logic). The correlation phase
-        # itself is the right place to draw the edges.
+        # IPs + technologies from active-probe output (httpx writes
+        # ``infra_intel[sub] = {"results": [<httpx json>...]}`` where each row
+        # carries ``a`` (resolved A records) and ``tech``). Each becomes a typed
+        # node with a RESOLVES_TO / HAS_TECH edge from the subdomain. Wrapped so
+        # a shape surprise from a tool-version bump never breaks the rebuild.
+        import ipaddress
+
+        def _is_ip(val: Any) -> bool:
+            try:
+                ipaddress.ip_address(str(val))
+                return True
+            except Exception:
+                return False
+
+        infra_intel = state.get("infra_intel") or {}
+        for sub, sid in sub_to_id.items():
+            info = infra_intel.get(sub)
+            if not isinstance(info, dict):
+                continue
+            results = info.get("results")
+            rows = results if isinstance(results, list) else [info]
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                try:
+                    ip_candidates: list[str] = []
+                    a_records = row.get("a")
+                    if isinstance(a_records, list):
+                        ip_candidates.extend(str(x) for x in a_records)
+                    for k in ("ip", "host"):
+                        v = row.get(k)
+                        if isinstance(v, str):
+                            ip_candidates.append(v)
+                    for ip in ip_candidates:
+                        if _is_ip(ip):
+                            ip_id = g.add_ip(ip, source="phase5")
+                            g.relate(sid, ip_id, RelationshipType.RESOLVES_TO,
+                                     source_tool="phase5")
+                    techs = row.get("tech") or row.get("technologies") or []
+                    if isinstance(techs, list):
+                        for tech in techs:
+                            if isinstance(tech, str) and tech.strip():
+                                tech_id = g.add_technology(tech.strip(), source="phase5")
+                                g.relate(sid, tech_id, RelationshipType.HAS_TECH,
+                                         source_tool="phase5")
+                except Exception:
+                    continue
+
+        # Secrets from code leakage (gitleaks ``leaks`` / trufflehog +
+        # github_recon ``findings``). We store a NON-SENSITIVE label (rule +
+        # file), never the raw secret value, and link it to its repository.
+        for key, data in code_intel.items():
+            if not isinstance(data, dict):
+                continue
+            repo_id = repo_to_id.get(key)
+            if repo_id is None:
+                continue
+            secret_items = data.get("leaks") or data.get("findings") or []
+            if not isinstance(secret_items, list):
+                continue
+            for i, item in enumerate(secret_items):
+                if not isinstance(item, dict):
+                    continue
+                try:
+                    rule = (
+                        item.get("RuleID") or item.get("DetectorName")
+                        or item.get("rule") or item.get("type") or "secret"
+                    )
+                    loc = item.get("File") or item.get("file") or item.get("path") or ""
+                    label = f"{rule}@{loc}" if loc else f"{key}:{rule}#{i}"
+                    secret_id = g.add_secret(label, secret_type=str(rule), source="phase3")
+                    g.relate(repo_id, secret_id, RelationshipType.CONTAINS_SECRET,
+                             source_tool="phase3")
+                except Exception:
+                    continue
+
+        # Reasoning artifacts → first-class nodes WITH edges back to evidence.
+        # Each hypothesis / lead CITES every entity whose value is mentioned in
+        # its statement (mention-based linkage, evidence-labelled), and each
+        # open question BLOCKS any lead / hypothesis that shares a cited entity.
+        # This is the "explain a finding as a graph traversal" capability: the
+        # reasoning layer is no longer a set of disconnected text nodes.
+        _CITABLE_TYPES = {
+            "domain", "subdomain", "email", "ip_address", "cve",
+            "cloud_asset", "technology", "repository", "person", "username",
+        }
+        citable: list[tuple[str, str]] = []
+        for nid, ndata in g.graph.nodes(data=True):
+            if ndata.get("entity_type") in _CITABLE_TYPES:
+                val = str(ndata.get("value") or "")
+                if len(val) >= 4:  # skip trivially short values to avoid noise
+                    citable.append((val.lower(), nid))
+
+        def _mentioned_ids(text: str) -> list[str]:
+            t = (text or "").lower()
+            return [nid for val, nid in citable if val in t]
+
+        downstream: list[tuple[str, set[str]]] = []  # (node_id, cited entity ids)
         for h in (state.get("hypotheses") or []):
             if isinstance(h, str) and h:
-                g.add_hypothesis(h, source="phase4_correlation",
-                                 generated_by="phase4")
+                cites = _mentioned_ids(h)
+                hid = g.add_hypothesis(h, source="phase4_correlation",
+                                       generated_by="phase4", cites=cites)
+                downstream.append((hid, set(cites)))
         for ld in (state.get("confirmed_leads") or []):
             if isinstance(ld, str) and ld:
-                g.add_lead(ld, source="phase4_correlation")
+                cites = _mentioned_ids(ld)
+                lid = g.add_lead(ld, source="phase4_correlation", cites=cites)
+                downstream.append((lid, set(cites)))
         for q in (state.get("open_questions") or []):
             if isinstance(q, str) and q:
-                g.add_open_question(q, source="phase4_correlation")
+                q_ents = set(_mentioned_ids(q))
+                blocks = [
+                    nid for nid, ents in downstream if q_ents and (ents & q_ents)
+                ]
+                g.add_open_question(q, source="phase4_correlation", blocks=blocks)
 
         # Phase 0.1 PR B: pull the Phase D IdentityGraph + Phase E
         # RelationshipGraph into the unified EntityGraph when
