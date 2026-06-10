@@ -961,7 +961,15 @@ def export(
     findings = data.get("findings", [])
 
     if not output:
-        output = str(state_path.parent / f"findings_export.{fmt}")
+        # STIX bundles use the canonical name the `sign` command and the
+        # signing receipt discover; every other format uses the generic
+        # pattern. Previously stix2 also used findings_export.stix2, so the
+        # advertised `export --format stix2` then `sign` happy path broke:
+        # sign auto-discovered stix2-bundle.json and never found it.
+        if fmt == "stix2":
+            output = str(state_path.parent / "stix2-bundle.json")
+        else:
+            output = str(state_path.parent / f"findings_export.{fmt}")
 
     out_path = Path(output)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1057,6 +1065,10 @@ def export(
             if kind == "total_objects":
                 continue
             console.print(f"  {kind}: [cyan]{count}[/cyan]")
+        console.print(
+            f"  next: sign it with "
+            f"[bold]nexusrecon sign {campaign_id} --key-id <key>[/bold]"
+        )
         return
     elif fmt == "markdown":
         lines = ["# Findings Export", "", f"**Campaign:** {campaign_id}", ""]
@@ -2450,13 +2462,20 @@ def sign_cmd(
         bundle = None
         for candidate in output_dir.rglob(campaign_id):
             if candidate.is_dir():
-                bp = candidate / "stix2-bundle.json"
-                if bp.exists():
-                    bundle = bp
-                    break
+                # Canonical name first, then the generic export fallback so a
+                # bundle written by an older `export --format stix2` (which
+                # used findings_export.stix2) is still discovered.
+                for name in ("stix2-bundle.json", "findings_export.stix2"):
+                    bp = candidate / name
+                    if bp.exists():
+                        bundle = bp
+                        break
+            if bundle is not None:
+                break
         if bundle is None:
             console.print(
-                f"[red]No stix2-bundle.json found for campaign "
+                f"[red]No STIX bundle (stix2-bundle.json or "
+                f"findings_export.stix2) found for campaign "
                 f"{campaign_id!r}. Run `nexusrecon export "
                 f"{campaign_id} --format stix2` first or pass "
                 f"--bundle.[/red]"

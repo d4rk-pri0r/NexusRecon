@@ -90,22 +90,39 @@ def _now() -> str:
     )
 
 
+#: STIX 2.1 Cyber-observable Object types this exporter emits. SCOs do NOT
+#: carry the SDO common properties ``created`` / ``modified`` /
+#: ``created_by_ref`` / ``confidence``; attaching them makes a strict OASIS
+#: validator reject the object. SDOs (identity, software, vulnerability,
+#: infrastructure, note, relationship) DO carry them.
+_SCO_TYPES: frozenset[str] = frozenset({
+    "domain-name", "ipv4-addr", "ipv6-addr", "email-addr", "url",
+})
+
+
 def _base_object(
     stix_type: str,
     seed: str,
     *,
     created_by_ref: str | None = None,
 ) -> dict[str, Any]:
-    """Common fields every SDO/SCO carries."""
+    """Common fields for one STIX object.
+
+    SCOs and SDOs share ``type`` / ``id`` / ``spec_version``. Only SDOs get
+    ``created`` / ``modified`` / ``created_by_ref`` ── those are SDO common
+    properties in STIX 2.1, and a strict validator rejects an SCO (domain-name,
+    ipv4-addr, email-addr, url) that carries them.
+    """
     obj: dict[str, Any] = {
         "type": stix_type,
         "spec_version": SPEC_VERSION,
         "id": _stix_id(stix_type, seed),
-        "created": _now(),
-        "modified": _now(),
     }
-    if created_by_ref:
-        obj["created_by_ref"] = created_by_ref
+    if stix_type not in _SCO_TYPES:
+        obj["created"] = _now()
+        obj["modified"] = _now()
+        if created_by_ref:
+            obj["created_by_ref"] = created_by_ref
     return obj
 
 
@@ -243,9 +260,11 @@ def _map_entity(entity: dict[str, Any]) -> dict[str, Any] | None:
     if mapper is None:
         return None
     obj = mapper(entity)
-    # Attach NexusRecon provenance as custom properties.
-    if entity.get("confidence") is not None:
+    # ``confidence`` is an SDO common property; never attach it to an SCO.
+    if entity.get("confidence") is not None and obj["type"] not in _SCO_TYPES:
         obj["confidence"] = int(float(entity["confidence"]) * 100)
+    # NexusRecon provenance as custom properties (``x_`` prefix is spec-allowed
+    # on both SDOs and SCOs in STIX 2.1).
     if entity.get("sources"):
         obj["x_nexusrecon_sources"] = list(entity["sources"])
     if entity.get("entity_id"):
@@ -324,8 +343,11 @@ def build_stix_bundle(
                 entity_type=node.get("entity_type"),
             )
             continue
-        # Claim NexusRecon as the creator.
-        mapped["created_by_ref"] = nr_identity["id"]
+        # Claim NexusRecon as the creator. ``created_by_ref`` is an SDO common
+        # property; SCOs (domain-name, ipv4-addr, email-addr, url) must not
+        # carry it, so only stamp SDOs or a strict validator rejects the SCO.
+        if mapped["type"] not in _SCO_TYPES:
+            mapped["created_by_ref"] = nr_identity["id"]
         objects.append(mapped)
         entity_id_to_stix_id[entity_id] = mapped["id"]
         counts[mapped["type"]] = counts.get(mapped["type"], 0) + 1

@@ -298,40 +298,63 @@ class TestEntityMapping:
 # ──────────────────────────────────────────────────────────────────────
 
 
+#: STIX 2.1 SCO types this exporter emits. SCOs must NOT carry the SDO common
+#: properties created / modified / created_by_ref / confidence.
+_SCO_TYPES = {"domain-name", "ipv4-addr", "ipv6-addr", "email-addr", "url"}
+
+
 class TestObjectMetadata:
     def test_all_required_fields_present(self, graph: EntityGraph):
         graph.add_domain("acme.com", source="scope", confidence=0.85)
         bundle = build_stix_bundle(graph).bundle
         for obj in bundle["objects"]:
-            # STIX-mandatory.
+            # STIX-mandatory on every object.
             assert obj["type"]
             assert obj["spec_version"] == "2.1"
             assert _STIX_ID_PATTERN.match(obj["id"])
-            assert obj["created"]
-            assert obj["modified"]
+            if obj["type"] in _SCO_TYPES:
+                # SCOs must NOT carry SDO common properties, or a strict
+                # OASIS validator rejects the bundle.
+                assert "created" not in obj
+                assert "modified" not in obj
+                assert "created_by_ref" not in obj
+            else:
+                assert obj["created"]
+                assert obj["modified"]
 
-    def test_confidence_included(self, graph: EntityGraph):
-        graph.add_domain("acme.com", source="scope", confidence=0.75)
+    def test_confidence_on_sdo_not_sco(self, graph: EntityGraph):
+        graph.add_domain("acme.com", source="scope", confidence=0.75)  # SCO
+        graph.add_cve("CVE-2021-44228", source="nvd", confidence=0.9)  # SDO
         bundle = build_stix_bundle(graph).bundle
+        # SCO: confidence is an SDO-only property, so it must be absent.
         domains = _objects_of_type(bundle, "domain-name")
-        assert domains[0]["confidence"] == 75
+        assert "confidence" not in domains[0]
+        # SDO: confidence is surfaced (scaled to the STIX 0-100 range).
+        vulns = _objects_of_type(bundle, "vulnerability")
+        assert vulns[0]["confidence"] == 90
 
     def test_sources_surfaced_as_custom_property(self, graph: EntityGraph):
+        # x_ custom properties are spec-allowed on SCOs and carry provenance.
         graph.add_domain("acme.com", source="subfinder")
         bundle = build_stix_bundle(graph).bundle
         domains = _objects_of_type(bundle, "domain-name")
         assert "subfinder" in domains[0]["x_nexusrecon_sources"]
 
-    def test_created_by_ref_points_to_nexusrecon(self, graph: EntityGraph):
-        graph.add_domain("acme.com", source="scope")
+    def test_created_by_ref_on_sdo_not_sco(self, graph: EntityGraph):
+        graph.add_domain("acme.com", source="scope")          # SCO
+        graph.add_cve("CVE-2021-44228", source="nvd")          # SDO
         bundle = build_stix_bundle(graph).bundle
         nr_id = next(
             o["id"] for o in bundle["objects"]
             if o["type"] == "identity"
             and o.get("name") == "NexusRecon"
         )
+        # SDO claims NexusRecon as creator.
+        vulns = _objects_of_type(bundle, "vulnerability")
+        assert vulns[0]["created_by_ref"] == nr_id
+        # SCO must not carry created_by_ref.
         domains = _objects_of_type(bundle, "domain-name")
-        assert domains[0]["created_by_ref"] == nr_id
+        assert "created_by_ref" not in domains[0]
 
 
 # ──────────────────────────────────────────────────────────────────────

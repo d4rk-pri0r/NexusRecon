@@ -211,6 +211,26 @@ class TestExportCommand:
             assert "Title" in content
             assert "Test Finding" in content
 
+    def test_export_stix2_default_filename_is_canonical(self):
+        """`export --format stix2` with no --output must write
+        stix2-bundle.json, the exact name `sign` auto-discovers. Previously it
+        wrote findings_export.stix2 and the advertised export->sign happy path
+        broke on defaults."""
+        with tempfile.TemporaryDirectory() as tmp:
+            campaign_dir = self._setup_campaign(tmp, "TEST-EXP-STIX", [])
+            with patch("nexusrecon.cli.main.get_config") as mock_config:
+                mock_cfg = mock_config.return_value
+                mock_cfg.output_dir = tmp
+                result = runner.invoke(app, [
+                    "export", "TEST-EXP-STIX", "--format", "stix2"
+                ])
+            assert result.exit_code == 0, result.output
+            assert (campaign_dir / "stix2-bundle.json").exists()
+            # The legacy mismatched name is not what we write by default.
+            assert not (campaign_dir / "findings_export.stix2").exists()
+            bundle = json.loads((campaign_dir / "stix2-bundle.json").read_text())
+            assert bundle["type"] == "bundle"
+
     def test_export_to_markdown(self):
         with tempfile.TemporaryDirectory() as tmp:
             self._setup_campaign(tmp, "TEST-EXP-03", [

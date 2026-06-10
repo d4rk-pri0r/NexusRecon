@@ -133,14 +133,20 @@ exists actually deliver on its claim.
        (findings auto-backfilled with a hash over the LLM's own prose); fix or
        drop the claim.
 
-7. [ ] **Fix the export-to-sign happy path and STIX SCO schema.** `export`
-       writes `findings_export.stix2` while `sign` auto-discovers
-       `stix2-bundle.json`, so the one advertised crypto-provenance workflow is
-       broken on defaults and the error message names the wrong filename. Make
-       `sign` discover what `export` writes. Stop attaching SDO-only fields
-       (created/modified/created_by_ref/confidence) to SCOs so a strict OASIS
-       validator and a real TIP will ingest the bundle. The signed STIX is real
-       client value; do not let a filename typo break its only happy path.
+7. [x] **Fix the export-to-sign happy path and STIX SCO schema.** Done.
+       `export --format stix2` now writes the canonical `stix2-bundle.json`
+       (the exact name `sign` and the receipt expect) instead of
+       `findings_export.stix2`, and prints the next-step `sign` hint. `sign`
+       auto-discovery accepts both names (canonical first, legacy fallback) and
+       its error message lists both. STIX SCO schema fixed: `_base_object` and
+       `build_stix_bundle` no longer attach the SDO common properties
+       (created / modified / created_by_ref / confidence) to SCOs (domain-name,
+       ipv4-addr, ipv6-addr, email-addr, url), which a strict OASIS validator
+       rejected; SDOs still carry them, and the `x_` provenance properties (spec
+       allowed on SCOs) are preserved. Regression:
+       `tests/integration/test_cli.py::TestExportCommand::test_export_stix2_default_filename_is_canonical`
+       and `tests/unit/test_phase_4b_stix_export.py::TestObjectMetadata`. Done
+       2026-06-09.
 
 8. [ ] **Decide the Continuous Confidence Engine.** It is sold as a core bet but
        `nexusrecon/verification/` has zero production callers: nothing constructs
