@@ -17,12 +17,14 @@ from typing import Any
 _PHASE_TIER_FLOOR: dict[str, int] = {
     "phase1": 0,
     "phase2": 0,
+    "phase2_5": 0,
     "phase3": 0,
     "phase4": 0,
     "phase5": 2,
     "phase6": 3,
     "phase7": 0,
     "phase7_5": 0,
+    "phase7_7": 0,
     "phase8": 0,
     "phase9": 0,
 }
@@ -58,27 +60,41 @@ async def run_campaign(
     """
     from nexusrecon.graph.nodes import (
         phase1_passive_footprinting,
+        phase2_5_personal_identity_pivot,
         phase2_identity_cloud,
         phase3_code_leakage,
         phase4_correlation,
         phase5_light_active,
         phase6_active,
         phase7_5_harvest,
+        phase7_7_pretext_intelligence,
         phase7_vuln_pretext,
         phase8_attack_surface,
         phase9_reporting,
         reflection_node,
     )
 
+    # phase2_5 (personal-identity pivot + credential punch list) and phase7_7
+    # (relationship graph + pretext scoring) are tier-0 passive phases that
+    # operate on plain campaign state. They were previously reachable only via
+    # the --use-graph LangGraph path, which left their marquee deliverables
+    # (credential_exposure_paths.md, spear_phishing_intelligence.md) empty on a
+    # default run. Both degrade gracefully: they skip cleanly when no identity
+    # data exists, breach lookups stay gated by the scope guard's
+    # allow_breach_db_lookup constraint, and phishing-draft generation remains
+    # behind --generate-phishing. Slotted to match graph/workflow.py: 2_5 after
+    # corp identity is confirmed (phase2), 7_7 after credential harvest (7_5).
     phases = [
         ("phase1", "Passive Footprinting", phase1_passive_footprinting),
         ("phase2", "Identity & Cloud", phase2_identity_cloud),
+        ("phase2_5", "Personal Identity Pivot", phase2_5_personal_identity_pivot),
         ("phase3", "Code Leakage", phase3_code_leakage),
         ("phase4", "Correlation", phase4_correlation),
         ("phase5", "Light Active", phase5_light_active),
         ("phase6", "Active (T3)", phase6_active),
         ("phase7", "Vuln & Pretext", phase7_vuln_pretext),
         ("phase7_5", "Credential Harvest", phase7_5_harvest),
+        ("phase7_7", "Pretext Intelligence", phase7_7_pretext_intelligence),
         ("phase8", "Attack Surface", phase8_attack_surface),
         ("phase9", "Reporting", phase9_reporting),
     ]
@@ -146,8 +162,18 @@ async def run_campaign(
             except Exception:
                 pass
             findings_count = len(s.get("findings", []))
+            # Real entity count for the run-health summary (F-A5). phase4/phase8
+            # persist the built EntityGraph as state["entity_graph"]
+            # (nodes/edges/stats); before phase4 the graph is absent and 0 is the
+            # honest count. run_health takes the max entities_count across phases,
+            # so the post-phase4/8 counts dominate. Passing the real count instead
+            # of a hardcoded 0 stops the "entity extraction may be broken" caveat
+            # from firing on every healthy run, the false alarm that trained
+            # operators to distrust the entire run-health block.
+            entity_graph_state = s.get("entity_graph") or {}
+            entities_count = len(entity_graph_state.get("nodes", []))
             try:
-                campaign.end_phase(phase_id, findings_count, 0)
+                campaign.end_phase(phase_id, findings_count, entities_count)
             except Exception:
                 pass
             _emit({
