@@ -137,6 +137,30 @@ class TestGitHubReconTool:
         assert result.data["org_repos"] == {"total": 0, "repos": []}
         assert result.data["domain_in_code"]["total"] == 0
         assert result.data["secret_searches"]["findings"] == []
+        # A clean 404/200 run is a genuine negative, not a degraded scan.
+        assert result.data["_status_degraded"] is False
+
+    @patch("nexusrecon.tools.code.github_tool.asyncio.sleep", new_callable=AsyncMock)
+    @patch("nexusrecon.core.config.NexusConfig.get_secret", return_value="ghp_faketoken")
+    async def test_ratelimit_sets_status_degraded(self, _secret, _sleep) -> None:
+        """A 403 (rate limit / insufficient scope) on the endpoints is captured
+        as _status_degraded, so assess_result flags the throttled scan instead
+        of reporting a clean 'nothing on GitHub' (Wave F-A1 / ROADMAP item 5)."""
+        tool = GitHubTool()
+        with respx.mock:
+            respx.get(f"{self.BASE}/orgs/example.com").mock(
+                return_value=Response(403, json={"message": "API rate limit exceeded"})
+            )
+            respx.get(url__regex=r"https://api\.github\.com/orgs/example\.com/repos.*").mock(
+                return_value=Response(403, json={"message": "API rate limit exceeded"})
+            )
+            respx.get(url__regex=r"https://api\.github\.com/search/code.*").mock(
+                return_value=Response(403, json={"message": "API rate limit exceeded"})
+            )
+            result = await tool.run("example.com")
+        assert result.success is True
+        assert result.data["_status_degraded"] is True
+        assert tool.assess_result(result, "example.com") is not None
 
     @patch("nexusrecon.tools.code.github_tool.asyncio.sleep", new_callable=AsyncMock)
     @patch("nexusrecon.core.config.NexusConfig.get_secret", return_value="ghp_faketoken")

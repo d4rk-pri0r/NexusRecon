@@ -84,7 +84,7 @@ exists actually deliver on its claim.
        genuinely extracted none. Regression guard:
        `tests/unit/test_campaign_runner_phases.py`. Done 2026-06-09.
 
-3. [~] **Close the phase6 deanonymization gap.** Active web-probing
+3. [x] **Close the phase6 deanonymization gap.** Active web-probing
        (`/.git/config`, `/.env`, `/admin`) in `graph/nodes.py` fired raw
        `httpx.AsyncClient` outside `registry.execute()`, bypassing proxy, JA3,
        rate limiter, and jitter simultaneously, on the campaign's most exposed
@@ -94,9 +94,21 @@ exists actually deliver on its claim.
        `proxy_kwargs()`, JA3/TLS impersonation), degrading to plain httpx when no
        context is bound. Wire-verified in
        `tests/integration/test_opsec_wire.py::TestPhase6ActiveProbingOpsec`.
-       Remaining (follow-up): inject proxy env into subprocess tools (subfinder,
-       amass, nuclei) and bind OPSEC context in `resume()`. The phase6 hole, the
-       one that could get a client-engagement operator burned, is closed.
+       Follow-ups now closed (2026-06-11): subprocess tools inherit the campaign
+       proxy — `OSINTTool.run_subprocess()` (subfinder, amass, nuclei) and
+       maigret's own `create_subprocess_exec` thread the active proxy into the
+       child env as `HTTP(S)_PROXY`/`ALL_PROXY` via a new `opsec.context.proxy_env()`
+       that reads the same `proxy_context` `execute()` enters, passing `env=None`
+       when unproxied so the default install is byte-for-byte unchanged; and
+       `resume()` now rebuilds the scope model from `scope_metadata.json`
+       (reloading the original YAML, or falling back to the persisted
+       engagement+constraints seeded by the campaign's seeds) and rebinds the
+       full OPSEC stack via `set_campaign_context` before any phase runs, so a
+       resumed campaign no longer probes through an unbound registry. Regression
+       guards: `tests/integration/test_opsec_wire.py::TestSubprocessProxyEnv` and
+       `tests/integration/test_cli.py::TestRebuildScopeForResume`. The phase6
+       hole, the one that could get a client-engagement operator burned, is
+       closed.
 
 4. [x] **Make the graph carry real entities and real edges.** On a default run
        `EntityGraph.from_state()` instantiated 5 of 17 entity types and drew no
@@ -116,22 +128,64 @@ exists actually deliver on its claim.
        Follow-up: thread per-source `ProvenanceRecord` writers (still unwired)
        before re-advertising "per-source provenance."
 
-5. [ ] **Broaden degraded-tool detection.** Today only 4 of 97 tools override
-       `assess_result` (whois/nuclei/sslyze/wafw00f), so a silent failure in
-       subfinder, amass, httpx, shodan, or github_recon is reported as a clean
-       negative, the exact failure this feature was built to kill. Add
-       `assess_result` coverage for the high-traffic tools.
+5. [x] **Broaden degraded-tool detection.** Previously only 4 of ~99 tools
+       overrode `assess_result` (whois/nuclei/sslyze/wafw00f), so a silent
+       failure in subfinder, amass, httpx, shodan, or github_recon was reported
+       as a clean negative, the exact failure this feature was built to kill.
+       Done (2026-06-11): conservative `assess_result` overrides added to all
+       five (now 9 of ~99). The three subprocess tools (subfinder, amass, httpx)
+       now thread the binary's `returncode` + `stderr_tail` into `result.data`
+       (mirroring nuclei) and flag an empty result only when the exit code or a
+       DNS/network failure marker proves the enumeration did not run; httpx keys
+       strictly on a non-zero exit so a host that simply isn't serving HTTP stays
+       a legitimate negative. shodan already routes HTTP failures through
+       `classify_response`, so its override flags only the impossible case of a
+       success with no query data at all. github_recon, which used to swallow
+       401/403/429 into empty org/repo/secret results (the documented "quiet
+       rate-limit-driven empty results"), now records every endpoint's status
+       via a `_get` wrapper and sets `_status_degraded` when an auth/rate-limit
+       code is seen; 404 (target is not an org) stays a legitimate negative.
+       Every rule is double-gated to avoid crying wolf on a healthy run.
+       Regression guards: `tests/unit/test_wave_f_failure_detection.py`
+       (per-tool assessment + subprocess-capture cases) and
+       `tests/integration/test_code_tools.py::TestGitHubReconTool::test_ratelimit_sets_status_degraded`.
+       Adversarially verified (SHIP; no high-traffic default-path tool left
+       uncovered).
 
-6. [ ] **Stop MockLLM masquerading as analysis.** Keyless (the default, and the
+6. [x] **Stop MockLLM masquerading as analysis.** Keyless (the default, and the
        only path the test suite exercises) the persona layer no-ops into
        near-identical word-count boilerplate through the same code path as real
-       agents, and those findings flow into shipped reports. Either refuse to
-       emit agent findings without a key, or mark every MockLLM finding
-       unmistakably in the report. Add the one missing test that asserts persona
-       text reaches the prompt and changes output. Separately, the
-       `evidence_auditor` "legal-defensibility gate" is defeated by construction
-       (findings auto-backfilled with a hash over the LLM's own prose); fix or
-       drop the claim.
+       agents, and those findings flowed into shipped reports. Done (2026-06-11),
+       three parts: (a) *Mark, not refuse* (chosen to keep the keyless killer-demo
+       and test suite working). `AgentExecutor.run_agent` now stamps every finding
+       with a robust `analysis_engine` field ("mock" vs "live", driven by the
+       serving model, not the mutable `source`), and every human-facing report
+       deliverable prefixes templated findings with `[MOCK: templated output, not
+       analysis]` via `reports/engine.finding_display_title` (exec summary, full
+       report, correlated section, exec-summary table, HTML report, slide deck,
+       and the Jira CSV import), plus a per-finding caveat line in the detailed
+       view; the report-level mock run-health banner (Wave F-A6) stays. An
+       adversarial verification pass confirmed no human-facing finding-title
+       render path ships a MockLLM finding unmarked. (b) The missing persona test now
+       asserts role/goal/backstory reach the prompt and differentiate it per agent
+       (`tests/unit/test_agent_executor.py::TestAgentExecutor::test_build_context_persona_reaches_prompt_and_differentiates`).
+       (c) *Reframe, not full-fix* for the `evidence_auditor` "legal-defensibility
+       gate": agent findings now carry `evidence_provenance` ("self_reported" when
+       the hash is a content hash of the LLM's own prose, "tool_evidence" when
+       genuine `raw_evidence` is present), the report labels a self-reported
+       Evidence Hash honestly ("content hash of finding text; not independent
+       evidence"), and the auditor's role/goal/backstory drop the overstated
+       "legal defensibility" claim for honest citation-completeness framing. The
+       same overclaim was scrubbed from the surrounding docs/strings that
+       contradicted the reframe (`MANUAL.md` audit-log + chain-break notes,
+       `models/scope.py` and `core/campaign.py` scope-metadata docstrings), now
+       framed as integrity/scope-compliance/audit-traceability rather than legal
+       proof. Regression guards: `tests/unit/test_mock_finding_honesty.py`,
+       `tests/unit/test_reports.py::test_jira_tracker_marks_mock_findings`, and
+       the new `test_agent_executor` cases. The `evidence_auditor` remains a
+       completeness gate (presence of the four citation fields); a true
+       raw-tool-evidence hash chain (matching the `Finding.create()` model) is
+       deferred as a larger finding-pipeline change, not part of this item.
 
 7. [x] **Fix the export-to-sign happy path and STIX SCO schema.** Done.
        `export --format stix2` now writes the canonical `stix2-bundle.json`

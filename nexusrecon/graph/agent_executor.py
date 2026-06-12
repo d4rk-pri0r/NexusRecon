@@ -321,6 +321,16 @@ class AgentExecutor:
             # despite ATTRIBUTION RULE prompt. Walk findings and downgrade any that
             # cite stem-match cloud data to info severity + [POSSIBLE] prefix.
             new_findings = self._gate_findings_by_attribution(new_findings, state)
+            # Item 6 (MockLLM honesty): stamp the analysis engine on every
+            # finding so reports can mark templated MockLLM output unmistakably.
+            # Keyless runs no-op the persona layer into near-identical boilerplate;
+            # those findings must never read as real analysis in a delivered
+            # report. Driven by the model that served the call (``mock_llm`` is the
+            # keyless fallback), not the mutable ``source`` field.
+            engine_label = "mock" if model_name == "mock_llm" else "live"
+            for _f in new_findings:
+                if isinstance(_f, dict):
+                    _f["analysis_engine"] = engine_label
             if new_findings and state is not None:
                 state.setdefault("findings", []).extend(new_findings)
 
@@ -377,15 +387,26 @@ class AgentExecutor:
                 if isinstance(finding, dict):
                     finding.setdefault("phase", phase)
                     finding.setdefault("timestamp", now)
-                    # B28: synthetic evidence hash so EvidenceAuditorAgent doesn't reject
-                    # all agent findings for missing raw_evidence_hash (Option 1)
+                    # Item 6 (honest provenance): the agent emits prose, not raw
+                    # tool output, so the hash below is a CONTENT hash of the
+                    # finding's own text, NOT a hash of independently collected
+                    # evidence. We still backfill it so the completeness gate has
+                    # the field, but we record evidence_provenance so the auditor
+                    # and the report never present a self-derived hash as
+                    # third-party-verifiable evidence. A finding that arrives with
+                    # genuine raw_evidence keeps tool-grade provenance.
                     evidence_str = (
                         f"{phase}::{finding.get('title', '')}"
                         f"|{finding.get('description', '')[:500]}"
                     )
+                    has_real_evidence = bool(finding.get("raw_evidence"))
                     finding.setdefault(
                         "raw_evidence_hash",
                         "sha256:" + hashlib.sha256(evidence_str.encode()).hexdigest(),
+                    )
+                    finding.setdefault(
+                        "evidence_provenance",
+                        "tool_evidence" if has_real_evidence else "self_reported",
                     )
                     finding.setdefault(
                         "source", finding.get("source") or f"agent:{phase}"

@@ -154,7 +154,7 @@ class CampaignManager:
         )
 
     def _write_scope_metadata(self) -> None:
-        """Write scope metadata JSON for legal defensibility."""
+        """Write scope metadata JSON for audit compliance and scope tracking."""
         meta = {
             "campaign_id": self.campaign_id,
             "scope_hash": self.scope.scope_hash,

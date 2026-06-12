@@ -531,7 +531,7 @@ The `use_graph` flag switches from the sequential phase runner to the LangGraph 
 - `begin_phase(name)` / `end_phase(name, count, entities)`, Checkpoint boundaries.
 - `finalize()`, Saves state, verifies audit chain, returns summary dict.
 
-**`audit.py`**, `AuditLog` writes a hash-chained JSONL file to `logs/audit.jsonl`. Each entry SHA-256 hashes the previous entry so the chain can be verified for tampering. Used for legal defensibility. Key methods: `log_tool_start`, `log_tool_result`, `log_scope_violation`, `verify_chain()`.
+**`audit.py`**, `AuditLog` writes a hash-chained JSONL file to `logs/audit.jsonl`. Each entry SHA-256 hashes the previous entry so the chain can be verified for tampering. Used for operational transparency and scope-compliance tracking. Key methods: `log_tool_start`, `log_tool_result`, `log_scope_violation`, `verify_chain()`.
 
 **`cache.py`**, `Cache` is a SQLite-backed TTL store. Keys are `sha256(source + "|" + json(query))`. Each source type has its own TTL (e.g., crt.sh: 24h, Shodan: 6h, breach DBs: 7d). Shared with the LangGraph checkpoint database.
 
@@ -1261,7 +1261,7 @@ brew install pango
 
 ### The audit chain shows BROKEN
 
-This should not happen in normal operation. It can happen if you manually edited `audit.jsonl` or if a crash interrupted a write mid-line. The chain being broken does not prevent the campaign from running, it only affects legal defensibility of the log.
+This should not happen in normal operation. It can happen if you manually edited `audit.jsonl` or if a crash interrupted a write mid-line. The chain being broken does not prevent the campaign from running, it only affects the integrity verification of the log.
 
 ### ToolResult.success is False for every tool
 

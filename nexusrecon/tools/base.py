@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import abc
 import asyncio
+import os
 import random
 import subprocess
 from dataclasses import dataclass, field
@@ -224,14 +225,30 @@ class OSINTTool(abc.ABC):
         timeout_sec: int = 300,
         cwd: str | None = None,
     ) -> subprocess.CompletedProcess:
-        """Run a subprocess (for CLI tools like subfinder, gitleaks, etc.)."""
+        """Run a subprocess (for CLI tools like subfinder, gitleaks, etc.).
+
+        When a campaign proxy is bound, the registry enters ``proxy_context``
+        before calling this tool's ``run()`` (registry.execute), so the active
+        proxy URL is threaded into the child environment here as the standard
+        ``HTTP(S)_PROXY`` / ``ALL_PROXY`` variables. Go tools (subfinder,
+        amass, nuclei) and most CLI utilities honour these, so the subprocess
+        respects the same proxy as the HTTP tool fleet instead of leaking a
+        direct connection. With no proxy bound, ``proxy_env()`` is empty and
+        ``env`` stays ``None`` so the child inherits the parent environment
+        unchanged (byte-for-byte the previous behaviour).
+        """
+        from nexusrecon.opsec.context import proxy_env
+
         log.debug("Running subprocess", cmd=cmd)
+        overrides = proxy_env()
+        env = {**os.environ, **overrides} if overrides else None
         return subprocess.run(
             cmd,
             capture_output=True,
             text=True,
             timeout=timeout_sec,
             cwd=cwd,
+            env=env,
         )
 
 

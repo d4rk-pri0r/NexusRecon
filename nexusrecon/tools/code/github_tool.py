@@ -78,6 +78,9 @@ class GitHubTool(OSINTTool):
     def __init__(self) -> None:
         super().__init__()
         self._http: httpx.AsyncClient | None = None
+        # Status codes seen this run, so assess_result can distinguish a
+        # throttled/unauthorized scan (401/403/429) from a genuine empty.
+        self._status_codes: list[int] = []
 
     async def _get_client(self, token: str) -> httpx.AsyncClient:
         if self._http is None:
@@ -99,6 +102,15 @@ class GitHubTool(OSINTTool):
             await self._http.aclose()
             self._http = None
 
+    async def _get(self, client: httpx.AsyncClient, url: str, **kwargs: Any) -> httpx.Response:
+        """GET wrapper that records each response status so assess_result can
+        detect the auth / rate-limit failures (401/403/429) that this tool's
+        per-endpoint handlers otherwise swallow into empty org/repo/secret
+        results (the documented "quiet rate-limit-driven empty results")."""
+        resp = await client.get(url, **kwargs)
+        self._status_codes.append(resp.status_code)
+        return resp
+
     async def run(self, target: str, **kwargs: Any) -> ToolResult:
         # The tool declares ``requires_keys = ["github_token"]`` but a
         # previous revision wrote ``token = self.config.get_secret(...)
@@ -108,6 +120,9 @@ class GitHubTool(OSINTTool):
         # too low for the 20-dork scan in ``_search_secrets``. The
         # operator saw quiet rate-limit-driven empty results instead
         # of a clear "set GITHUB_TOKEN" error.
+        # Reset unconditionally on every run() path, before the token check,
+        # so a reused tool instance never carries a prior run's status codes.
+        self._status_codes = []
         token = self.config.get_secret("github_token")
         if not token:
             return ToolResult(
@@ -138,6 +153,13 @@ class GitHubTool(OSINTTool):
                 results["user_repos"] = await self._get_user_repos(client, target)
 
             await self._close()
+            # Flag whether any endpoint hit an auth / rate-limit failure so
+            # assess_result can mark a throttled scan degraded. 404 (target is
+            # not an org/user) is deliberately excluded: it is a legitimate
+            # negative, not a failure.
+            results["_status_degraded"] = any(
+                s in (401, 403, 429) for s in self._status_codes
+            )
             repo_count = len(results.get("org_repos", {}).get("repos", []))
             return ToolResult(
                 success=True, source=self.name, data=results,
@@ -146,8 +168,23 @@ class GitHubTool(OSINTTool):
         except Exception as e:
             return ToolResult(success=False, source=self.name, error=str(e))
 
+    def assess_result(self, result: ToolResult, target: str, target_type: str = "domain") -> str | None:
+        # GitHub's REST/search endpoints return 401 (bad/expired token), 403
+        # (rate limit or insufficient scope), or 429 on failure; this tool used
+        # to swallow those into empty org/repo/secret results, so a throttled
+        # run looked identical to "nothing on GitHub". A 404 (target is not an
+        # org/user) is a legitimate negative and is deliberately not flagged.
+        d = result.data or {}
+        if d.get("_status_degraded"):
+            return (
+                "GitHub queries hit auth or rate-limit errors (401/403/429); "
+                "the empty result reflects a throttled or unauthorized scan, "
+                "not the absence of repositories, code, or secrets"
+            )
+        return None
+
     async def _get_org(self, client: httpx.AsyncClient, org: str) -> dict[str, Any]:
-        resp = await client.get(f"/orgs/{org}")
+        resp = await self._get(client, f"/orgs/{org}")
         if resp.status_code == 200:
             data = resp.json()
             return {
@@ -165,7 +202,7 @@ class GitHubTool(OSINTTool):
         repos = []
         page = 1
         while True:
-            resp = await client.get(
+            resp = await self._get(client,
                 f"/orgs/{org}/repos",
                 params={"per_page": 100, "page": page, "sort": "updated"},
             )
@@ -194,7 +231,7 @@ class GitHubTool(OSINTTool):
         return {"total": len(repos), "repos": repos}
 
     async def _search_code(self, client: httpx.AsyncClient, domain: str) -> dict[str, Any]:
-        resp = await client.get("/search/code", params={
+        resp = await self._get(client, "/search/code", params={
             "q": f'"{domain}"', "per_page": 10, "sort": "indexed", "order": "desc",
         })
         if resp.status_code == 200:
@@ -217,7 +254,7 @@ class GitHubTool(OSINTTool):
         findings = []
         for dork in GITHUB_CODE_DORKS[:20]:  # top 20 most relevant
             q = f'"{dork}" org:{target}' if not target.startswith(("http", "www")) else f'"{dork}" "{target}"'
-            resp = await client.get("/search/code", params={"q": q, "per_page": 5})
+            resp = await self._get(client, "/search/code", params={"q": q, "per_page": 5})
             # GitHub's search-code endpoint enforces ~30 req/min — pause
             # between dorks to stay under the limit. Async sleep so we
             # yield the event loop to other tools running in parallel
@@ -235,7 +272,7 @@ class GitHubTool(OSINTTool):
         return {"findings": findings}
 
     async def _get_user(self, client: httpx.AsyncClient, username: str) -> dict[str, Any]:
-        resp = await client.get(f"/users/{username}")
+        resp = await self._get(client, f"/users/{username}")
         if resp.status_code == 200:
             data = resp.json()
             return {
@@ -249,7 +286,7 @@ class GitHubTool(OSINTTool):
         return {"found": False}
 
     async def _get_user_repos(self, client: httpx.AsyncClient, username: str) -> dict[str, Any]:
-        resp = await client.get(f"/users/{username}/repos", params={"per_page": 100})
+        resp = await self._get(client, f"/users/{username}/repos", params={"per_page": 100})
         if resp.status_code == 200:
             return {
                 "total": len(resp.json()),

@@ -83,6 +83,20 @@ class ShodanTool(BaseHTTPTool):
         except Exception as e:
             return ToolResult(success=False, source=self.name, error=str(e))
 
+    def assess_result(self, result: ToolResult, target: str, target_type: str = "domain") -> str | None:
+        # Shodan's HTTP failure modes (bad key, rate limit, provider outage)
+        # are already converted to explicit success=False results by
+        # classify_response, so an empty *successful* result is a genuine
+        # negative (the target is simply not in Shodan's index) and must not be
+        # flagged. The only implausible success is one with no data block at
+        # all, which means no host search / host detail / DNS query executed.
+        if not result.data:
+            return (
+                "Shodan returned a successful result with no host-search, "
+                "host-detail, or DNS data; no query appears to have executed"
+            )
+        return None
+
     def _parse_search_results(self, data: dict) -> dict:
         hosts = []
         for match in data.get("matches", []):

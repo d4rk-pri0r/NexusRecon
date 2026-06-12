@@ -69,6 +69,40 @@ def proxy_kwargs() -> dict[str, Any]:
     return {}
 
 
+def proxy_env() -> dict[str, str]:
+    """Return subprocess environment overrides routing CLI tools through the
+    campaign proxy.
+
+    The subprocess analogue of :func:`proxy_kwargs`. Returns ``{}`` when no
+    proxy is active, or a dict setting ``HTTP_PROXY`` / ``HTTPS_PROXY`` /
+    ``ALL_PROXY`` (plus the lowercase variants) to the active proxy URL when
+    ``proxy_context`` has been entered with a non-None URL.
+
+    Go tools (subfinder, amass, nuclei) and most CLI utilities honour the
+    standard ``*_PROXY`` environment variables; ``ALL_PROXY`` additionally
+    carries ``socks5://`` support. Threading these into the child environment
+    makes the campaign proxy apply to tools that never touch httpx, closing the
+    gap where a paranoid engagement could be deanonymised by its own
+    enumeration subprocesses while the HTTP tool fleet was correctly proxied.
+
+    Launch the subprocess with ``env={**os.environ, **proxy_env()}`` so the
+    rest of the environment (``PATH``, ``HOME``) is preserved; when this
+    returns ``{}`` the caller should pass ``env=None`` so the child inherits
+    the parent environment unchanged.
+    """
+    url = get_current_proxy_url()
+    if not url:
+        return {}
+    return {
+        "HTTP_PROXY": url,
+        "HTTPS_PROXY": url,
+        "ALL_PROXY": url,
+        "http_proxy": url,
+        "https_proxy": url,
+        "all_proxy": url,
+    }
+
+
 @contextmanager
 def proxy_context(url: str | None) -> Iterator[None]:
     """Set the proxy URL for the duration of the ``with`` block.

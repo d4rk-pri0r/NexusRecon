@@ -7,7 +7,8 @@ from unittest.mock import patch
 import pytest
 from typer.testing import CliRunner
 
-from nexusrecon.cli.main import app
+from nexusrecon.cli.main import _rebuild_scope_for_resume, app
+from nexusrecon.models.scope import ScopeModel
 
 runner = CliRunner()
 
@@ -267,3 +268,45 @@ class TestDryRun:
             "run", "--scope", scope_file, "--dry-run",
         ])
         assert result.exit_code == 0
+
+
+class TestRebuildScopeForResume:
+    """ROADMAP item 3 follow-up (b): resume() used to run every phase through an
+    UNBOUND registry — phase6 active probing degraded to plain httpx and
+    subprocess tools bypassed the proxy. The fix reconstructs the scope model
+    from the persisted metadata so the OPSEC stack can be rebound before any
+    resumed phase runs. These pin the reconstruction's three paths."""
+
+    def test_primary_reloads_full_scope_from_yaml(self, scope_file):
+        # scope_metadata.json records the original YAML path; the full,
+        # high-fidelity reconstruction reloads it so the scope guard enforces
+        # the real scope and build_opsec sees the real stealth profile.
+        model = _rebuild_scope_for_resume({"scope_file_path": scope_file}, {})
+        assert model is not None
+        assert model.scope.in_scope.domains == ["testcorp.com"]
+        assert model.constraints.stealth_profile == "normal"
+
+    def test_fallback_reconstructs_from_metadata_and_seeds(self, scope_file):
+        # YAML moved/deleted: rebuild from the persisted engagement+constraints
+        # (which carry the stealth profile build_opsec needs), seeding in-scope
+        # domains from the campaign's recorded seeds so the scope guard stays
+        # permissive for targets already in flight.
+        full = ScopeModel.from_yaml(scope_file)
+        scope_meta = {
+            "scope_file_path": "/nonexistent/scope.yaml",
+            "engagement": full.engagement.model_dump(mode="json"),
+            "constraints": full.constraints.model_dump(mode="json"),
+            "scope_hash": "sha256:deadbeef",
+        }
+        state_data = {"seeds": ["seed1.example.com", "seed2.example.com"]}
+        model = _rebuild_scope_for_resume(scope_meta, state_data)
+        assert model is not None
+        assert model.constraints.stealth_profile == "normal"
+        assert model.scope.in_scope.domains == ["seed1.example.com", "seed2.example.com"]
+        assert model.scope_hash == "sha256:deadbeef"
+
+    def test_returns_none_when_nothing_reconstructable(self):
+        # No scope file and no engagement/constraints metadata: signal the
+        # caller to warn rather than bind a bogus OPSEC stack.
+        assert _rebuild_scope_for_resume({}, {}) is None
+        assert _rebuild_scope_for_resume({"scope_file_path": "/nope.yaml"}, {}) is None

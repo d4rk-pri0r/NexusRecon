@@ -101,7 +101,7 @@ class ScopeModel(BaseModel):
 
     Parsed from the YAML scope file.  The scope_hash field is computed
     from the raw YAML content and embedded in every output artifact for
-    legal defensibility.
+    scope-compliance verification and audit traceability.
     """
 
     engagement: EngagementInfo

@@ -561,6 +561,47 @@ def validate(scope: str = typer.Argument(..., help="Path to scope YAML file")) -
         raise typer.Exit(1)
 
 
+def _rebuild_scope_for_resume(
+    scope_meta: dict, state_data: dict
+) -> "ScopeModel | None":
+    """Reconstruct a ScopeModel for resume() so the OPSEC stack can be rebound.
+
+    Prefers reloading the original scope YAML recorded in
+    ``scope_metadata.json`` (``scope_file_path``) for full fidelity. If that
+    file has moved or been deleted, falls back to rebuilding the model from the
+    persisted ``engagement`` + ``constraints`` (which carry the stealth profile
+    and ``require_proxy`` that ``build_opsec`` needs), seeding
+    ``in_scope.domains`` from the campaign's recorded seeds so the scope guard
+    stays as permissive as the original run for the targets already in flight.
+    Returns ``None`` when no scope can be reconstructed.
+    """
+    scope_file = scope_meta.get("scope_file_path")
+    if scope_file and Path(scope_file).exists():
+        try:
+            return ScopeModel.from_yaml(scope_file)
+        except Exception as exc:
+            console.print(
+                f"[yellow]Could not reload scope from {scope_file}: {exc}; "
+                f"reconstructing from saved metadata.[/yellow]"
+            )
+
+    engagement = scope_meta.get("engagement")
+    constraints = scope_meta.get("constraints")
+    if not engagement or not constraints:
+        return None
+    try:
+        model = ScopeModel.model_validate({
+            "engagement": engagement,
+            "constraints": constraints,
+            "scope": {"in_scope": {"domains": list(state_data.get("seeds", []))}},
+        })
+        model.scope_hash = scope_meta.get("scope_hash")
+        return model
+    except Exception as exc:
+        console.print(f"[yellow]Could not reconstruct scope for OPSEC: {exc}[/yellow]")
+        return None
+
+
 @app.command()
 def resume(campaign_id: str = typer.Argument(..., help="Campaign ID to resume")) -> None:
     """Resume a campaign from its last checkpoint."""
@@ -594,10 +635,42 @@ def resume(campaign_id: str = typer.Argument(..., help="Campaign ID to resume"))
     console.print(f"Findings so far: {len(state_data.get('findings', []))}")
 
     # Load scope metadata to reconstruct scope model
+    scope_meta: dict = {}
     if scope_meta_path and scope_meta_path.exists():
         scope_meta = json.loads(scope_meta_path.read_text())
         console.print(f"Client: {scope_meta.get('engagement', {}).get('client', 'unknown')}")
         console.print(f"Max Tier: {scope_meta.get('constraints', {}).get('max_tier', 'T0')}")
+
+    # Rebind the OPSEC stack before any resumed phase runs. Without this,
+    # resume() ran every phase through an UNBOUND registry: phase6 active
+    # probing (registry.opsec_http_get) silently degraded to plain httpx and
+    # CLI subprocess tools bypassed the proxy, reintroducing the exact
+    # deanonymisation risk a fresh `run` closes. Mirrors run()'s binding block.
+    _resume_scope_model = _rebuild_scope_for_resume(scope_meta, state_data)
+    if _resume_scope_model is not None:
+        from nexusrecon.opsec.setup import ProxyRequiredError, build_opsec
+        from nexusrecon.tools.registry import get_registry
+        try:
+            _opsec = build_opsec(_resume_scope_model, config)
+        except ProxyRequiredError as e:
+            console.print(f"[bold red]OPSEC: {e}[/bold red]")
+            raise typer.Exit(1)
+        # cache / audit_log are intentionally not rebound here (resume() does
+        # not reconstruct the CampaignManager); the OPSEC envelope — stealth
+        # profile, rate limiter, proxy manager — is what this item closes.
+        get_registry().set_campaign_context(
+            ScopeGuard(_resume_scope_model), None, None, **_opsec
+        )
+        console.print(
+            f"[dim]OPSEC rebound: stealth="
+            f"{_resume_scope_model.constraints.stealth_profile}, "
+            f"proxy={'on' if _opsec['proxy_manager'].available else 'off'}[/dim]"
+        )
+    else:
+        console.print(
+            "[yellow]Warning: could not reconstruct scope to rebind the OPSEC "
+            "stack; resumed phases run without proxy/stealth enforcement.[/yellow]"
+        )
 
     # Skip completed phases, continue from current
     console.print("\n[bold green]Continuing campaign execution...[/bold green]")
