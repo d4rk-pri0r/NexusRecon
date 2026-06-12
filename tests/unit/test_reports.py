@@ -253,6 +253,46 @@ class TestReportEngineGenerate:
             assert "Summary" in content  # CSV header
             assert "Public S3 Bucket" in content
 
+    def test_jira_tracker_marks_mock_findings(self):
+        # ROADMAP item 6: MockLLM findings must be marked unmistakably in EVERY
+        # human-facing deliverable, including the Jira CSV import. A real tool
+        # finding alongside it must stay unmarked.
+        state = _make_state(findings=[
+            {
+                "finding_id": "m1",
+                "title": "Reconnaissance data collected",
+                "description": "templated",
+                "severity": "info",
+                "confidence": 0.4,
+                "category": "reconnaissance",
+                "source": "mock_llm",
+                "analysis_engine": "mock",
+                "timestamp": "2025-01-01T00:00:00",
+                "raw_evidence_hash": "sha256:abc",
+                "evidence_provenance": "self_reported",
+            },
+            {
+                "finding_id": "t1",
+                "title": "Public S3 Bucket",
+                "description": "real tool finding",
+                "severity": "critical",
+                "confidence": 0.95,
+                "category": "cloud_exposure",
+                "source": "aws_tool",
+                "analysis_engine": "live",
+                "timestamp": "2025-01-01T00:00:00",
+                "raw_evidence_hash": "sha256:def",
+            },
+        ])
+        with tempfile.TemporaryDirectory() as tmp:
+            engine = ReportEngine("test", "eng", "hash", Path(tmp))
+            content = Path(engine._jira_tracker(state)).read_text()
+        # mock finding is marked
+        assert "[MOCK: templated output, not analysis] Reconnaissance data collected" in content
+        # real tool finding is NOT marked
+        assert "Public S3 Bucket" in content
+        assert "[MOCK: templated output, not analysis] Public S3 Bucket" not in content
+
     def test_entity_graph_html_generated(self):
         with tempfile.TemporaryDirectory() as tmp:
             engine = ReportEngine("test", "eng", "hash", Path(tmp))

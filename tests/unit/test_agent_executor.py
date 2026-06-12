@@ -204,6 +204,77 @@ class TestAgentExecutor:
         )
         assert "completed_phases" not in context
 
+    def test_build_context_persona_reaches_prompt_and_differentiates(self):
+        """ROADMAP item 6: the missing test. Asserts an agent's persona
+        (role/goal/backstory) actually reaches the built prompt AND changes the
+        prompt per agent (F-008 differentiation). Note: with the keyless MockLLM
+        the persona does NOT change the generated findings — that limitation is
+        exactly why MockLLM findings are marked in reports — but it DOES reach
+        the prompt fed to a real LLM, which is what this pins."""
+        from nexusrecon.agents.recon_passive import PassiveReconSpecialist
+        from nexusrecon.agents.risk_analyst import RiskAnalystAgent
+
+        config = MagicMock()
+        executor = AgentExecutor(config)
+        a1 = PassiveReconSpecialist()
+        a2 = RiskAnalystAgent()
+        ctx1 = executor._build_context({"seeds": ["example.com"]}, "task", a1)
+        ctx2 = executor._build_context({"seeds": ["example.com"]}, "task", a2)
+
+        # 1) persona text actually reaches the prompt (verbatim, per agent)
+        assert a1.role in ctx1
+        assert a1.goal in ctx1
+        assert a1.backstory in ctx1
+        assert "Your goal:" in ctx1
+        # 2) and it differentiates the prompt between agents (changes output)
+        assert ctx1 != ctx2
+        assert a1.role != a2.role
+        assert a2.role in ctx2 and a1.role not in ctx2
+        # 3) the agent=None branch uses the generic preamble, not a persona
+        ctx_none = executor._build_context({"seeds": ["example.com"]}, "task", None)
+        assert "NexusRecon OSINT specialist" in ctx_none
+        assert a1.role not in ctx_none
+
+    @pytest.mark.asyncio
+    async def test_run_agent_stamps_mock_analysis_engine(self):
+        """ROADMAP item 6: keyless MockLLM findings are stamped so reports can
+        mark them unmistakably, and their synthetic evidence hash is honestly
+        labeled self-reported rather than tool evidence."""
+        config = MagicMock()
+        config.get_secret = MagicMock(return_value=None)
+        executor = AgentExecutor(config)
+        assert isinstance(executor.llm, MockLLM)
+        result = await executor.run_agent("passive_recon", {"seeds": ["test.com"]}, "task")
+        findings = result["findings"]
+        assert findings, "MockLLM always emits at least one finding"
+        for f in findings:
+            assert f["analysis_engine"] == "mock", f
+            assert f["evidence_provenance"] == "self_reported", f
+
+    def test_parse_findings_marks_self_reported_evidence(self):
+        """A finding synthesized from the LLM's own prose carries a content hash
+        labeled self_reported — the evidence_auditor gate must not present it as
+        independent evidence."""
+        content = (
+            'FINDINGS_JSON:[{"severity":"info","title":"t","description":"d",'
+            '"confidence":0.5,"category":"recon"}]\n\nprose'
+        )
+        parsed = AgentExecutor._parse_findings_json(content, "phase1")
+        assert len(parsed) == 1
+        f = parsed[0]
+        assert f["raw_evidence_hash"].startswith("sha256:")
+        assert f["evidence_provenance"] == "self_reported"
+
+    def test_parse_findings_keeps_tool_evidence_provenance(self):
+        """A finding that arrives WITH genuine raw_evidence keeps tool-grade
+        provenance, not the self_reported label."""
+        content = (
+            'FINDINGS_JSON:[{"severity":"info","title":"t","description":"d",'
+            '"confidence":0.5,"category":"recon","raw_evidence":"{\\"x\\":1}"}]'
+        )
+        parsed = AgentExecutor._parse_findings_json(content, "phase1")
+        assert parsed[0]["evidence_provenance"] == "tool_evidence"
+
     def test_audit_findings(self):
         MagicMock()
         valid_findings = [
