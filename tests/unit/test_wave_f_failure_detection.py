@@ -288,6 +288,164 @@ class TestNucleiRunFailureDetection:
         assert "nuclei" in result.error.lower()
 
 
+class TestSubfinderAssessment:
+    def _tool(self):
+        from nexusrecon.tools.domain.subfinder_tool import SubfinderTool
+        return SubfinderTool()
+
+    def test_nonzero_exit_no_subdomains_flagged(self):
+        r = ToolResult(success=True, source="subfinder",
+                       data={"subdomains": [], "returncode": 1, "stderr_tail": ""},
+                       result_count=0)
+        assert self._tool().assess_result(r, "acme.com") is not None
+
+    def test_stderr_marker_flagged(self):
+        r = ToolResult(success=True, source="subfinder",
+                       data={"subdomains": [], "returncode": 0,
+                             "stderr_tail": "could not resolve host"},
+                       result_count=0)
+        assert self._tool().assess_result(r, "acme.com") is not None
+
+    def test_clean_empty_not_flagged(self):
+        # subfinder ran fine (exit 0, no error) and found nothing: valid.
+        r = ToolResult(success=True, source="subfinder",
+                       data={"subdomains": [], "returncode": 0, "stderr_tail": ""},
+                       result_count=0)
+        assert self._tool().assess_result(r, "acme.com") is None
+
+    def test_subdomains_present_not_flagged(self):
+        # found results despite a non-zero exit: usable, not a silent failure.
+        r = ToolResult(success=True, source="subfinder",
+                       data={"subdomains": [{"subdomain": "a.acme.com"}],
+                             "returncode": 1, "stderr_tail": "x"},
+                       result_count=1)
+        assert self._tool().assess_result(r, "acme.com") is None
+
+
+class TestAmassAssessment:
+    def _tool(self):
+        from nexusrecon.tools.domain.amass_tool import AmassTool
+        return AmassTool()
+
+    def test_nonzero_exit_no_subdomains_flagged(self):
+        r = ToolResult(success=True, source="amass",
+                       data={"subdomains": [], "returncode": 1, "stderr_tail": ""},
+                       result_count=0)
+        assert self._tool().assess_result(r, "acme.com") is not None
+
+    def test_clean_empty_not_flagged(self):
+        r = ToolResult(success=True, source="amass",
+                       data={"subdomains": [], "returncode": 0, "stderr_tail": ""},
+                       result_count=0)
+        assert self._tool().assess_result(r, "acme.com") is None
+
+
+class TestHttpxAssessment:
+    def _tool(self):
+        from nexusrecon.tools.web.httpx_tool import HTTPxTool
+        return HTTPxTool()
+
+    def test_nonzero_exit_no_results_flagged(self):
+        r = ToolResult(success=True, source="httpx",
+                       data={"results": [], "returncode": 1, "stderr_tail": "panic"},
+                       result_count=0)
+        assert self._tool().assess_result(r, "acme.com") is not None
+
+    def test_down_host_clean_exit_not_flagged(self):
+        # host simply not serving HTTP: httpx exits 0 with no rows -> valid
+        # negative, must not be flagged (the whole point of keying on exit code).
+        r = ToolResult(success=True, source="httpx",
+                       data={"results": [], "returncode": 0, "stderr_tail": ""},
+                       result_count=0)
+        assert self._tool().assess_result(r, "acme.com") is None
+
+    def test_results_present_not_flagged(self):
+        r = ToolResult(success=True, source="httpx",
+                       data={"results": [{"url": "https://acme.com"}],
+                             "returncode": 0, "stderr_tail": ""},
+                       result_count=1)
+        assert self._tool().assess_result(r, "acme.com") is None
+
+
+class TestShodanAssessment:
+    def _tool(self):
+        from nexusrecon.tools.intel.shodan_tool import ShodanTool
+        return ShodanTool()
+
+    def test_no_data_block_flagged(self):
+        # success with no search/host/dns block means no query executed.
+        r = ToolResult(success=True, source="shodan", data={}, result_count=0)
+        assert self._tool().assess_result(r, "acme.com") is not None
+
+    def test_empty_search_not_flagged(self):
+        # genuine empty: the search ran (classify_response already turns HTTP
+        # failures into success=False), the target is just not in the index.
+        r = ToolResult(success=True, source="shodan",
+                       data={"search": {"total": 0, "hosts": []}}, result_count=0)
+        assert self._tool().assess_result(r, "acme.com") is None
+
+
+class TestGithubReconAssessment:
+    def _tool(self):
+        from nexusrecon.tools.code.github_tool import GitHubTool
+        return GitHubTool()
+
+    def test_auth_or_ratelimit_flagged(self):
+        r = ToolResult(success=True, source="github_recon",
+                       data={"org": {"found": False}, "_status_degraded": True},
+                       result_count=0)
+        assert self._tool().assess_result(r, "acme.com") is not None
+
+    def test_clean_empty_not_flagged(self):
+        # 404 (target is not an org) + 200 empty searches: genuine negative.
+        r = ToolResult(success=True, source="github_recon",
+                       data={"org": {"found": False}, "_status_degraded": False},
+                       result_count=0)
+        assert self._tool().assess_result(r, "acme.com") is None
+
+    def test_repos_present_not_flagged(self):
+        r = ToolResult(success=True, source="github_recon",
+                       data={"org_repos": {"total": 3, "repos": [1, 2, 3]},
+                             "_status_degraded": False},
+                       result_count=3)
+        assert self._tool().assess_result(r, "acme.com") is None
+
+
+class TestSubprocessRunCapturesOutcome:
+    """The high-traffic subprocess tools must thread the subprocess exit code +
+    stderr into result.data so assess_result can tell a silent failure from a
+    genuine empty (previously the outcome was discarded)."""
+
+    def test_subfinder_run_captures_returncode_and_stderr(self, monkeypatch):
+        from nexusrecon.tools.domain.subfinder_tool import SubfinderTool
+        tool = SubfinderTool()
+        monkeypatch.setattr(tool, "is_available", lambda: True)
+        monkeypatch.setattr(
+            tool, "run_subprocess",
+            lambda *a, **k: _FakeProc(1, stderr="could not resolve host", stdout=""),
+        )
+        result = asyncio.run(tool.run("acme.com"))
+        assert result.success is True
+        assert result.data["returncode"] == 1
+        assert "could not resolve host" in result.data["stderr_tail"]
+        # the captured signal makes the empty result assessable as degraded
+        assert tool.assess_result(result, "acme.com") is not None
+
+    def test_httpx_run_captures_returncode(self, monkeypatch):
+        from nexusrecon.tools.web.httpx_tool import HTTPxTool
+        tool = HTTPxTool()
+        monkeypatch.setattr(tool, "is_available", lambda: True)
+        monkeypatch.setattr(
+            tool, "run_subprocess",
+            lambda *a, **k: _FakeProc(0, stderr="", stdout=""),
+        )
+        result = asyncio.run(tool.run("acme.com"))
+        assert result.success is True
+        assert result.data["returncode"] == 0
+        # clean exit + no rows = down host, a valid negative, not degraded
+        assert tool.assess_result(result, "acme.com") is None
+
+
 class TestRegistrySetsDegraded:
     """The registry wires assess_result -> result.degraded + audit."""
 

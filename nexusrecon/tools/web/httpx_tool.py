@@ -31,6 +31,33 @@ class HTTPxTool(OSINTTool):
                         results.append(json.loads(line))
                     except json.JSONDecodeError:
                         continue
-            return ToolResult(success=True, source=self.name, data={"results": results}, result_count=len(results))
+            return ToolResult(
+                success=True, source=self.name,
+                data={
+                    "results": results,
+                    # Wave F-A1: keep the subprocess outcome so assess_result
+                    # can tell a failed probe from a host that simply isn't
+                    # serving HTTP.
+                    "returncode": result.returncode,
+                    "stderr_tail": (result.stderr or "")[-800:].strip(),
+                },
+                result_count=len(results),
+            )
         except Exception as e:
             return ToolResult(success=False, source=self.name, error=str(e))
+
+    def assess_result(self, result: ToolResult, target: str, target_type: str = "domain") -> str | None:
+        # httpx emitting zero rows for a host that simply is not serving HTTP is
+        # a legitimate negative (the binary still exits 0). Only a non-zero exit
+        # proves the probe itself failed, so key strictly on the exit code and
+        # never on emptiness alone, to avoid crying wolf on down hosts.
+        if result.result_count > 0:
+            return None
+        d = result.data or {}
+        if d.get("returncode", 0) != 0:
+            detail = d.get("stderr_tail") or f"exit code {d.get('returncode')}"
+            return (
+                "httpx returned no probe results and exited non-zero; the probe "
+                f"failed rather than the host being a clean negative: {detail[:200]}"
+            )
+        return None
