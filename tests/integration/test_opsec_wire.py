@@ -890,6 +890,73 @@ class TestProductionOpsecBinding:
         assert _CtxProbe.seen[-1] == {"proxy": "http://proxy.test:3128"}
 
 
+class _SubprocProbe(OSINTTool):
+    """A tool that shells out via ``run_subprocess`` (as subfinder/amass/nuclei
+    do). The test patches ``subprocess.run`` to capture the ``env`` the proxy
+    threading sets, proving the campaign proxy reaches CLI subprocesses."""
+
+    name = "subproc_probe"
+    tier = Tier.T0
+    category = Category.DOMAIN
+    requires_keys: list[str] = []
+    target_types = ["domain"]
+
+    async def run(self, target, **kwargs):
+        self.run_subprocess(["true"], timeout_sec=5)
+        return ToolResult(success=True, source=self.name, data={}, result_count=0)
+
+
+class TestSubprocessProxyEnv:
+    """ROADMAP item 3 follow-up (a): subprocess CLI tools (subfinder, amass,
+    nuclei, maigret) used to send traffic outside the campaign proxy because
+    ``run_subprocess`` never set ``env``. They now inherit the proxy via the
+    standard ``*_PROXY`` env vars, read from the ``proxy_context`` that
+    ``registry.execute()`` enters around ``tool.run()``. With no proxy bound,
+    ``env`` stays ``None`` so the child inherits the parent environment
+    byte-for-byte (no regression)."""
+
+    def test_run_subprocess_injects_proxy_env_when_bound(self):
+        captured: dict = {}
+
+        def _fake_run(cmd, **kwargs):
+            captured.update(kwargs)
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        reg = ToolRegistry()
+        reg.register(_SubprocProbe)
+        opsec = build_opsec(
+            _fake_scope("loud"), _fake_config(proxy_url="socks5://127.0.0.1:9050")
+        )
+        reg.set_campaign_context(scope_guard=None, **opsec)  # type: ignore[arg-type]
+        with patch("nexusrecon.tools.base.subprocess.run", _fake_run):
+            asyncio.run(reg.execute("subproc_probe", "example.com"))
+
+        env = captured.get("env")
+        assert env is not None, "proxy bound but subprocess env was not set"
+        assert env.get("ALL_PROXY") == "socks5://127.0.0.1:9050"
+        assert env.get("HTTPS_PROXY") == "socks5://127.0.0.1:9050"
+        assert env.get("HTTP_PROXY") == "socks5://127.0.0.1:9050"
+        assert "PATH" in env, "parent environment must be preserved, not replaced"
+
+    def test_run_subprocess_env_none_when_unbound(self):
+        captured: dict = {}
+
+        def _fake_run(cmd, **kwargs):
+            captured.update(kwargs)
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        reg = ToolRegistry()  # no campaign context / proxy bound
+        reg.register(_SubprocProbe)
+        with patch("nexusrecon.tools.base.subprocess.run", _fake_run):
+            asyncio.run(reg.execute("subproc_probe", "example.com"))
+
+        assert "env" in captured, "run_subprocess must always pass env explicitly"
+        assert captured["env"] is None, (
+            "an unproxied campaign must pass env=None so the child inherits the "
+            "parent environment byte-for-byte (no regression)"
+        )
+
+
 # ──────────────────────────────────────────────────────────────────────────
 # Phase 6 active-probing OPSEC (registry.opsec_http_get)
 # ──────────────────────────────────────────────────────────────────────────
