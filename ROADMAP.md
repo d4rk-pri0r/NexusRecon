@@ -146,16 +146,30 @@ exists actually deliver on its claim.
        routing IP targets to `/shodan/host` in shodan's `run()`. The other ~90
        tools correctly default to no opinion.
 
-6. [ ] **Stop MockLLM masquerading as analysis.** Keyless (the default, and the
-       only path the test suite exercises) the persona layer no-ops into
-       near-identical word-count boilerplate through the same code path as real
-       agents, and those findings flow into shipped reports. Either refuse to
-       emit agent findings without a key, or mark every MockLLM finding
-       unmistakably in the report. Add the one missing test that asserts persona
-       text reaches the prompt and changes output. Separately, the
-       `evidence_auditor` "legal-defensibility gate" is defeated by construction
-       (findings auto-backfilled with a hash over the LLM's own prose); fix or
-       drop the claim.
+6. [x] **Stop MockLLM masquerading as analysis.** Resolved as label, not
+       refuse. Keyless (the default, and the only path the test suite
+       exercises) the MockLLM fallback emitted one templated finding through
+       the same code path as real agents; the persona reaches the prompt but
+       MockLLM ignores it, so every agent produced near-identical boilerplate
+       that rendered identically to real analysis in the two detail reports
+       (which never showed the Run Health mock banner). Done: `run_agent` now
+       stamps `provenance` from the model that actually served the call
+       (spoof-proof, independent of the LLM-controlled `source`), and the
+       executive summary and full report lead with a blunt "MOCK ANALYSIS:
+       templated, not reasoned" banner and badge each mock finding `[MOCK]`.
+       The persona test the item asked for is added (a real agent's
+       role/goal/backstory reaches the prompt); it also documents that MockLLM
+       output does not vary by persona, which is why labeling, not trust, is
+       the fix. Separately, the `evidence_auditor` overclaim is dropped: it is
+       renamed a citation-completeness check (presence of the four fields), the
+       "legal defensibility" and "check every evidence hash" language is
+       stripped from the auditor and findings docstrings, and because the
+       agent-path evidence hash only digests the model's own prose, findings
+       now carry `evidence_integrity="unverified"` and the full report says so.
+       The real fix (persist raw tool artifacts and hash those) is a provenance
+       subsystem left out of scope. Regression:
+       `tests/unit/test_agent_executor.py::TestMockProvenanceLabeling` and
+       `tests/unit/test_reports.py::TestMockFindingLabeling`. Done 2026-07-13.
 
 7. [x] **Fix the export-to-sign happy path and STIX SCO schema.** Done.
        `export --format stix2` now writes the canonical `stix2-bundle.json`

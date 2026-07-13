@@ -321,6 +321,14 @@ class AgentExecutor:
             # despite ATTRIBUTION RULE prompt. Walk findings and downgrade any that
             # cite stem-match cloud data to info severity + [POSSIBLE] prefix.
             new_findings = self._gate_findings_by_attribution(new_findings, state)
+            # Wave F-A6: stamp analysis provenance from the model that actually
+            # served this call, independent of the LLM-controlled "source" field
+            # (which a MockLLM finding can set to anything). Reports key off this
+            # to brand MockLLM output (templated, not reasoned) unmistakably at
+            # the per-finding level, not just in the aggregate Run Health block.
+            provenance = "mock" if model_name == "mock_llm" else "llm"
+            for _f in new_findings:
+                _f["provenance"] = provenance
             if new_findings and state is not None:
                 state.setdefault("findings", []).extend(new_findings)
 
@@ -377,16 +385,23 @@ class AgentExecutor:
                 if isinstance(finding, dict):
                     finding.setdefault("phase", phase)
                     finding.setdefault("timestamp", now)
-                    # B28: synthetic evidence hash so EvidenceAuditorAgent doesn't reject
-                    # all agent findings for missing raw_evidence_hash (Option 1)
-                    evidence_str = (
-                        f"{phase}::{finding.get('title', '')}"
-                        f"|{finding.get('description', '')[:500]}"
-                    )
-                    finding.setdefault(
-                        "raw_evidence_hash",
-                        "sha256:" + hashlib.sha256(evidence_str.encode()).hexdigest(),
-                    )
+                    if "raw_evidence_hash" not in finding:
+                        # This digests the model's OWN title/description prose, not
+                        # an independent tool artifact (agent findings carry no raw
+                        # evidence to hash). It is a content id for dedup, NOT
+                        # evidence provenance, so we mark the finding's evidence
+                        # unverified: the citation-completeness check and the
+                        # reports must never imply integrity we do not have. A
+                        # finding that arrives with its own hash (a real
+                        # tool-derived artifact) is left untouched.
+                        evidence_str = (
+                            f"{phase}::{finding.get('title', '')}"
+                            f"|{finding.get('description', '')[:500]}"
+                        )
+                        finding["raw_evidence_hash"] = (
+                            "sha256:" + hashlib.sha256(evidence_str.encode()).hexdigest()
+                        )
+                        finding.setdefault("evidence_integrity", "unverified")
                     finding.setdefault(
                         "source", finding.get("source") or f"agent:{phase}"
                     )

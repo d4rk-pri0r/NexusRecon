@@ -440,6 +440,23 @@ class ReportEngine:
 
     # ── Executive Summary ──────────────────────────────────────────────────────
 
+    @staticmethod
+    def _mock_analysis_banner() -> list[str]:
+        """A blunt banner for reports that contain MockLLM findings.
+
+        The executive summary and full report do not render the Run Health
+        block, so without this a reader of those deliverables sees only a
+        buried ``source: mock_llm`` string. This states plainly that the
+        findings are templated, not reasoned.
+        """
+        return [
+            "> **MOCK ANALYSIS: no LLM API key was configured, so the findings",
+            "> below were produced by the deterministic MockLLM fallback. They are",
+            "> templated, not reasoned. Treat every finding marked [MOCK] as",
+            "> placeholder output, not assessment.**",
+            "",
+        ]
+
     def _executive_summary(self, state: dict[str, Any]) -> str:
         """1-page red-team focused summary."""
         findings = state.get("findings", [])
@@ -481,10 +498,16 @@ class ReportEngine:
             "",
         ]
 
+        if any(f.get("provenance") == "mock" for f in findings):
+            lines.extend(self._mock_analysis_banner())
+
         for i, f in enumerate(findings[:10], 1):
-            lines.append(f"{i}. **[{f.get('severity', 'info').upper()}]** {f.get('title', 'Untitled')}")
+            mock_tag = "[MOCK] " if f.get("provenance") == "mock" else ""
+            lines.append(f"{i}. **[{f.get('severity', 'info').upper()}]** {mock_tag}{f.get('title', 'Untitled')}")
             lines.append(f"   - {f.get('description', '')[:200]}")
             lines.append(f"   - Source: {f.get('source', 'unknown')} | Confidence: {f.get('confidence', 0):.0%}")
+            if f.get("provenance") == "mock":
+                lines.append("   - Provenance: MockLLM (templated, not reasoned)")
             lines.append("")
 
         # Top threads to pull
@@ -615,9 +638,13 @@ class ReportEngine:
             "",
         ])
 
+        if any(f.get("provenance") == "mock" for f in findings):
+            lines.extend(self._mock_analysis_banner())
+
         for i, f in enumerate(findings, 1):
+            mock_tag = "[MOCK] " if f.get("provenance") == "mock" else ""
             lines.extend([
-                f"### {i}. {f.get('title', 'Untitled')}",
+                f"### {i}. {mock_tag}{f.get('title', 'Untitled')}",
                 "",
                 f"- **Severity:** {f.get('severity', 'info').upper()}",
                 f"- **Confidence:** {f.get('confidence', 0):.0%}",
@@ -625,6 +652,15 @@ class ReportEngine:
                 f"- **Source:** {f.get('source', 'unknown')}",
                 f"- **Timestamp:** {f.get('timestamp', 'unknown')}",
                 f"- **Evidence Hash:** {f.get('raw_evidence_hash', 'N/A')}",
+            ])
+            if f.get("evidence_integrity") == "unverified":
+                lines.append(
+                    "- **Evidence integrity:** unverified (the hash digests the "
+                    "finding text, not an independent tool artifact)"
+                )
+            if f.get("provenance") == "mock":
+                lines.append("- **Provenance:** MockLLM (templated, not reasoned)")
+            lines.extend([
                 "",
                 f"**Description:** {f.get('description', '')}",
                 "",

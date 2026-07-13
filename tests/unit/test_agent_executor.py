@@ -220,3 +220,73 @@ class TestAgentExecutor:
             mock_cls.return_value.audit_findings = mock_fn
             result = AgentExecutor.audit_findings(valid_findings)
             assert result == (valid_findings, [])
+
+
+# ── #6: MockLLM provenance labeling + evidence-integrity honesty ──────────────
+
+class TestMockProvenanceLabeling:
+    """A keyless run falls back to MockLLM, which emits templated (not reasoned)
+    findings. #6 labels them unmistakably instead of letting them masquerade as
+    analysis, and stops the evidence hash from implying provenance it lacks."""
+
+    def _keyless_executor(self):
+        config = MagicMock()
+        config.llm_provider = "mock"
+        config.llm_model = "mock"
+        config.llm_temperature = 0.0
+        config.get_secret = MagicMock(return_value=None)
+        return AgentExecutor(config)
+
+    @pytest.mark.asyncio
+    async def test_mock_findings_stamped_provenance_mock(self):
+        ex = self._keyless_executor()
+        result = await ex.run_agent(
+            "passive_recon",
+            {"seeds": ["example.com"], "subdomain_intel": {"s": {"sources": ["crtsh"]}}},
+            "Find subdomains",
+        )
+        assert result["findings"], "MockLLM always emits one finding"
+        assert all(f.get("provenance") == "mock" for f in result["findings"])
+
+    @pytest.mark.asyncio
+    async def test_provenance_is_model_derived_not_source_spoofable(self):
+        # A finding served by a real model but whose source string CLAIMS
+        # mock_llm must be stamped provenance="llm": the stamp reflects the
+        # actual model, not the spoofable source field.
+        ex = self._keyless_executor()
+        fake = MagicMock()
+        fake.model_name = "claude-x"
+        fake.invoke.return_value = MockLLMResponse(
+            'FINDINGS_JSON:[{"severity":"info","title":"t","description":"d",'
+            '"source":"mock_llm","confidence":0.9,"category":"recon"}]'
+        )
+        ex.llm = fake
+        result = await ex.run_agent("passive_recon", {"seeds": ["x"]}, "task")
+        assert result["findings"]
+        f = result["findings"][0]
+        assert f["source"] == "mock_llm"       # source is spoofed
+        assert f["provenance"] == "llm"         # provenance reflects the real model
+
+    @pytest.mark.asyncio
+    async def test_agent_findings_marked_unverified_evidence(self):
+        # The evidence hash is synthesized over the model's own prose, so agent
+        # findings carry evidence_integrity="unverified" (drop-the-overclaim).
+        ex = self._keyless_executor()
+        result = await ex.run_agent("passive_recon", {"seeds": ["x"]}, "task")
+        assert result["findings"]
+        f = result["findings"][0]
+        assert f.get("raw_evidence_hash", "").startswith("sha256:")
+        assert f.get("evidence_integrity") == "unverified"
+
+    def test_persona_reaches_prompt(self):
+        # ROADMAP #6's named missing test: a real agent's role/goal/backstory
+        # reaches the built prompt. (Under MockLLM this does NOT meaningfully
+        # change the templated output, which is exactly why mock findings must
+        # be labeled rather than trusted as persona-driven analysis.)
+        from nexusrecon.graph.agent_executor import AGENT_REGISTRY
+        ex = self._keyless_executor()
+        agent = AGENT_REGISTRY["risk_analyst"]()
+        ctx = ex._build_context({"seeds": ["x"]}, "task", agent)
+        assert agent.role.strip() and agent.role.strip() in ctx
+        assert agent.goal.strip() and agent.goal.strip() in ctx
+        assert agent.backstory.strip() and agent.backstory.strip() in ctx

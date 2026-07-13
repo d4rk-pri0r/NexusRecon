@@ -1,9 +1,13 @@
 """
 Finding model — the atomic intelligence unit in NexusRecon.
 
-EVERY finding MUST have: source, timestamp, raw_evidence_hash, confidence.
-Findings without all four are rejected at the EvidenceAuditor stage.
-The Evidence Auditor is not advisory — it drops uncited findings.
+Every finding carries: source, timestamp, raw_evidence_hash, confidence.
+Findings missing any of these are dropped by the EvidenceAuditor's
+citation-completeness check. Note that for agent findings the evidence hash
+digests the model's own prose, not an independent tool artifact, so it is
+flagged ``evidence_integrity="unverified"``: the check confirms the fields are
+present, it does not verify evidence provenance. ``Finding.create()`` below
+does hash real raw evidence when it is available.
 """
 
 from __future__ import annotations

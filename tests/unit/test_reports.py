@@ -284,3 +284,50 @@ class TestReportEngineGenerate:
                                 cloud_intel={}, code_intel={}, infra_intel={}, vuln_intel={})
             paths = engine.generate_all(empty)
             assert isinstance(paths, dict)
+
+
+class TestMockFindingLabeling:
+    """#6: MockLLM findings must be unmistakably branded in the two detail
+    reports (which do not render the Run Health block), not passed off as
+    reasoned analysis."""
+
+    _MOCK_FINDING = {
+        "finding_id": "m1",
+        "title": "Intelligence data collected",
+        "description": "templated mock output",
+        "severity": "info",
+        "confidence": 0.5,
+        "category": "reconnaissance",
+        "source": "mock_llm",
+        "timestamp": "2025-01-01T00:00:00",
+        "raw_evidence_hash": "sha256:deadbeef",
+        "evidence_integrity": "unverified",
+        "provenance": "mock",
+    }
+
+    def test_executive_summary_badges_mock_finding(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            engine = ReportEngine("test", "eng", "hash", Path(tmp))
+            state = _make_state(findings=[dict(self._MOCK_FINDING)])
+            content = Path(engine._executive_summary(state)).read_text()
+            assert "MOCK ANALYSIS" in content            # banner
+            assert "[MOCK]" in content                   # per-finding badge
+            assert "MockLLM (templated, not reasoned)" in content
+
+    def test_full_report_badges_and_marks_unverified(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            engine = ReportEngine("test", "eng", "hash", Path(tmp))
+            state = _make_state(findings=[dict(self._MOCK_FINDING)])
+            content = Path(engine._full_report(state)).read_text()
+            assert "MOCK ANALYSIS" in content
+            assert "[MOCK]" in content
+            assert "Evidence integrity:** unverified" in content
+
+    def test_real_finding_not_badged(self):
+        # A normal (live-model / tool) finding carries no mock provenance and
+        # must NOT get the banner or badge: no crying wolf on real analysis.
+        with tempfile.TemporaryDirectory() as tmp:
+            engine = ReportEngine("test", "eng", "hash", Path(tmp))
+            content = Path(engine._executive_summary(_make_state())).read_text()
+            assert "MOCK ANALYSIS" not in content
+            assert "[MOCK]" not in content
