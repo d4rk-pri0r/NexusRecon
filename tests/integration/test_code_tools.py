@@ -182,6 +182,62 @@ class TestGitHubReconTool:
         assert result.success is False
         assert "GITHUB_TOKEN" in result.error
 
+    @patch("nexusrecon.tools.code.github_tool.asyncio.sleep", new_callable=AsyncMock)
+    @patch("nexusrecon.core.config.NexusConfig.get_secret", return_value="ghp_faketoken")
+    async def test_recon_health_flags_server_side_search_outage(self, _secret, _sleep) -> None:
+        """A server-side search incident (every /search/code dork returns 503)
+        must be recorded in _recon_health as a transient failure so
+        assess_result flags the code-exposure scan as never-ran. 5xx counts as
+        a transient failure (a gap an adversarial pass found), unlike a 422
+        query-reject which does not."""
+        tool = GitHubTool()
+        with respx.mock:
+            respx.get(f"{self.BASE}/orgs/example.com").mock(
+                return_value=Response(404, json={"message": "Not Found"})
+            )
+            respx.get(url__regex=r"https://api\.github\.com/orgs/example\.com/repos.*").mock(
+                return_value=Response(404, json={"message": "Not Found"})
+            )
+            respx.get(url__regex=r"https://api\.github\.com/search/code.*").mock(
+                return_value=Response(503, json={"message": "Service Unavailable"})
+            )
+            result = await tool.run("example.com")
+        assert result.success is True
+        health = result.data["_recon_health"]
+        assert health["secret_ok"] == 0
+        assert health["secret_transient_fail"] == 20  # all 5xx counted as transient
+        assert health["secret_query_reject"] == 0     # none were deterministic 4xx
+        # assess_result must now flag this as a silent code-exposure failure.
+        assert tool.assess_result(result, "example.com") is not None
+
+    @patch("nexusrecon.tools.code.github_tool.asyncio.sleep", new_callable=AsyncMock)
+    @patch("nexusrecon.core.config.NexusConfig.get_secret", return_value="ghp_faketoken")
+    async def test_bare_domain_422_dorks_not_flagged(self, _secret, _sleep) -> None:
+        """The false-positive fix: a bare domain makes every dork query
+        "org:example.com", which GitHub 422s (org logins cannot contain dots).
+        Those deterministic query-rejects are NOT counted as transient
+        failures, so a healthy domain run is not flagged degraded. Before the
+        fix, counting all non-200s made nearly every domain run cry wolf."""
+        tool = GitHubTool()
+        with respx.mock:
+            respx.get(f"{self.BASE}/orgs/example.com").mock(
+                return_value=Response(404, json={"message": "Not Found"})
+            )
+            respx.get(url__regex=r"https://api\.github\.com/orgs/example\.com/repos.*").mock(
+                return_value=Response(404, json={"message": "Not Found"})
+            )
+            respx.get(url__regex=r"https://api\.github\.com/search/code.*").mock(
+                return_value=Response(422, json={"message": "Validation Failed"})
+            )
+            result = await tool.run("example.com")
+        assert result.success is True
+        health = result.data["_recon_health"]
+        assert health["secret_ok"] == 0
+        assert health["secret_transient_fail"] == 0    # no transient failures
+        assert health["secret_query_reject"] == 20     # all 20 are deterministic 422s
+        # A healthy (if unproductive) domain run must NOT be flagged degraded.
+        assert tool.assess_result(result, "example.com") is None
+
 
 # ────────────────────────────────────────────────────────────────────────
 # github_actions_leaks — api.github.com (search/code + raw file fetch)

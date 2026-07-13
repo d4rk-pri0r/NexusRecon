@@ -319,6 +319,340 @@ class TestRegistrySetsDegraded:
         assert audit.results and audit.results[-1]["degraded"] is True
 
 
+# F-A1 (broadened, perfect-it #5): high-traffic tool coverage. Before this,
+# only 4 of 97 tools overrode assess_result, so a silent failure in
+# subfinder / amass / httpx / shodan / github_recon was reported as a clean
+# negative. What the coverage does now, and (just as important) what it
+# deliberately does NOT do, after two adversarial verification passes:
+#
+#  - Subprocess tools (subfinder/amass/httpx): run() fails on a non-zero exit
+#    with no output (a crashed/errored tool is no longer a "clean negative"),
+#    and assess_result flags a partial crash (non-zero exit with some output).
+#    Their exit-0-but-empty failures (dead proxy, all sources throttled) are
+#    NOT guessed at: an empirical pass showed subfinder/httpx write nothing
+#    useful to stderr at their default verbosity, while amass writes per-source
+#    noise on healthy runs, so a stderr-marker heuristic would be either inert
+#    or a cry-wolf false positive. That gap is a documented residual (needs
+#    per-source -stats / a proxy preflight), not a heuristic.
+#  - github_recon distinguishes the separately-metered core and /search/code
+#    pools: only a token-wide 401, a rejected repo enumeration, or a code scan
+#    where every reaching request failed transiently AND none returned data is
+#    flagged. A bare-domain run (whose org:<domain> dorks all 422 on the
+#    invalid qualifier) and a bare org rate-limit are NOT flagged.
+#  - shodan surfaces the one reachable silent failure (an IP dispatched with
+#    target_type="ip" gets hostname-searched on the wrong endpoint); its
+#    network failures are otherwise already caught by classify_response.
+#
+# The invariant across all of them: a clean, genuine negative is never flagged
+# (false positives train operators to ignore the signal, the harm this feature
+# exists to prevent), even at the cost of leaving some hard-to-detect silent
+# failures as honest residuals.
+
+
+class TestSubfinderAssessment:
+    def _tool(self):
+        from nexusrecon.tools.domain.subfinder_tool import SubfinderTool
+        return SubfinderTool()
+
+    def test_found_subdomains_not_flagged(self):
+        r = ToolResult(success=True, source="subfinder",
+                       data={"subdomains": [{"subdomain": "a.acme.com"}],
+                             "returncode": 0, "stderr_tail": ""},
+                       result_count=1)
+        assert self._tool().assess_result(r, "acme.com") is None
+
+    def test_clean_exit_empty_not_flagged(self):
+        # Exit 0, no subdomains: a legitimate negative for an obscure domain.
+        # Even with stderr noise present, an exit-0 empty is NOT flagged (the
+        # source-health signal is not reliably separable from a real empty).
+        r = ToolResult(success=True, source="subfinder",
+                       data={"subdomains": [], "returncode": 0,
+                             "stderr_tail": "one-source: i/o timeout"},
+                       result_count=0)
+        assert self._tool().assess_result(r, "acme.com") is None
+
+    def test_nonzero_exit_empty_flagged(self):
+        r = ToolResult(success=True, source="subfinder",
+                       data={"subdomains": [], "returncode": 1,
+                             "stderr_tail": "could not load resolvers"},
+                       result_count=0)
+        assert self._tool().assess_result(r, "acme.com") is not None
+
+    def test_nonzero_exit_with_output_flagged(self):
+        # A partial crash (some names, then a non-zero exit) is a truncated
+        # run, not a healthy success: the exit code is real, so flag it.
+        r = ToolResult(success=True, source="subfinder",
+                       data={"subdomains": [{"subdomain": "a.acme.com"}],
+                             "returncode": 2, "stderr_tail": "panic: runtime error"},
+                       result_count=1)
+        assert self._tool().assess_result(r, "acme.com") is not None
+
+
+class TestSubfinderRunFailureDetection:
+    def test_nonzero_exit_no_output_is_failure(self, monkeypatch):
+        from nexusrecon.tools.domain.subfinder_tool import SubfinderTool
+        tool = SubfinderTool()
+        monkeypatch.setattr(tool, "is_available", lambda: True)
+        monkeypatch.setattr(tool, "run_subprocess",
+                            lambda *a, **k: _FakeProc(1, stderr="fatal: bad config"))
+        result = asyncio.run(tool.run("acme.com"))
+        # Previously success=True with 0 subdomains; the discarded exit
+        # code now surfaces it as a genuine failure, not an empty result.
+        assert result.success is False
+        assert "subfinder" in result.error.lower()
+
+    def test_nonzero_exit_with_output_kept_as_success(self, monkeypatch):
+        # A partial run that still returned names is trusted, not discarded.
+        from nexusrecon.tools.domain.subfinder_tool import SubfinderTool
+        tool = SubfinderTool()
+        monkeypatch.setattr(tool, "is_available", lambda: True)
+        monkeypatch.setattr(tool, "run_subprocess",
+                            lambda *a, **k: _FakeProc(1, stdout="www.acme.com\n"))
+        result = asyncio.run(tool.run("acme.com"))
+        assert result.success is True
+        assert result.result_count == 1
+
+
+class TestAmassAssessment:
+    def _tool(self):
+        from nexusrecon.tools.domain.amass_tool import AmassTool
+        return AmassTool()
+
+    def test_found_subdomains_not_flagged(self):
+        r = ToolResult(success=True, source="amass",
+                       data={"subdomains": [{"subdomain": "a.acme.com"}],
+                             "returncode": 0, "stderr_tail": ""},
+                       result_count=1)
+        assert self._tool().assess_result(r, "acme.com") is None
+
+    def test_clean_exit_empty_not_flagged(self):
+        # amass logs per-source timeouts/throttles to stderr on healthy runs,
+        # so an exit-0 empty with such noise must NOT be flagged: one of many
+        # sources flapping does not invalidate a genuine empty.
+        r = ToolResult(success=True, source="amass",
+                       data={"subdomains": [], "returncode": 0,
+                             "stderr_tail": "crtsh: rate limit exceeded"},
+                       result_count=0)
+        assert self._tool().assess_result(r, "acme.com") is None
+
+    def test_nonzero_exit_empty_flagged(self):
+        r = ToolResult(success=True, source="amass",
+                       data={"subdomains": [], "returncode": 1,
+                             "stderr_tail": "config file error"},
+                       result_count=0)
+        assert self._tool().assess_result(r, "acme.com") is not None
+
+    def test_nonzero_exit_with_output_flagged(self):
+        r = ToolResult(success=True, source="amass",
+                       data={"subdomains": [{"subdomain": "a.acme.com"}],
+                             "returncode": 1, "stderr_tail": "datasource error"},
+                       result_count=1)
+        assert self._tool().assess_result(r, "acme.com") is not None
+
+
+class TestAmassRunFailureDetection:
+    def test_nonzero_exit_no_output_is_failure(self, monkeypatch):
+        from nexusrecon.tools.domain.amass_tool import AmassTool
+        tool = AmassTool()
+        monkeypatch.setattr(tool, "is_available", lambda: True)
+        monkeypatch.setattr(tool, "run_subprocess",
+                            lambda *a, **k: _FakeProc(1, stderr="datasource init failed"))
+        result = asyncio.run(tool.run("acme.com"))
+        assert result.success is False
+        assert "amass" in result.error.lower()
+
+
+class TestHTTPxAssessment:
+    def _tool(self):
+        from nexusrecon.tools.web.httpx_tool import HTTPxTool
+        return HTTPxTool()
+
+    def test_live_host_not_flagged(self):
+        r = ToolResult(success=True, source="httpx",
+                       data={"results": [{"url": "https://acme.com", "status_code": 200}],
+                             "returncode": 0, "stderr_tail": ""},
+                       result_count=1)
+        assert self._tool().assess_result(r, "acme.com") is None
+
+    def test_clean_exit_no_live_host_not_flagged(self):
+        # httpx exits 0 when a host simply is not serving HTTP: a valid
+        # negative, not flagged even if stderr carries a connection error
+        # (indistinguishable from a genuinely down host).
+        r = ToolResult(success=True, source="httpx",
+                       data={"results": [], "returncode": 0,
+                             "stderr_tail": "dial tcp 1.2.3.4:443: connection refused"},
+                       result_count=0)
+        assert self._tool().assess_result(r, "acme.com") is None
+
+    def test_nonzero_exit_empty_flagged(self):
+        r = ToolResult(success=True, source="httpx",
+                       data={"results": [], "returncode": 2,
+                             "stderr_tail": "flag provided but not defined"},
+                       result_count=0)
+        assert self._tool().assess_result(r, "acme.com") is not None
+
+
+class TestHTTPxRunFailureDetection:
+    def test_nonzero_exit_no_output_is_failure(self, monkeypatch):
+        from nexusrecon.tools.web.httpx_tool import HTTPxTool
+        tool = HTTPxTool()
+        monkeypatch.setattr(tool, "is_available", lambda: True)
+        monkeypatch.setattr(tool, "run_subprocess",
+                            lambda *a, **k: _FakeProc(2, stderr="flag provided but not defined"))
+        result = asyncio.run(tool.run("acme.com"))
+        assert result.success is False
+        assert "httpx" in result.error.lower()
+
+    def test_nonzero_exit_with_output_kept_as_success(self, monkeypatch):
+        from nexusrecon.tools.web.httpx_tool import HTTPxTool
+        tool = HTTPxTool()
+        monkeypatch.setattr(tool, "is_available", lambda: True)
+        monkeypatch.setattr(tool, "run_subprocess",
+                            lambda *a, **k: _FakeProc(
+                                1, stdout='{"url": "https://acme.com", "status_code": 200}'))
+        result = asyncio.run(tool.run("acme.com"))
+        assert result.success is True
+        assert result.result_count == 1
+
+
+class TestShodanAssessment:
+    def _tool(self):
+        from nexusrecon.tools.intel.shodan_tool import ShodanTool
+        return ShodanTool()
+
+    def test_domain_zero_hosts_not_flagged(self):
+        # classify_response already fails auth/rate-limit/outage cases, so a
+        # domain with no indexed hosts is a legitimate negative, not a failure.
+        r = ToolResult(success=True, source="shodan",
+                       data={"search": {"total": 0, "hosts": []}}, result_count=0)
+        assert self._tool().assess_result(r, "acme.com") is None
+
+    def test_host_detail_not_flagged(self):
+        r = ToolResult(success=True, source="shodan",
+                       data={"host": {"ip": "1.2.3.4", "ports": [443]}}, result_count=0)
+        assert self._tool().assess_result(r, "1.2.3.4", target_type="ip") is None
+
+    def test_ip_hostname_searched_flagged(self):
+        # The reachable silent failure: the dispatcher routes an IP with
+        # target_type="ip", but run() hostname-searches it (no host structure),
+        # missing its ports/services/vulns. Surface the mis-route.
+        r = ToolResult(success=True, source="shodan",
+                       data={"search": {"total": 0, "hosts": []}}, result_count=0)
+        assert self._tool().assess_result(r, "1.2.3.4", target_type="ip") is not None
+
+    def test_misrouted_empty_flagged(self):
+        # Neither structure populated: the lookup did nothing yet reported
+        # success (an internally misrouted call).
+        r = ToolResult(success=True, source="shodan", data={}, result_count=0)
+        assert self._tool().assess_result(r, "acme.com") is not None
+
+
+class TestGitHubReconAssessment:
+    def _tool(self):
+        from nexusrecon.tools.code.github_tool import GitHubTool
+        return GitHubTool()
+
+    def test_auth_failure_401_flagged(self):
+        r = ToolResult(success=True, source="github_recon",
+                       data={"org": {"found": False},
+                             "_recon_health": {"primary_status": 401,
+                                               "secret_ok": 0, "secret_transient_fail": 20}},
+                       result_count=0)
+        assert self._tool().assess_result(r, "acme.com") is not None
+
+    def test_bare_primary_403_not_flagged(self):
+        # A 403 confined to the /orgs lookup (core-pool rate-limit) must NOT
+        # flag the whole result: the code-search pool is metered separately
+        # and ran clean here, so this was a false positive the verifiers
+        # caught. Only a 401 (token rejected everywhere) is a whole-result
+        # verdict.
+        r = ToolResult(success=True, source="github_recon",
+                       data={"_recon_health": {"primary_status": 403, "repos_status": None,
+                                               "secret_ok": 20, "secret_transient_fail": 0}},
+                       result_count=0)
+        assert self._tool().assess_result(r, "acme.com") is None
+
+    def test_bare_domain_all_422_not_flagged(self):
+        # The critical false-positive fix: a bare domain makes every dork query
+        # "org:acme.com", which GitHub 422s (org logins cannot contain dots).
+        # Those are counted as query-rejects, not failures, so a healthy domain
+        # run is not flagged. This is the most common engagement input;
+        # flagging it would cry wolf on nearly every run.
+        r = ToolResult(success=True, source="github_recon",
+                       data={"_recon_health": {"primary_status": 404, "repos_status": 404,
+                                               "secret_ok": 0, "secret_transient_fail": 0,
+                                               "secret_query_reject": 20}},
+                       result_count=0)
+        assert self._tool().assess_result(r, "acme.com") is None
+
+    def test_bare_domain_422_with_transient_blip_not_flagged(self):
+        # Convergence fix: a bare-domain run where 19 dorks 422 (invalid
+        # org:<domain>) and ONE catches a stray transient blip (a 5xx or a
+        # shared-pool 403 crossing mid-loop). The dork scan is still a
+        # designed no-op for a domain, so the presence of a query-reject
+        # suppresses the flag: without this, a single coincident blip would
+        # cry wolf on the most common input.
+        r = ToolResult(success=True, source="github_recon",
+                       data={"_recon_health": {"primary_status": 404, "repos_status": 404,
+                                               "secret_ok": 0, "secret_transient_fail": 1,
+                                               "secret_query_reject": 19}},
+                       result_count=0)
+        assert self._tool().assess_result(r, "acme.com") is None
+
+    def test_repo_enum_rejected_flagged(self):
+        # Org lookup fine, but repo enumeration (a primary output) was
+        # rate-limited on its first page: the empty repo list is a failed
+        # call, not an org with no repos.
+        r = ToolResult(success=True, source="github_recon",
+                       data={"_recon_health": {"primary_status": 200, "repos_status": 403,
+                                               "secret_ok": 20, "secret_transient_fail": 0}},
+                       result_count=0)
+        assert self._tool().assess_result(r, "acme.com") is not None
+
+    def test_repo_enum_404_not_flagged(self):
+        # A 404 on repos means the org genuinely does not exist: not a failure.
+        r = ToolResult(success=True, source="github_recon",
+                       data={"_recon_health": {"primary_status": 404, "repos_status": 404,
+                                               "secret_ok": 20, "secret_transient_fail": 0}},
+                       result_count=0)
+        assert self._tool().assess_result(r, "acme.com") is None
+
+    def test_all_code_searches_transient_failed_flagged(self):
+        # A real org scan (valid org: qualifier, so no query-rejects) where
+        # every dork that reached the endpoint failed transiently (all 5xx or
+        # all 403) and none returned data: the code-exposure scan did not run,
+        # so "no secrets" is unverified. The query-reject gate does not suppress
+        # this because a valid org login produces zero 422s.
+        r = ToolResult(success=True, source="github_recon",
+                       data={"_recon_health": {"primary_status": 200, "repos_status": None,
+                                               "secret_ok": 0, "secret_transient_fail": 20,
+                                               "secret_query_reject": 0}},
+                       result_count=0)
+        assert self._tool().assess_result(r, "validorg") is not None
+
+    def test_org_found_not_flagged(self):
+        r = ToolResult(success=True, source="github_recon",
+                       data={"org": {"found": True, "name": "acme"},
+                             "_recon_health": {"primary_status": 200,
+                                               "secret_ok": 20, "secret_transient_fail": 0}},
+                       result_count=3)
+        assert self._tool().assess_result(r, "acme") is None
+
+    def test_partial_code_search_failure_not_flagged(self):
+        # Some dorks succeeded and some were rate-limited: we still collected
+        # signal, so we do not cry wolf on a partial rate-limit.
+        r = ToolResult(success=True, source="github_recon",
+                       data={"_recon_health": {"primary_status": 404, "repos_status": None,
+                                               "secret_ok": 12, "secret_transient_fail": 8}},
+                       result_count=0)
+        assert self._tool().assess_result(r, "acme.com") is None
+
+    def test_no_health_bucket_not_flagged(self):
+        # Defensive: a result with no diagnostics is never flagged.
+        r = ToolResult(success=True, source="github_recon", data={}, result_count=0)
+        assert self._tool().assess_result(r, "acme.com") is None
+
+
 # ── F-A3: preflight availability report ──────────────────────────────────────
 
 

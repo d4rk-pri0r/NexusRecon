@@ -83,6 +83,42 @@ class ShodanTool(BaseHTTPTool):
         except Exception as e:
             return ToolResult(success=False, source=self.name, error=str(e))
 
+    def assess_result(self, result: ToolResult, target: str, target_type: str = "domain") -> str | None:
+        # Shodan's HTTP-layer failures (bad key 401, rate limit 429, provider
+        # outage 5xx) are already converted to success=False by
+        # ``classify_response``, so a success here means the API answered. Zero
+        # hosts for a domain is then a legitimate negative: most domains are
+        # simply not indexed by Shodan, and flagging that would be exactly the
+        # cry-wolf noise this feature must avoid.
+        d = result.data or {}
+        if not isinstance(d, dict):
+            return None
+        # An IP target that came back with only a hostname-search structure was
+        # queried on the wrong endpoint. ``run()`` routes on the is_ip/ip
+        # kwargs, which the entity-graph dispatcher does not pass, so an IP
+        # dispatched with target_type="ip" is searched as ``hostname:"<ip>"``
+        # and its real host/port/vuln data is missed. Surface that mis-route as
+        # degraded instead of reporting a clean "no exposure". (Deeper fix,
+        # noted in ROADMAP #5: route IP targets to /shodan/host in run().)
+        if target_type == "ip" and "host" not in d:
+            return (
+                "shodan queried this IP via hostname search rather than the host "
+                "endpoint, so its open ports, services, and vulns were not "
+                "retrieved; the empty result is a mis-routed query, not a clean "
+                "negative"
+            )
+        # The only other anomaly is a success that populated no result
+        # structure at all, which means the call was internally misrouted (an
+        # IP path invoked without the IP). Key *presence* (not emptiness) makes
+        # this zero-false-positive: a domain with no hosts still carries an
+        # (empty) ``search`` block.
+        if "search" not in d and "host" not in d:
+            return (
+                "shodan returned success but produced neither a host-search nor a "
+                "host-detail structure; the lookup was misrouted rather than empty"
+            )
+        return None
+
     def _parse_search_results(self, data: dict) -> dict:
         hosts = []
         for match in data.get("matches", []):

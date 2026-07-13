@@ -46,10 +46,55 @@ class SubfinderTool(OSINTTool):
                     except json.JSONDecodeError:
                         subdomains.append({"subdomain": line.strip(), "source": "unknown"})
 
+            # Capture the process outcome instead of discarding it.
+            # subfinder exits non-zero on resolver, network, or config
+            # failures that leave stdout empty; previously that looked
+            # identical to a clean "no subdomains" run, so a silent
+            # enumeration failure was reported as a genuine negative. A
+            # non-zero exit with nothing parsed is a real failure.
+            returncode = result.returncode
+            stderr_tail = (result.stderr or "")[-800:].strip()
+            if returncode != 0 and not subdomains:
+                return ToolResult(
+                    success=False, source=self.name,
+                    error=(
+                        f"subfinder exited {returncode} with no subdomains"
+                        + (f": {stderr_tail}" if stderr_tail else "")
+                    ),
+                )
+
             return ToolResult(
                 success=True, source=self.name,
-                data={"subdomains": subdomains},
+                data={
+                    "subdomains": subdomains,
+                    "returncode": returncode,
+                    "stderr_tail": stderr_tail,
+                },
                 result_count=len(subdomains),
             )
         except Exception as e:
             return ToolResult(success=False, source=self.name, error=str(e))
+
+    def assess_result(self, result: ToolResult, target: str, target_type: str = "domain") -> str | None:
+        # A non-zero exit is an objective anomaly. run() already fails the
+        # empty case (non-zero exit + no subdomains -> success=False), so
+        # reaching here with a non-zero code means subfinder emitted some names
+        # but did not finish cleanly, so the list is likely truncated. Never a
+        # false positive: the exit code is real.
+        #
+        # subfinder's exit-0-but-empty failures (a dead proxy, blocked egress,
+        # or every source throttled) are deliberately NOT guessed at here.
+        # Empirically, under -silent subfinder writes nothing to stderr on any
+        # exit-0 path, so there is no marker that separates "all sources failed"
+        # from "genuinely no subdomains" -- flagging on stderr would either be
+        # inert or cry wolf on a real empty. Closing that gap needs the
+        # per-source -stats signal (a follow-up noted in ROADMAP #5), not a
+        # returncode/stderr heuristic.
+        d = result.data or {}
+        if d.get("returncode", 0) != 0:
+            detail = d.get("stderr_tail") or f"exit code {d.get('returncode')}"
+            return (
+                "subfinder exited non-zero after emitting partial output; the "
+                f"subdomain list is likely incomplete: {detail[:200]}"
+            )
+        return None

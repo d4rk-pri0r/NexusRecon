@@ -116,11 +116,35 @@ exists actually deliver on its claim.
        Follow-up: thread per-source `ProvenanceRecord` writers (still unwired)
        before re-advertising "per-source provenance."
 
-5. [ ] **Broaden degraded-tool detection.** Today only 4 of 97 tools override
+5. [x] **Broaden degraded-tool detection.** Only 4 of 97 tools overrode
        `assess_result` (whois/nuclei/sslyze/wafw00f), so a silent failure in
-       subfinder, amass, httpx, shodan, or github_recon is reported as a clean
-       negative, the exact failure this feature was built to kill. Add
-       `assess_result` coverage for the high-traffic tools.
+       subfinder, amass, httpx, shodan, or github_recon was reported as a
+       clean negative, the exact failure this feature was built to kill. Done,
+       and scoped so it never cries wolf (a false "degraded" is the real
+       harm), after three adversarial verification passes (one running the
+       actual binaries) pruned an over-eager first cut. The three subprocess
+       tools now capture the process exit code: `run()` fails outright on a
+       non-zero exit that parsed nothing (a crashed or misconfigured tool is
+       no longer a clean negative) and `assess_result` flags a partial crash
+       (non-zero exit with some output). Their exit-0-but-empty failures (dead
+       proxy, all sources throttled) are left an honest residual: these tools
+       write nothing usable to stderr at default verbosity, so any marker
+       heuristic is either inert or a false positive, and closing the gap
+       needs the per-source `-stats` signal or a proxy preflight. github_recon
+       threads a `_recon_health` bucket that separates GitHub's core-REST and
+       `/search/code` rate-limit pools and flags a token-wide 401, a rejected
+       repo enumeration, or a code scan where every reaching dork failed
+       transiently and none returned data, but never a bare org rate-limit and
+       never a bare-domain run (whose `org:<domain>` dorks all 422 on the
+       invalid qualifier, tracked as query-rejects rather than failures).
+       shodan needed no new field detection (`classify_response` already fails
+       its auth/rate-limit/outage responses); its one reachable silent
+       failure, an in-scope IP hostname-searched on the wrong endpoint, is now
+       surfaced. Regression: `tests/unit/test_wave_f_failure_detection.py` and
+       `tests/integration/test_code_tools.py`. Follow-ups noted: per-source
+       `-stats` or a proxy preflight for the subprocess exit-0 case, and
+       routing IP targets to `/shodan/host` in shodan's `run()`. The other ~90
+       tools correctly default to no opinion.
 
 6. [ ] **Stop MockLLM masquerading as analysis.** Keyless (the default, and the
        only path the test suite exercises) the persona layer no-ops into
