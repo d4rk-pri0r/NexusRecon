@@ -794,7 +794,7 @@ async def phase5_light_active(state: CampaignGraphState) -> CampaignGraphState:
 # ── Phase 6: Active (T3 gated) ────────────────────────────────────────────────
 
 async def phase6_active(state: CampaignGraphState) -> CampaignGraphState:
-    """T3 active probing — content fuzzing, alt-port probes, screenshots."""
+    """T3 active probing: content fuzzing and alt-port probes."""
     log.info("Phase 6: Active enumeration (T3)")
     state["current_phase"] = "phase6"
     infra_intel = dict(state.get("infra_intel", {}))
@@ -889,14 +889,6 @@ async def phase6_active(state: CampaignGraphState) -> CampaignGraphState:
         if data:
             infra_intel.setdefault(sub, {}).setdefault("discovered_paths", []).append(data)
 
-    # gowitness screenshots
-    for sub in subdomains[:50]:
-        result = await registry.execute("gowitness", sub, "domain")
-        if result.success:
-            shots = result.data.get("screenshots", result.data.get("data", {}).get("screenshots", []))
-            if shots:
-                infra_intel.setdefault(sub, {}).setdefault("screenshots", []).extend(shots)
-
     # Agent synthesis: Active Recon Specialist
     executor = _get_executor()
     try:
@@ -911,8 +903,7 @@ async def phase6_active(state: CampaignGraphState) -> CampaignGraphState:
                         "1. Interesting HTTP endpoints and directories "
                         "2. Alternative ports with web services "
                         "3. Admin panels and sensitive paths discovered "
-                        "4. Screenshot evidence of live services "
-                        "5. Findings for further exploitation",
+                        "4. Findings for further exploitation",
             state=state,
         )
         state.setdefault("agent_messages", []).append({

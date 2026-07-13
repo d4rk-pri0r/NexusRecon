@@ -179,42 +179,18 @@ class TestFaviconTool:
 
 
 class TestDorksTool:
-    """Google dork automation with Bing fallback."""
+    """Google/Bing dork automation is now a stub: SERP HTML scraping is
+    defeated by 2026 consent walls / anti-bot markup. Rather than report a
+    scraping failure as a fake clean negative (the old success=True,
+    result_count=0), run() returns a clean failure. Inventory is enforced by
+    tests/unit/test_stubbed_tools.py::TestStubInventory."""
 
     @pytest.mark.asyncio
-    async def test_google_search_success(self):
+    async def test_run_returns_clean_stub_failure(self):
         tool = DorksTool()
-        html = '<html><a href="https://example.com/doc.pdf">PDF</a></html>'
-        with respx.mock:
-            respx.get(url__startswith="https://www.google.com/search").mock(
-                return_value=Response(200, text=html)
-            )
-            result = await tool.run("example.com")
-        assert result.success is True
-        assert result.result_count >= 1
-
-    @pytest.mark.asyncio
-    async def test_google_fails_falls_back_to_bing(self):
-        tool = DorksTool()
-        bing_html = '<html><cite>https://example.com/file.pdf</cite></html>'
-        with respx.mock:
-            respx.get(url__startswith="https://www.google.com/search").mock(return_value=Response(403))
-            respx.get(url__startswith="https://www.bing.com/search").mock(
-                return_value=Response(200, text=bing_html)
-            )
-            result = await tool.run("example.com")
-        assert result.success is True
-        assert result.result_count >= 1
-
-    @pytest.mark.asyncio
-    async def test_both_search_engines_fail(self):
-        tool = DorksTool()
-        with respx.mock:
-            respx.get(url__startswith="https://www.google.com/search").mock(return_value=Response(403))
-            respx.get(url__startswith="https://www.bing.com/search").mock(return_value=Response(503))
-            result = await tool.run("example.com")
-        assert result.success is True
-        assert result.result_count == 0
+        result = await tool.run("example.com")
+        assert result.success is False
+        assert "stub" in (result.error or "").lower()
 
 
 class TestMetadataTool:

@@ -252,8 +252,14 @@ async def run_campaign(
             if campaign_dir is not None:
                 reports_dir = Path(campaign_dir) / "reports"
                 reports_dir.mkdir(parents=True, exist_ok=True)
+                from nexusrecon import __version__ as _nr_version
                 (reports_dir / "run_health.md").write_text(
-                    render_run_health_md(health, s.get("campaign_id", "")),
+                    render_run_health_md(
+                        health,
+                        s.get("campaign_id", ""),
+                        scope_hash=s.get("scope_hash", ""),
+                        nexusrecon_version=str(_nr_version),
+                    ),
                     encoding="utf-8",
                 )
     except Exception as hl_err:

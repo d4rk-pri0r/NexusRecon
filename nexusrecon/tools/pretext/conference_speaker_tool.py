@@ -349,6 +349,22 @@ class ConferenceSpeakerTool(BaseHTTPTool):
             result_count=len(all_talks),
         )
 
+    def assess_result(self, result: ToolResult, target: str, target_type: str = "domain") -> str | None:
+        # Only the FOSDEM parser is implemented; 7 of the 8 conference-site
+        # parsers are placeholders that return no talks. So a zero-talk result
+        # reflects that missing coverage, not a verified "this person never
+        # spoke at these conferences". Flag it degraded rather than let the
+        # empty result read as a clean negative. A non-empty result means the
+        # working parser found real talks and is trusted as-is.
+        data = result.data if isinstance(result.data, dict) else {}
+        if data.get("summary", {}).get("talks_found", 0) == 0:
+            return (
+                "conference_speaker found no talks, but 7 of its 8 conference-site "
+                "parsers are placeholders (only FOSDEM is implemented); this is "
+                "missing coverage, not a verified absence of speaking history"
+            )
+        return None
+
 
 # ──────────────────────────────────────────────────────────────────────
 # Helpers

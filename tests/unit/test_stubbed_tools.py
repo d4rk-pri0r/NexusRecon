@@ -35,6 +35,7 @@ from nexusrecon.tools.registry import get_registry
 #     (set ``stubbed = False`` on the class and remove the entry)
 _KNOWN_STUBS: set[str] = {
     "gowitness",
+    "dorks",
 }
 
 

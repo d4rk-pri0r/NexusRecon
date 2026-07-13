@@ -14,10 +14,11 @@ What we emit
     which fields.
   * A ``set sample_name`` referencing the campaign's lead
     target.
-  * A list of ``set useragent`` candidates derived from any
-    Technology entities the campaign observed (e.g. "Apache
-    2.4.x" → a plausible mobile/desktop UA matching that
-    server's typical client mix).
+  * A fixed set of three common browser ``header
+    "User-Agent"`` values (Chrome/Windows, Safari/macOS,
+    Firefox/Linux). These are NOT derived from the observed
+    Technology entities; those are recorded in a comment
+    header instead.
   * ``http-get { ... }`` and ``http-post { ... }`` skeletons
     with the campaign's confirmed subdomains listed as
     candidate ``set uri`` values.

@@ -26,6 +26,8 @@ def build_spear_phishing_intelligence_md(
     engagement_id: str,
     state: dict[str, Any],
     output_dir: Path,
+    scope_hash: str = "",
+    nexusrecon_version: str = "",
 ) -> tuple[str, str]:
     """Write ``spear_phishing_intelligence.md`` + ``pretext_candidates.json``.
 
@@ -111,6 +113,14 @@ def build_spear_phishing_intelligence_md(
     # ── Per-target dossiers ─────────────────────────────────────────
     for target_id, dossier in targets.items():
         lines += _render_target_dossier(target_id, dossier)
+
+    lines += [
+        "---",
+        "",
+        f"**Scope Hash:** {scope_hash}",
+        f"**Tooling:** NexusRecon v{nexusrecon_version}",
+        "",
+    ]
 
     md_path = output_dir / "spear_phishing_intelligence.md"
     md_path.write_text("\n".join(lines))

@@ -477,7 +477,7 @@ moonshot capabilities are in place (Watch Mode, Signed Bundles,
 Adversarial Defense, Vision). Fleet-Level Learning is open for design
 discussion.
 
-**Test suite: 590/590 passing.**
+**Test suite: full suite green.**
 
 What's stable:
 

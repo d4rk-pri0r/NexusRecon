@@ -52,7 +52,7 @@ These are CLI binaries that certain tools wrap. NexusRecon skips any tool whose 
 | `httpx` | HTTP probing (Phase 5) | `go install github.com/projectdiscovery/httpx/cmd/httpx@latest` |
 | `gitleaks` | secret scanning | `brew install gitleaks` or GitHub releases |
 | `trufflehog` | secret scanning | `brew install trufflehog` or GitHub releases |
-| `gowitness` | screenshots (Phase 6) | `go install github.com/sensepost/gowitness@latest` |
+| `gowitness` | screenshots (registered stub; not run by a phase) | `go install github.com/sensepost/gowitness@latest` |
 | `gau` | URL enumeration | `go install github.com/lc/gau/v2/cmd/gau@latest` |
 | `maigret` | username OSINT | `pip install maigret` |
 
@@ -753,8 +753,8 @@ Tools: `httpx` (parallel, Semaphore(20)), `shodan`, `virustotal`, `greynoise` (o
 Produces: live host data in `infra_intel`. Skipped entirely if scope `max_tier` < T2.
 
 ### Phase 6: Active (T3 required)
-No tool registry calls. Direct httpx probes with `UserAgentPool` and `Semaphore(25)`: alt-port sweep (30 subs × 9 ports) and content discovery (20 subs × 24 paths). Then `gowitness` screenshots.  
-Produces: `alt_ports`, `discovered_paths`, and `screenshots` in `infra_intel`. Skipped entirely if scope `max_tier` < T3.
+No tool registry calls. Direct httpx probes with `UserAgentPool` and `Semaphore(25)`: alt-port sweep (30 subs × 9 ports) and content discovery (20 subs × 24 paths).  
+Produces: `alt_ports` and `discovered_paths` in `infra_intel`. Skipped entirely if scope `max_tier` < T3.
 
 ### Phase 7: Vulnerability Correlation
 Tools: `kev` (CISA catalog), `nvd` (CVEs for fingerprinted products, parallel).  

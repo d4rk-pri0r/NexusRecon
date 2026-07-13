@@ -1,1 +1,0 @@
-"""Cloud posture report module."""

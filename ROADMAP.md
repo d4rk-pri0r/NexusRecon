@@ -203,24 +203,30 @@ exists actually deliver on its claim.
        reversible; the wiring path and traps are recorded in ARCHITECTURE
        section 14. Done 2026-07-13.
 
-### Honesty cleanup (small, mechanical, do alongside the above)
+### Honesty cleanup (done 2026-07-13, one noted residual)
 
-- Remove the `gowitness` stub call in phase6 (a guaranteed no-op screenshot
-  step) or remove the stub from the advertised triage step.
-- Fix or cut the Cobalt Strike emitter's docstring, which claims user-agents are
-  "derived from observed Technology entities" while the code emits three
-  hardcoded UAs. Near-zero value over a public Malleable C2 template.
-- Delete the dead duplicate `reports/maltego_export.py` and the docstring-only
-  report stub modules that mislead readers about where logic lives.
-- `conference_speaker_tool` returns `success=True, talks_found=0` (7 of 8 site
-  parsers unconditionally return `[]`) and `dorks_tool` returns
-  `success=True, result_count=0` against 2026 consent walls. Make these report
-  honest failure instead of a fake clean negative, or mark them stubbed.
-- Report footer hygiene: add scope-hash plus version footers to
-  `credential_exposure_paths.md`, `spear_phishing_intelligence.md`, and
-  `run_health.md`, and fix the PDF footer that hardcodes `v1.0.0`. Strip
-  em-dashes and box-drawing glyphs from generated operator prose (they read as
-  an AI tell in delivered documents).
+- Done: removed the `gowitness` no-op screenshot call from phase6 (it fired up
+  to 50 pointless registry round-trips into a stub and populated nothing);
+  dropped the now-false "screenshots" claim from the phase6 docstring, the
+  agent prompt, and MANUAL.md. The tool stays a registered stub.
+- Done: the Cobalt Strike emitter docstring now says the three User-Agent
+  headers are a fixed set, not derived from Technology entities (which the code
+  never did).
+- Done: deleted the dead duplicate `reports/maltego_export.py` and six
+  docstring-only report stub modules (`asset_inventory`, `attack_surface`,
+  `cloud_posture`, `executive_summary`, `full_report`, `phishing_package`); the
+  real logic lives in `reports/engine.py`, and `reports/__init__.py` now imports
+  only `engine`.
+- Done: `dorks_tool` is marked `stubbed` (its SERP HTML scraping is defeated by
+  2026 consent walls) so it returns a clean failure instead of a fake clean
+  negative; `conference_speaker_tool` gains an `assess_result` that flags
+  degraded on zero talks, since 7 of its 8 conference parsers are placeholders
+  so an empty result is missing coverage, not a verified absence.
+- Done: `credential_exposure_paths.md`, `spear_phishing_intelligence.md`, and
+  `run_health.md` now carry scope-hash plus version footers, and the PDF footer
+  reports the real version instead of a hardcoded `v1.0.0`. Residual: a broad
+  sweep to strip em-dashes and box-drawing glyphs from ALL generated operator
+  prose is not done (only the touched footers are clean); left as a follow-up.
 
 ### Release readiness (ship what exists, not new features)
 

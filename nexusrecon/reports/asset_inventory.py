@@ -1,1 +1,0 @@
-"""Asset inventory module."""

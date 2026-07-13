@@ -310,7 +310,12 @@ def format_preflight_console(preflight: dict[str, Any]) -> str:
     )
 
 
-def render_run_health_md(health: RunHealth, campaign_id: str = "") -> str:
+def render_run_health_md(
+    health: RunHealth,
+    campaign_id: str = "",
+    scope_hash: str = "",
+    nexusrecon_version: str = "",
+) -> str:
     """Render a RunHealth as an operator-facing markdown deliverable."""
     h = health
     lines: list[str] = ["# Run Health Summary"]
@@ -395,5 +400,10 @@ def render_run_health_md(health: RunHealth, campaign_id: str = "") -> str:
         for p in h.policy_skipped:
             lines.append(f"- `{p['tool']}`: {p['reason']}")
         lines.append("")
+
+    lines.append("---")
+    lines.append("")
+    lines.append(f"**Scope Hash:** {scope_hash}")
+    lines.append(f"**Tooling:** NexusRecon v{nexusrecon_version}")
 
     return "\n".join(lines).rstrip() + "\n"

@@ -868,6 +868,15 @@ class TestRunHealthSummary:
         assert "Degraded capabilities" in md
         assert "crt.sh returned 502" in md
 
+    def test_render_markdown_has_scope_and_version_footer(self):
+        # Honesty cleanup: the run_health deliverable carries a scope-hash +
+        # tool-version footer so it is traceable to its engagement and build.
+        from nexusrecon.core.run_health import render_run_health_md, summarize_run_health
+        h = summarize_run_health(self._entries(), self._cats())
+        md = render_run_health_md(h, "nr-test", scope_hash="sh-abc", nexusrecon_version="0.7.0")
+        assert "**Scope Hash:** sh-abc" in md
+        assert "**Tooling:** NexusRecon v0.7.0" in md
+
 
 # ── F-A3 follow-up: console surfacing ────────────────────────────────────────
 

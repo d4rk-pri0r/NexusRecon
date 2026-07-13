@@ -1,1 +1,0 @@
-"""Phishing target package module."""

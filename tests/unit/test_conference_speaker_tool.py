@@ -378,3 +378,25 @@ class TestRegistration:
         names = {s.name for s in SITE_REGISTRY}
         assert {"DEFCON", "BSides", "RSA", "KubeCon", "FOSDEM",
                 "BlackHat", "Strange Loop", "USENIX"} <= names
+
+
+class TestConferenceSpeakerAssessResult:
+    """#6/honesty-cleanup: 7 of 8 conference parsers are placeholders, so a
+    zero-talk result is missing coverage, not a verified absence. assess_result
+    flags that degraded instead of letting it read as a clean negative."""
+
+    def test_zero_talks_flagged(self):
+        from nexusrecon.tools.base import ToolResult
+        tool = ConferenceSpeakerTool()
+        r = ToolResult(success=True, source="conference_speaker",
+                       data={"summary": {"talks_found": 0}}, result_count=0)
+        reason = tool.assess_result(r, "Jane Doe")
+        assert reason is not None
+        assert "placeholder" in reason.lower()
+
+    def test_talks_found_not_flagged(self):
+        from nexusrecon.tools.base import ToolResult
+        tool = ConferenceSpeakerTool()
+        r = ToolResult(success=True, source="conference_speaker",
+                       data={"summary": {"talks_found": 2}}, result_count=2)
+        assert tool.assess_result(r, "Jane Doe") is None

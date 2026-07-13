@@ -331,3 +331,24 @@ class TestMockFindingLabeling:
             content = Path(engine._executive_summary(_make_state())).read_text()
             assert "MOCK ANALYSIS" not in content
             assert "[MOCK]" not in content
+
+
+class TestReportFooters:
+    """Honesty cleanup: credential_exposure_paths and spear_phishing_intelligence
+    must carry a scope-hash + tool-version footer so a delivered document is
+    traceable to its engagement and build (matching the other reports)."""
+
+    def test_credential_exposure_footer(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            engine = ReportEngine("test", "eng", "scopehash-xyz", Path(tmp))
+            content = Path(engine._credential_exposure_paths(_make_state())).read_text()
+            assert "**Scope Hash:** scopehash-xyz" in content
+            assert "**Tooling:** NexusRecon v" in content
+
+    def test_spear_phishing_footer(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            engine = ReportEngine("test", "eng", "scopehash-xyz", Path(tmp))
+            md_path, _ = engine._spear_phishing_intelligence(_make_state())
+            content = Path(md_path).read_text()
+            assert "**Scope Hash:** scopehash-xyz" in content
+            assert "**Tooling:** NexusRecon v" in content
