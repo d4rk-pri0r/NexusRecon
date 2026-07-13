@@ -43,7 +43,8 @@ tool to run next, on what target, in response to what the previous
 tool just told you**. And proving the resulting findings are still
 true six weeks later when legal asks.
 
-NexusRecon is built around five durable capabilities:
+NexusRecon is built around four durable capabilities (plus one
+experimental engine kept in-tree, noted after the list):
 
 1. **Living Intelligence Graph**: every entity (subdomain, IP, email,
    person, cloud asset, vulnerability, hypothesis, lead, open
@@ -56,22 +57,23 @@ NexusRecon is built around five durable capabilities:
    simulation runs before every LLM dispatch; bounded-agency
    primitives let high-tier items queue for human approval instead
    of auto-firing.
-3. **Continuous Confidence Engine**: every graph mutation flows
-   through an orchestrator that runs corroboration, contradiction
-   detection, propagation, and adversarial self-check verifiers.
-   Confidence rises when multi-source independent agreement appears
-   and falls when contradictions land. Both bounded, both
-   audit-logged.
-4. **First-class extensibility**: community recon packs (a
+3. **First-class extensibility**: community recon packs (a
    directory + `manifest.yaml`) contribute tools, agents, dispatch
    policies, report templates, and custom entity / relationship
    types. Three scaffolders (`agent new` / `tool new` /
    `policy new`) generate working boilerplate in seconds.
-5. **Cryptographically signed handoff**: STIX 2.1 bundle export +
+4. **Cryptographically signed handoff**: STIX 2.1 bundle export +
    Ed25519 signed receipts + a standalone single-file Python
    verifier downstream consumers can run without installing
    NexusRecon. Plus bidirectional import from Nessus, Nuclei,
    generic CSV, and STIX bundles produced by partners.
+
+**Experimental (in-tree, opt-in, not wired into a default run):** a
+**Continuous Confidence Engine** (`nexusrecon/verification/`) whose
+orchestrator can subscribe to graph mutations and run corroboration,
+contradiction, propagation, and adversarial self-check verifiers. The
+code is unit-tested but no default `nexusrecon run` constructs it yet;
+see ARCHITECTURE.md section 14 and ROADMAP item 8.
 
 ---
 
@@ -88,7 +90,6 @@ laptop with default API keys configured, typical 30-60 min run:
 | **Phase 2** · active surface | httpx + gowitness fingerprint 12 live HTTP services; one is an unauthenticated admin console. |
 | **Phase 3** · cloud + identity | Azure/M365 enumerator finds the M365 federation; bucket_enum finds two public S3 buckets. |
 | **Phase 4** · correlation | LLM correlator promotes hypotheses to LeadEntities, draws CITES edges back to supporting evidence, scores attribution confidence. |
-| **Corroboration engine** | Same subdomain seen via passive_dns + certificate + active_probe → confidence lifts from 0.5 → 0.745 → 0.871. |
 | **Phase 7** · vuln correlation | NVD + KEV + EPSS match 4 CVEs. KEV-listed VPN CVE with EPSS 0.87 lands in the graph. |
 | **Adversarial scan** | `nexusrecon adversarial scan` finds 2 subdomains lockstep-fabricated by an upstream wildcard DNS server → confidence halved + queued for review. |
 | **Phase 8** · attack-surface rank | Top thread: "KEV-listed VPN CVE on `vpn.acme.com` + 3 breached employees in scope for credential reuse". |
@@ -127,8 +128,8 @@ bundle, or the continuous watch the framework gives you for free.
            ▼                  ▼                    ▼
   ┌──────────────┐    ┌──────────────┐     ┌──────────────────┐
   │ OSINT tool   │    │ 11 LLM phase │     │ Strategic engine │
-  │ registry +   │    │ agents +     │     │ planner +        │
-  │ recon packs  │    │ verifiers    │     │ simulator +      │
+  │ registry +   │    │ agents       │     │ planner +        │
+  │ recon packs  │    │              │     │ simulator +      │
   │ (T0-T3)      │    │              │     │ bounded agency   │
   └──────────────┘    └──────────────┘     └──────────────────┘
            │                  │                    │
@@ -136,8 +137,8 @@ bundle, or the continuous watch the framework gives you for free.
                         │
                         ▼
               ┌───────────────────────┐
-              │ Continuous Confidence │
-              │ + Adversarial defense │
+              │  Adversarial defense  │
+              │     (opt-in scan)     │
               └───────────┬───────────┘
                           │
                           ▼
@@ -299,6 +300,14 @@ nexusrecon resume nr-20260514-120000-abc12345
 | **Adversarial self-check** | `AdversarialSelfCheck` | Heuristic graph audit: single-source high-confidence claims, citation cycles, disconnected islands, source monocultures. |
 | **Adversarial defense** | `nexusrecon adversarial scan` | Four detectors: poisoned data, suspicious tool-call patterns, evidence inconsistency, prompt injection (regex+structural default, LLM mode opt-in). |
 
+The four verifier rows above (Corroboration engine, Contradiction detector,
+Confidence propagation, Adversarial self-check) are **experimental and
+opt-in**: they live in `nexusrecon/verification/` and are unit-tested, but a
+default `nexusrecon run` does not construct the orchestrator, so they do not
+run on a normal campaign. See ARCHITECTURE.md section 14 and ROADMAP item 8.
+(`Adversarial defense` above is a separate, real CLI command and does run when
+invoked.)
+
 ### Interop + distribution
 
 | Capability | Surface | What it does |
@@ -458,13 +467,15 @@ Per-key tool-unlock matrix:
 
 ## Status
 
-**v0.7.0, beta.** The four core bets of the post-0.5 transformation
-(Living Graph foundation, Strategic Reasoning Engine, Continuous
-Confidence Engine, Contribution & Pack format) and the intent-driven
-entry + STIX export/import + downstream emitters ship in this
-release. Four of five moonshot capabilities are in place (Watch
-Mode, Signed Bundles, Adversarial Defense, Vision). Fleet-Level
-Learning is open for design discussion.
+**v0.7.0, beta.** The three core bets of the post-0.5 transformation
+(Living Graph foundation, Strategic Reasoning Engine, Contribution &
+Pack format) and the intent-driven entry + STIX export/import +
+downstream emitters ship in this release. The Continuous Confidence
+Engine is built and unit-tested but stays experimental and opt-in
+(not wired into a default run; see ROADMAP item 8). Four of five
+moonshot capabilities are in place (Watch Mode, Signed Bundles,
+Adversarial Defense, Vision). Fleet-Level Learning is open for design
+discussion.
 
 **Test suite: 590/590 passing.**
 
@@ -475,8 +486,6 @@ What's stable:
   mutation events
 - Strategic engine: planner, dispatch policies, simulation, bounded
   agency
-- Continuous verification: corroboration, contradiction, propagation,
-  adversarial self-check
 - Recon Pack format with SDK scaffolders for agents / tools / policies
 - STIX 2.1 export + Ed25519 signed receipts + standalone verifier
 - Bidirectional import (STIX, Nessus, Nuclei, CSV) + Burp first-party
@@ -488,6 +497,9 @@ What's stable:
 
 What's still moving:
 
+- Continuous Confidence Engine (corroboration, contradiction,
+  propagation, adversarial self-check): in-tree and unit-tested, but
+  experimental and opt-in, not wired into a default run (ROADMAP item 8)
 - Fleet-Level Learning (privacy-preserving cross-campaign patterns)
 - TUI surfaces for the new Watch / Intent / Vision flows (the
   underlying capabilities ship; TUI tabs land as community pull

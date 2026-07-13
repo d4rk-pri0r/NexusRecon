@@ -71,6 +71,11 @@ deep-dives.
 
 ### Phase 2: Continuous Confidence Engine
 
+> Note (2026-06-09): the PRs below did land and the engine is in-tree
+> and unit-tested, but it remains experimental and opt-in. No default
+> `nexusrecon run` constructs the orchestrator, so it does not run on a
+> normal campaign. See ARCHITECTURE.md section 14 and ROADMAP item 8.
+
 - **PR A**: `nexusrecon/verification/`. `VerificationOrchestrator`
   subscribes to graph mutation events
   (`register_mutation_listener`). `CorroborationEngine` lifts

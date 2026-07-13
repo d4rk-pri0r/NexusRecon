@@ -597,9 +597,9 @@ Post-0.5 layers (sections 13-22 below describe each):
 - `nexusrecon/strategy/`, Strategy package. Strategy dataclass,
   DispatchPolicy interface, simulation, bounded agency, planner
   orchestration.
-- `nexusrecon/verification/`, Continuous Confidence Engine , 
-  orchestrator, corroboration, contradiction, propagation,
-  adversarial self-check.
+- `nexusrecon/verification/`, Continuous Confidence Engine
+  (experimental, opt-in, not wired into a default run): orchestrator,
+  corroboration, contradiction, propagation, adversarial self-check.
 - `nexusrecon/packs/`, Recon Pack format. Manifest schema,
   loader, registry, git distribution, marketplace.
 - `nexusrecon/sdk/`, Contribution SDK. Prompt versioning,
@@ -700,14 +700,26 @@ architecture lock-in during Phase 0.1); a graph database backend
 
 ## 14. Continuous Confidence Engine (Phase 2)
 
+**Status (2026-06-09): experimental, in-tree, opt-in, and not wired
+into the default run.** The design below is fully implemented in
+`nexusrecon/verification/` and unit-tested, but nothing in a default
+`nexusrecon run` constructs the orchestrator or registers the mutation
+listener, so no corroboration, contradiction, propagation, or
+self-check runs on a normal campaign. Promoting it (ROADMAP item 8
+option a) also requires fixing `from_state` source strings to match
+`SOURCE_INDEPENDENCE_CLASSES` and giving derived entities sub-1.0
+confidence priors, or corroboration silently no-ops against the 0.99
+cap. This section documents the capability as built.
+
 **Problem.** Confidence on entities was hand-set by tool wrappers
 and never re-evaluated. New corroborating evidence didn't lift
 confidence; contradictions didn't lower it; a downgraded asset's
 dependent leads stayed "high" until the operator noticed.
 
-**What landed.** `nexusrecon/verification/` ships an
-**orchestrator** that subscribes to the graph's mutation events
-and fans them out to registered verifiers. Four verifiers ship:
+**What was built (experimental, opt-in).** `nexusrecon/verification/`
+provides an **orchestrator** that can subscribe to the graph's mutation
+events and fan them out to registered verifiers once constructed and
+registered. Four verifiers exist:
 
 1. **`CorroborationEngine`**: maps source identifiers
    (`subfinder`, `crtsh`, `naabu`, `h8mail`, …) to **independence
@@ -1146,11 +1158,11 @@ that orchestrates the whole pipeline.
 
 | Term | Definition |
 |------|------------|
-| **Living Graph** | The post-0.5 evolution of `EntityGraph`. First-class hypothesis / lead / open-question nodes, provenance per claim, mutation events the verification engine subscribes to. |
+| **Living Graph** | The post-0.5 evolution of `EntityGraph`. First-class hypothesis / lead / open-question nodes, provenance per claim, and mutation events an experimental verification engine can subscribe to (opt-in; not wired into a default run). |
 | **Strategy** | A declarative campaign plan (phases, dispatch policy, success / kill criteria, tool budgets, metadata). Authored by the operator or synthesised by the planner. |
 | **DispatchPolicy** | Pluggable rules for "when does the dispatcher fire and how much can it do?". `LitePolicy` / `FullPolicy` / `OffPolicy` ship; community packs add more. |
-| **Verifier** | A component that subscribes to graph-mutation events and produces verdicts (corroboration / contradiction / propagation / adversarial). Verdicts land in `state["verification_log"]` + the audit chain. |
-| **Corroboration class** | Independence class for source signals (`passive_dns`, `certificate`, `active_probe`, `breach_corpus`, `code_intel`, `cloud_enum`, `social`, `scope`, `manual`). Same-class sources collapse to one signal. |
+| **Verifier** | An experimental, opt-in component (in `nexusrecon/verification/`, not active on a default run) that can subscribe to graph-mutation events and produce verdicts (corroboration / contradiction / propagation / adversarial). Verdicts land in `state["verification_log"]` + the audit chain. |
+| **Corroboration class** | Independence class for source signals (`passive_dns`, `certificate`, `active_probe`, `breach_corpus`, `code_intel`, `cloud_enum`, `social`, `scope`, `manual`) used by the experimental confidence engine. Same-class sources collapse to one signal. |
 | **Recon pack** | Community-contributed bundle of tools / agents / policies / report templates / custom entity-and-rel types. Lives at `~/.nexusrecon/packs/<name>/manifest.yaml`. |
 | **Bounded agency** | Per-item dispatch escalation: deep-pivot (per-item policy override that refuses to narrow) + human-approval queue (high-tier items wait for operator). |
 | **Watch sensor** | A configured monitor (Entity / Scope / Timed) that fires when its fingerprint changes or its cadence elapses; tiered actions follow. |

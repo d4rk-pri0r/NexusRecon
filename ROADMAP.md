@@ -172,15 +172,22 @@ exists actually deliver on its claim.
        and `tests/unit/test_phase_4b_stix_export.py::TestObjectMetadata`. Done
        2026-06-09.
 
-8. [ ] **Decide the Continuous Confidence Engine.** It is sold as a core bet but
-       `nexusrecon/verification/` has zero production callers: nothing constructs
-       `VerificationOrchestrator` or registers the mutation listener outside its
-       own tests, so no corroboration, contradiction, or cascade ever runs. Two
-       options, no middle state: (a) wire it in, which also requires fixing
-       `from_state` source strings to match `SOURCE_INDEPENDENCE_CLASSES` and not
-       defaulting confidence to 1.0 (above the 0.99 corroboration cap) or it
-       wires in and silently does nothing; or (b) strip the "core bet" framing
-       and demote it (see below). Decide before tagging 1.0.
+8. [x] **Decide the Continuous Confidence Engine.** Resolved: strip and demote
+       (option b). It was sold as a core bet but `nexusrecon/verification/` has
+       zero production callers (nothing constructs `VerificationOrchestrator` or
+       registers the mutation listener outside its own tests), so no
+       corroboration, contradiction, or cascade ever runs. An investigation
+       confirmed the code is real and unit-tested but that wiring it in is more
+       than the two fixes noted here: `from_state` also truncates each
+       subdomain's sources to the first one, so corroboration (which needs two
+       independent classes on one node) would silently no-op even after the
+       source-string and confidence-default fixes. Rather than expand the
+       footprint for a payoff concentrated in subdomain corroboration, the docs
+       now mark the engine experimental / opt-in / not-wired (README,
+       ARCHITECTURE section 14, CHANGELOG) with the tested code kept in-tree.
+       Promotion later (the old option a) is purely additive and fully
+       reversible; the wiring path and traps are recorded in ARCHITECTURE
+       section 14. Done 2026-07-13.
 
 ### Honesty cleanup (small, mechanical, do alongside the above)
 
@@ -221,9 +228,10 @@ workflows or an audience that does not exist yet. Demoted behind a clearly
 labeled experimental posture, not deleted, so the engineering is not lost and
 can be promoted later if a real need appears.
 
-- **Continuous Confidence Engine (`verification/`).** Unreached by any run (see
-  item 8). Either promote it via item 8 or it stays here, stripped of "core bet"
-  framing.
+- **Continuous Confidence Engine (`verification/`).** Unreached by any run.
+  Resolved via item 8: stripped of "core bet" framing and marked experimental /
+  opt-in / not-wired across the docs, tested code kept in-tree for a future
+  additive promotion.
 - **Recon Packs marketplace and Contribution SDK (`packs/`, `sdk/`).** Premature
   infrastructure for a community that does not exist: `DEFAULT_MARKETPLACE_URL`
   is empty, there is no index, and the only first-party pack is not in the load
