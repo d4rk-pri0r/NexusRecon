@@ -239,14 +239,15 @@ exists actually deliver on its claim.
       Maintainer-only remainder: run the verifier on Linux x86_64 and Linux
       arm64 hardware (no VM access from the dev loop) and confirm
       `pipx install nexusrecon` once the package is published to PyPI.
-- [ ] **The demo gif.** Recording setup is committed and audited: `make demo`
-      guards for `vhs`, renders `docs/demo/nexusrecon.tape` (a TUI walkthrough:
-      dashboard, tool catalogue, config, command palette) to
-      `docs/demo/nexusrecon.gif`, the path the README embeds. `RECORDING.md`
-      documents setup. Maintainer-only remainder: run `make demo` (needs `vhs`
-      and a live TUI; cannot run in CI) to produce the gif, and review it for
-      TUI-keybinding drift; until it is rendered the README image is
-      unresolved.
+- [x] **The demo gif.** Rendered 2026-07-14 via `vhs docs/demo/nexusrecon.tape`
+      and committed at `docs/demo/nexusrecon.gif` (the path the README embeds),
+      so README:188 now resolves. Verified frame-by-frame: it faithfully shows
+      the current TUI (dashboard with live tool health, the tool catalogue
+      filtered to a tool with per-key status, the masked key-edit modal, the
+      OPSEC config screen, and the command palette), with no keybinding drift
+      and no secrets exposed (tokens masked; config shows only non-secret
+      proxy/DNS settings). `make demo` re-renders it (needs `vhs` + `ttyd` +
+      `ffmpeg`, installable via `brew install vhs ttyd ffmpeg`).
 
 ---
 
