@@ -87,8 +87,8 @@ laptop with default API keys configured, typical 30-60 min run:
 | **Plan** | `nexusrecon plan "find leaked creds at acme.com, passive only"` synthesizes a `scope.yaml` stub + a `Strategy` (lite dispatch, T1 ceiling, breach lookups enabled). Operator reviews + saves. |
 | **Phase 1** · passive footprint | crt.sh + Subfinder + Amass + SecurityTrails surface 47 subdomains. One is `vpn.acme.com`. |
 | **Dispatcher fires** | Notices the VPN endpoint and an Android app discovered in the Play Store probe. Simulator forecasts the dispatch will add ~12 entities at $0.02 cost; queues Shodan + the APK analyzer. |
-| **Phase 2** · active surface | httpx + gowitness fingerprint 12 live HTTP services; one is an unauthenticated admin console. |
-| **Phase 3** · cloud + identity | Azure/M365 enumerator finds the M365 federation; bucket_enum finds two public S3 buckets. |
+| **Dispatched probe** | httpx fingerprints 12 live HTTP services; one is an unauthenticated admin console. |
+| **Phase 2** · identity + cloud | Azure/M365 enumerator finds the M365 federation; bucket_enum finds two public S3 buckets. |
 | **Phase 4** · correlation | LLM correlator promotes hypotheses to LeadEntities, draws CITES edges back to supporting evidence, scores attribution confidence. |
 | **Phase 7** · vuln correlation | NVD + KEV + EPSS match 4 CVEs. KEV-listed VPN CVE with EPSS 0.87 lands in the graph. |
 | **Adversarial scan** | `nexusrecon adversarial scan` finds 2 subdomains lockstep-fabricated by an upstream wildcard DNS server → confidence halved + queued for review. |
@@ -98,7 +98,7 @@ laptop with default API keys configured, typical 30-60 min run:
 
 **Output**: a `campaigns/acme/<engagement>/<id>/reports/` directory
 with the master report + ranked threads + STIX bundle + signed receipt
-+ adversarial findings log + 17 other deliverables.
++ adversarial findings log + 20+ other deliverables.
 
 By hand, you spend 6-8 hours bouncing across crt.sh, Subfinder, Amass,
 SecurityTrails, Shodan, Censys, urlscan, GitHub, Hunter, HIBP, NVD,
@@ -196,7 +196,8 @@ From the TUI you can:
 - **Configure** application-wide settings (LLM, OPSEC, storage, debug)
   in the Configuration screen. Tool API keys live in the Tools
   surface
-- **Resume** or **diff** prior campaigns
+- **Resume** prior campaigns (campaign **diff** is available via the
+  `nexusrecon diff <old> <new>` CLI command)
 - See the **top-impact missing API keys** ranked by how many tools
   each one would unlock, right on the dashboard
 
@@ -209,7 +210,7 @@ nexusrecon plan "find leaked credentials at acme.com, passive only"
 # Validate a scope file
 nexusrecon validate examples/scopes/minimal_seed.yaml
 
-# Dry-run (validate scope + show plan, no tools fired)
+# Dry-run (validate scope + show scope summary, no tools fired)
 nexusrecon run --scope examples/scopes/minimal_seed.yaml --dry-run
 
 # Show the planner's proposed Strategy without launching
@@ -271,18 +272,18 @@ nexusrecon resume nr-20260514-120000-abc12345
 
 | Phase | What it does | Sample tools |
 |-------|-------------|--------------|
-| **1. Passive footprint** | Subdomain harvest, cert transparency, WHOIS, DNS | crt.sh, Subfinder, Amass, SecurityTrails |
-| **2. Active surface** | HTTP probing, screenshotting, tech fingerprint | httpx, gowitness, WAF/CMS/TLS detection |
-| **2.5. Code & secret leakage** | Repos, leaked secrets, leaked CI configs | gitleaks, trufflehog, gitdorker, postman |
-| **3. Cloud & identity** | M365 federation, S3/GCS buckets, AWS account ID | Azure/M365 enumerator, bucket_enum, AWS recon |
+| **1. Passive footprint** | Subdomain harvest, cert transparency, WHOIS, DNS, initial intel | crt.sh, Subfinder, Amass, DNS, WHOIS |
+| **2. Identity & cloud** | M365/Entra federation, AWS/GCP enumeration, email harvesting | Azure/M365 recon, AWS/GCP recon, Hunter, theHarvester |
+| **2.5. Personal-identity pivot** | Bridge corporate identities to personal identities + breach credential exposure | personal_pivot, breach lookups (scope-gated) |
+| **3. Code leakage** | Recursive subdomain on high-value hits, GitHub/code recon | github_recon, gitleaks, trufflehog, gitdorker |
 | **4. Correlation** | Cross-source asset linking, hypothesis promotion | (LLM agent, no tools) |
-| **5. People & pretext** | Org chart inference, breach lookup, HUMINT leads | Hunter, HIBP, EmailRep, news, SEC EDGAR |
-| **6. Threat intel** | Shodan, Censys, GreyNoise, VirusTotal, urlscan | (intel category, 12 sources) |
-| **7. Vuln correlation** | NVD + KEV + EPSS + ExploitDB + GH Advisory | CVE matcher, KEV lookup, EPSS scorer |
-| **7.5. Cred harvest** | Mask + hash creds in exposed `.env` / configs | gitleaks, TruffleHog, infra_probe |
-| **7.7. Pretext intelligence** | Per-target spear-phish dossier (sender × topic × timing) | conference_speakers, news, business_partners |
+| **5. Light active (T2)** | HTTP probing, tech fingerprint, threat-intel enrichment | httpx, Shodan, VirusTotal, GreyNoise, WAF/TLS detection |
+| **6. Active (T3)** | Content fuzzing + alt-port probing (authorized runs only) | (OPSEC-routed direct probes) |
+| **7. Vuln correlation** | CVE correlation against fingerprinted tech + pretext research | NVD, KEV, EPSS, ExploitDB, GH Advisory, nuclei |
+| **7.5. Cred harvest** | Mask + hash creds from prior-phase intel (exposed `.env` / configs) | (extraction from prior intel, no tools) |
+| **7.7. Pretext intelligence** | Per-target spear-phish dossier (relationship graph + scoring) | conference_speaker, news, business_partner, social |
 | **8. Attack-surface rank** | `CVSS × EPSS × KEV × Metasploit` scoring | (scoring engine) |
-| **9. Reporting** | LLM-synthesized narrative + 17 deliverables + STIX export | (master_reporter agent) |
+| **9. Reporting** | LLM-synthesized narrative + 20+ deliverables + STIX export | (master_reporter agent) |
 
 ### Strategic + verification + safety layers
 
@@ -293,12 +294,12 @@ nexusrecon resume nr-20260514-120000-abc12345
 | **Dispatch policies** | `LitePolicy` / `FullPolicy` / `OffPolicy` + plugin | Pluggable per-phase caps + eligibility. Community packs ship custom policies. |
 | **Simulation** | `simulate_dispatch_plan` | Cheap pre-execution cost + graph-growth + scope-creep forecast for every dispatch; opt-in gating. |
 | **Bounded agency** | `route_plan_items` | Deep-pivot per-item policy escalation + human-approval queue for high-tier items. |
-| **Strategic audit** | `AuditLog.log_strategy_*` | Every strategic decision (plan, replan, dispatch policy, simulation, deep-pivot, human approval) is hash-chained. |
-| **Corroboration engine** | `CorroborationEngine` verifier | Confidence lift when multi-source independence-classes (passive_dns + cert + active_probe + …) agree on an entity. |
-| **Contradiction detector** | `ContradictionDetector` verifier | Sticky-field + exclusive-relationship conflicts → bounded downgrade + queued for human review. |
-| **Confidence propagation** | `ConfidencePropagator` verifier | Downgrades cascade through `cites` / `belongs_to` / `part_of` edges with depth decay + cycle protection. |
-| **Adversarial self-check** | `AdversarialSelfCheck` | Heuristic graph audit: single-source high-confidence claims, citation cycles, disconnected islands, source monocultures. |
-| **Adversarial defense** | `nexusrecon adversarial scan` | Four detectors: poisoned data, suspicious tool-call patterns, evidence inconsistency, prompt injection (regex+structural default, LLM mode opt-in). |
+| **Strategic audit** | `AuditLog` decision methods | Every strategic decision (plan, replan, dispatch policy, simulation, deep-pivot, human approval) is hash-chained. |
+| **Corroboration engine** _(experimental, not wired)_ | `CorroborationEngine` verifier | Confidence lift when multi-source independence-classes (passive_dns + cert + active_probe + …) agree on an entity. |
+| **Contradiction detector** _(experimental, not wired)_ | `ContradictionDetector` verifier | Sticky-field + exclusive-relationship conflicts → bounded downgrade + queued for human review. |
+| **Confidence propagation** _(experimental, not wired)_ | `ConfidencePropagator` verifier | Downgrades cascade through `cites` / `belongs_to` / `part_of` edges with depth decay + cycle protection. |
+| **Adversarial self-check** _(experimental, not wired)_ | `AdversarialSelfCheck` | Heuristic graph audit: single-source high-confidence claims, citation cycles, disconnected islands, source monocultures. |
+| **Adversarial defense** | `nexusrecon adversarial scan` / `scan-text` | `scan` runs three graph detectors (poisoned data, suspicious tool-call patterns, evidence inconsistency); `scan-text` runs the prompt-injection scanner on a text input (regex + structural, LLM classifier opt-in). |
 
 The four verifier rows above (Corroboration engine, Contradiction detector,
 Confidence propagation, Adversarial self-check) are **experimental and
@@ -312,7 +313,7 @@ invoked.)
 
 | Capability | Surface | What it does |
 |------------|---------|--------------|
-| **STIX 2.1 export** | `nexusrecon export … --format stix2` | EntityGraph → STIX Bundle. Stdlib-only serializer. Domain / IP / Email / Identity / Vulnerability / Infrastructure / Note SDOs. |
+| **STIX 2.1 export** | `nexusrecon export … --format stix2` | EntityGraph → STIX Bundle. Stdlib-only serializer. Identity / Vulnerability / Infrastructure / Note SDOs; Domain / IP / Email / URL SCOs (spec-correct observable types). |
 | **Signed bundles** | `nexusrecon sign / verify` + standalone script | Ed25519, passphrase-encrypted PEM keys, single-file verifier (`scripts/nexusrecon-verify.py`) that needs only `cryptography`. |
 | **Bidirectional import** | `nexusrecon ingest stix/nessus/nuclei/csv` | Folds partner STIX bundles, Nessus XML, Nuclei JSON-lines, and generic CSV asset inventories into the campaign graph. |
 | **Downstream emitters** | `--format jira / nuclei-targets / cobaltstrike-profile` | Jira REST NDJSON, Nuclei `-list` targets, Cobalt Strike Malleable C2 profile stub (with explicit "review before deploying" warning). |
