@@ -113,7 +113,7 @@ At ~30,000 feet:
        │   Reads/writes from:                               │
        │  ┌─────────────┐  ┌─────────────┐  ┌────────────┐ │
        │  │  TOOLS      │  │  AGENTS     │  │ DISPATCHER │ │
-       │  │  (OSINT     │  │  (8 LLM     │  │ (LLM-      │ │
+       │  │  (OSINT     │  │  (13 LLM    │  │ (LLM-      │ │
        │  │   registry) │  │   personas) │  │  driven)   │ │
        │  └─────────────┘  └─────────────┘  └────────────┘ │
        │                                                   │
@@ -121,7 +121,7 @@ At ~30,000 feet:
                                  │
                   ┌──────────────▼──────────────┐
                   │       REPORT ENGINE         │
-                  │   (17 deliverable types)    │
+                  │   (~22 deliverable types)   │
                   └──────────────┬──────────────┘
                                  │
        ┌─────────────────────────▼─────────────────────────┐
@@ -148,23 +148,26 @@ Key invariants the architecture enforces:
 
 ## 4. The phase pipeline
 
-A campaign runs 9 numbered phases (plus a credential-harvest interlude).
+A campaign runs 12 numbered phases (1, 2, 2.5, 3, 4, 5, 6, 7, 7.5, 7.7, 8, 9).
 Phases aren't sequential dependencies, they're checkpoints where the
 state accumulates layered intel. The dispatcher fires between certain
-phases to fill gaps.
+phases to fill gaps. Phases 2.5, 7.5, and 7.7 have a tier floor of 0 (they run
+on every campaign); phases 5 (T2) and 6 (T3) run only when the scope tier allows.
 
 | Phase | Role | What it discovers |
 |-------|------|-------------------|
 | **1, Passive Footprinting** | T0 broad sweep | Subdomains, DNS records, WHOIS, cert transparency, ASN/BGP, dark-web mentions |
 | **2, Identity & Cloud** | T0-T1 identity & cloud recon | M365/Azure tenant, AWS recon, GCP recon, harvested emails, email patterns |
-| **3, Code & Secret Leakage** | T0 code surface | GitHub repos, leaked secrets via gitleaks/trufflehog/gitdorker, Postman workspaces, Docker Hub images |
-| **4, Correlation & Hypothesis** | T0 synthesis | Cross-source validation, lead generation, confirmed_leads vs. Open_questions |
-| **5, Light Active** | T2 fingerprinting | HTTP probing (httpx), screenshots (gowitness), tech fingerprinting, favicon hashing, CMS detect, WAF detect, TLS analysis |
-| **6, Active (T3)** | T3 intrusive | Brute force, content fuzzing, exploit verification. **Skipped unless scope authorizes T3.** |
-| **7, Vuln & Pretext Correlation** | T0 vuln intel | NVD lookups, KEV check, EPSS scoring, ExploitDB, nuclei templates, pretext mining (news, jobs, SEC, LinkedIn dorks) |
-| **7.5, Credential Harvest** | T0 cred extraction | Parses exposed `.env`, `.git/config`, infostealer hits, GitHub Actions leaks into structured credential records; optionally validates them read-only |
+| **2.5, Personal Identity Pivot** | T0 identity bridge | Bridges corporate identities to personal identities + breach-credential exposure; builds the IdentityGraph and the credential punch list |
+| **3, Code & Secret Leakage** | T0 code surface | GitHub repos, leaked secrets via gitleaks/trufflehog/gitdorker, Postman workspaces |
+| **4, Correlation & Hypothesis** | T0 synthesis | Cross-source validation, lead generation, and a typed EntityGraph (`from_state`) |
+| **5, Light Active** | T2 fingerprinting | HTTP probing (httpx), tech fingerprinting, favicon hashing, CMS detect, WAF detect, TLS analysis, Shodan/VirusTotal/GreyNoise enrichment |
+| **6, Active (T3)** | T3 intrusive | Content fuzzing and alt-port probing, routed through the OPSEC stack. **Skipped unless scope authorizes T3.** |
+| **7, Vuln Correlation** | T0 vuln intel | NVD lookups, KEV check, EPSS scoring, ExploitDB, GH Advisory, OSV, Vulners, nuclei templates |
+| **7.5, Credential Harvest** | T0 cred extraction | Parses exposed `.env`/config/log content into masked+hashed credential records; optionally validates them read-only |
+| **7.7, Pretext Intelligence** | T0 pretext | Relationship graph + scored pretext candidates (conference_speaker, news, business_partner, socials); writes the spear-phish dossiers |
 | **8, Attack Surface Prioritization** | T0 scoring | Runs the scoring engine; produces `ranked_threads` (top 10 attack paths) |
-| **9, Reporting** | T0 synthesis | Generates 17 deliverables across MD/JSON/CSV/HTML/PDF/PPTX formats |
+| **9, Reporting** | T0 synthesis | Generates ~22 deliverables across MD/JSON/CSV/HTML/PDF/PPTX formats |
 
 Between phases, the **reflection node** runs. In default `lite` dispatch
 mode it invokes the dispatcher after phases 1, 4, and 7, the three
@@ -187,7 +190,7 @@ prose and (b) structured findings via a `FINDINGS_JSON:[...]` block.
 | **correlation** | 4 | Cross-references findings across all prior phases. Promotes hypotheses to confirmed_leads or moves them to open_questions. | Eliminates the human work of "looking at three findings that point to the same conclusion", corroborates intel from independent sources. |
 | **active_recon** | 5 | Analyzes T2 active probing results, HTTP responses, tech fingerprints, screenshots, TLS posture, CMS/WAF identification. | Operator-relevant interpretation of probe results: *"this admin panel responds 200; this CMS version is end-of-life; this WAF appears to be misconfigured."* |
 | **vuln_correlator** | 7 | Maps fingerprinted technologies to CVEs via NVD, KEV, EPSS, ExploitDB, nuclei-templates. Prioritises by exploit availability. | Translates a generic tech inventory into a CVE list filtered by *what's actually exploitable* (not just "this is a high CVSS"). |
-| **pretext_humint** | 7 | Aggregates pretext intel (news, jobs, SEC filings, LinkedIn dorks, Crunchbase, Wikipedia) for social engineering preparation. | Crafts the "why would this employee fall for this lure" narrative, recent acquisitions, layoffs, executive changes, software migrations. |
+| **pretext_humint** | (registered, not currently invoked) | Aggregates pretext intel for social engineering preparation. Note: no phase calls this agent today; phase 7.7 pretext work is done by tools plus the phishing drafter. | Crafts the "why would this employee fall for this lure" narrative, recent acquisitions, layoffs, executive changes, software migrations. |
 | **risk_analyst** | 8 | Reviews scored findings, ranks them by exploitability × impact × asset exposure, maps to MITRE PRE-ATT&CK / ATT&CK techniques. | This is the "what should the operator do first" step. Produces the top 10 attack paths with rationale. |
 | **executive_reporter** | 9 | Synthesises everything into the executive summary's top findings + analyst assessment prose. | The deliverable a client sees; the agent that has to write *for* a non-OSINT audience. |
 
@@ -295,9 +298,9 @@ The registry layer wraps every `run()` call with:
 | `identity` | maigret, holehe | Phase 2, dispatcher |
 | `breach` | hudsonrock, emailrep, leakcheck, breach_lookup | Phase 2 |
 | `infrastructure` | shodan, censys, virustotal, greynoise, abuseipdb, urlscan, binaryedge, fullhunt, zoomeye, netlas, leakix, ipinfo, ransomwatch, ahmia, pastebin_scan | Phase 1, dispatcher |
-| `web` | httpx, gowitness, webtech, favicon, nuclei, katana, arjun, linkfinder, cms_detect, subdomain_takeover, wafw00f, sslyze, wayback, gau, dorks, metadata | Phase 5 |
+| `web` | httpx, webtech, favicon, nuclei, katana, arjun, linkfinder, cms_detect, subdomain_takeover, wafw00f, sslyze, wayback, gau, metadata (+ stubs `gowitness`, `dorks`, not functional) | Phase 5 |
 | `vulnerability` | nvd, kev, epss, exploitdb, vulners, github_advisory, osv, nuclei_template | Phase 7 |
-| `pretext` | news_intel, jobs_intel, sec_edgar, github_org_members, linkedin_dorks, crunchbase, wikipedia, public_collab | Phase 7 |
+| `pretext` | news_intel, jobs_intel, sec_edgar, conference_speaker, business_partner, github_org_members, linkedin_dorks, crunchbase, wikipedia, public_collab | Phase 7.7 |
 | `mobile` | playstore, apk_analyzer | Phase 2, dispatcher |
 
 Roughly half work without API keys (passive sources, public services).
@@ -360,8 +363,9 @@ The dispatcher is bounded:
 
 - **5 dispatches per cycle** (per gated phase). If the LLM proposes
   more, the rest are dropped.
-- **30 dispatches across the whole campaign.** When the global cap
-  hits, the reflection node logs and proceeds without dispatching.
+- **A global dispatch cap (30 in lite/default, 50 in full, 0 in off; from the
+  active DispatchPolicy).** When the cap hits, the reflection node logs and
+  proceeds without dispatching.
 - **Cost protection:** every dispatch is a tool call, but the dispatcher
   LLM call itself is a single API request per cycle. Total dispatcher
   cost in `lite` mode is typically $0.05-$0.15 per campaign.
@@ -436,7 +440,7 @@ campaign completes. It's the answer to "where do I start tomorrow."
 
 ## 9. Reports
 
-A campaign produces 17 deliverables across formats, generated by
+A campaign produces ~22 deliverables across formats, generated by
 `ReportEngine` in `nexusrecon/reports/engine.py`. Each report has a
 specific audience and purpose.
 
@@ -486,7 +490,7 @@ operator. Specifically:
 
 ### What is automated
 
-- **Tool orchestration.** Running 30-60 tools across 9 phases without
+- **Tool orchestration.** Running 30-60 tools across 12 phases without
   forgetting any or running them in the wrong order.
 - **Cross-tool synthesis.** Translating raw tool output into a unified
   state model the agents can analyse.
@@ -563,7 +567,7 @@ NexusRecon does the boring parts.
 | **Evidence hash** | A sha256 hash tying a finding to its source data (a tool output, an agent's response, or a synthetic deterministic hash for LLM-derived findings). Used by the evidence auditor. |
 | **Finding** | A structured record: `{severity, title, description, source, confidence, category, affected_assets, next_steps, mitre_techniques, recommendation, evidence_hash, phase, timestamp}`. Produced by agents (via FINDINGS_JSON) or by the scoring engine from tool data. |
 | **KEV** | CISA Known Exploited Vulnerabilities catalogue, CVEs confirmed exploited in the wild. |
-| **Phase** | A campaign checkpoint with a defined role (passive recon, identity & cloud, etc.). 9 numbered phases plus phase 7.5. |
+| **Phase** | A campaign checkpoint with a defined role (passive recon, identity & cloud, etc.). 12 numbered phases: 1, 2, 2.5, 3, 4, 5, 6, 7, 7.5, 7.7, 8, 9. |
 | **Ranked thread** | An entry in `ranked_threads`, sourced from the scoring engine's normalised + sorted findings. The top 10 form the operator's "where to start" list. |
 | **Scope** | The YAML file authorizing what the platform may scan. Contains the engagement metadata, in-scope/out-of-scope domains, IP ranges, cloud tenants, and constraints (max tier, stealth profile, budget cap). |
 | **State** | The shared dict object that accumulates everything across the campaign. Tools write to it; agents read from it; the dispatcher reads it to decide; the report engine renders from it. |
@@ -586,7 +590,7 @@ NexusRecon does the boring parts.
 
 The codebase itself is organised so each component is in one place:
 - `nexusrecon/tools/`, every tool in the registry, organised by category
-- `nexusrecon/agents/`, the 11 agent personas (roles, prompts, backstories)
+- `nexusrecon/agents/`, the 13 agent personas (roles, prompts, backstories)
 - `nexusrecon/graph/`, the phase pipeline, dispatcher, agent executor
 - `nexusrecon/core/`, campaign manager, scoring engine, credential harvester, audit log
 - `nexusrecon/reports/`, the report engine + phishing draft generator
@@ -675,7 +679,8 @@ Concretely:
   downstream code react to `entity_added` / `entity_merged` /
   `relationship_added` / `confidence_changed` /
   `sticky_field_conflict` / `exclusive_rel_conflict`. The
-  verification orchestrator (§14) is the primary consumer.
+  verification orchestrator (§14) would be the primary consumer once enabled
+  (it is experimental / not wired into a default run).
 - **Confidence as a managed property.** `set_confidence(entity_id,
   value, *, reason, source)` is the single seam. Emits a
   `confidence_changed` event the propagator listens for.

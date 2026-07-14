@@ -1,9 +1,11 @@
 # NexusRecon: Operator Manual
 
-This document is the **operator reference** for NexusRecon, every CLI flag,
-every config knob, every module, every scope-file field, every troubleshooting
-recipe. New to the project? Start at [`README.md`](README.md) for a one-screen
-overview and then come back here.
+This document is the **operator reference** for NexusRecon: the main `run` flags,
+config knobs, modules, scope-file fields, and troubleshooting recipes. It focuses
+on the campaign workflow; the full command set (`plan`, `keys`, `sign`, `verify`,
+`watch`, `ingest`, `packs`, `agent`/`tool`/`policy new`, `adversarial`, `vision`,
+and more) is discoverable via `nexusrecon --help`. New to the project? Start at
+[`README.md`](README.md) for a one-screen overview and then come back here.
 
 > **Primary entry point is the TUI.** Run `nexusrecon` with no arguments to
 > open the interactive Textual UI, new-campaign wizard, masked `.env` editor,
@@ -308,7 +310,9 @@ Options:
                              YAML is the legal boundary; --seeds is only the starting point within it.
   --mode / -m        TEXT    Campaign depth: light | medium | deep | monitor. Default: medium.
   --resume / -r      TEXT    Campaign ID to resume from checkpoint.
-  --dry-run                  Validate scope and print plan. No tool invocations.
+  --dry-run                  Validate scope + print a scope summary, then exit
+                             (no tools, LLM calls, or planner). Use --plan-only
+                             to preview the planner Strategy.
   --use-graph                Use the LangGraph workflow engine instead of sequential phase runner.
   --dispatch-mode    TEXT    Dynamic dispatch: lite (default) | full | off.
                              See "Dispatch Modes" below.
@@ -317,6 +321,10 @@ Options:
                              See "Credential Validation" below.
   --generate-phishing        Generate per-target phishing email drafts in the phishing package.
                              Authorized engagements only. See "Phishing Drafts" below.
+  --plan-only                Run the planner and print the proposed Strategy, then exit
+                             (no tools run). The plan preview, distinct from --dry-run.
+  --pretext-targets  TEXT    Comma-separated names to narrow phase 7.7 pretext scoring to.
+  --obsidian                 Also write the Obsidian-flavored master report variant.
 ```
 
 #### `--seeds` precedence rules
@@ -388,19 +396,19 @@ and then calls official read-only API endpoints to check each credential's valid
 
 | Credential type | Validation endpoint |
 |----------------|---------------------|
-| `aws_access_key` | `sts:GetCallerIdentity` (dry run, no actions taken) |
+| `aws_access_key` | `sts:GetCallerIdentity` (read-only, no actions taken) |
 | `github_token` | `GET https://api.github.com/user` |
 | `slack_token` | `GET https://slack.com/api/auth.test` |
-| `azure_client_secret` | Azure login endpoint token exchange attempt |
+| `jwt` | structural decode + expiry check (no network call) |
 
-Credentials are **never written to disk in plain text**. The `harvested_credentials.md`
-report contains only masked values (`AKIA***KE`) and SHA-256 hashes.
+Anything else is treated as a JWT-style structural check. There is no Azure
+validator today. Credentials are **never written to disk in plain text**; the
+`harvested_credentials.md` report contains only masked values (`AKIA***KE`) and
+SHA-256 hashes.
 
-To validate via Tor (hides the operator's IP from cloud provider logs), set:
-```env
-NEXUS_VALIDATE_VIA_TOR=true
-NEXUS_TOR_PROXY=socks5h://127.0.0.1:9050
-```
+Note: `NEXUS_VALIDATE_VIA_TOR` is surfaced in the config editor but is **not
+wired** into credential validation, the validators use a bare HTTP client, so
+setting it has no effect today. Routing validation through Tor is a follow-up.
 
 ---
 
@@ -472,11 +480,13 @@ nexusrecon campaign-list --client "Acme"   # Filter by client name
 
 ### `nexusrecon export`
 
-Export campaign findings to CSV, JSON, or Markdown.
+Export campaign findings. `--format` accepts `csv`, `json`, `markdown`, `stix2`,
+`jira` (add `--jira-project`), `nuclei-targets`, and `cobaltstrike-profile`.
 
 ```bash
 nexusrecon export nr-20260501-120000-abc12345 --format csv
 nexusrecon export nr-20260501-120000-abc12345 --format markdown --output ./my-report.md
+nexusrecon export nr-20260501-120000-abc12345 --format stix2   # -> stix2-bundle.json
 ```
 
 ### `nexusrecon smoke`
@@ -531,7 +541,7 @@ The `use_graph` flag switches from the sequential phase runner to the LangGraph 
 - `begin_phase(name)` / `end_phase(name, count, entities)`, Checkpoint boundaries.
 - `finalize()`, Saves state, verifies audit chain, returns summary dict.
 
-**`audit.py`**, `AuditLog` writes a hash-chained JSONL file to `logs/audit.jsonl`. Each entry SHA-256 hashes the previous entry so the chain can be verified for tampering. Used for legal defensibility. Key methods: `log_tool_start`, `log_tool_result`, `log_scope_violation`, `verify_chain()`.
+**`audit.py`**, `AuditLog` writes a hash-chained JSONL file to `logs/audit.jsonl`. Each entry SHA-256 hashes the previous entry so the chain can be verified for tampering (`verify_chain()`). It is a tamper-evident activity record; it attests the log was not altered after writing, not the independent integrity of each finding's evidence. Key methods: `log_tool_start`, `log_tool_result`, `log_scope_violation`, `verify_chain()`.
 
 **`cache.py`**, `Cache` is a SQLite-backed TTL store. Keys are `sha256(source + "|" + json(query))`. Each source type has its own TTL (e.g., crt.sh: 24h, Shodan: 6h, breach DBs: 7d). Shared with the LangGraph checkpoint database.
 
@@ -565,18 +575,22 @@ The `execute()` method: validates scope → checks cache → logs audit start �
 
 **`__init__.py`**, Imports all tool subpackages, triggering `@register_tool` on each class. Without this import, the registry would be empty.
 
-**Category subpackages** (each `__init__.py` simply re-exports its tools):
+**Category subpackages** (each `__init__.py` simply re-exports its tools). The
+registry holds 97 tools; the lists below are representative, not exhaustive, run
+`nexusrecon tools` for the full inventory. `gowitness` and `dorks` are registered
+stubs (not functional; see section 7).
 
-| Package | Tools |
+| Package | Representative tools |
 |---|---|
-| `domain/` | crtsh, subfinder, amass, dns, whois, asn_bgp, passive_dns, email_sec, dnstwist |
+| `domain/` | crtsh, subfinder, amass, dns, whois, asn_bgp, passive_dns, otx, chaos, certspotter |
 | `cloud/` | azure_m365_recon, aws_recon, gcp_recon, cdn_detect |
-| `identity/` | theharvester, hunter, email_format, breach_lookup, maigret |
-| `intel/` | shodan, censys, virustotal, greynoise, urlscan, abuseipdb |
-| `code/` | github_recon, gitleaks, trufflehog, gitdorker, postman, dockerhub |
-| `web/` | httpx, gowitness, wayback, webtech, favicon, gau, dorks, metadata |
-| `vuln/` | kev, nvd, epss |
-| `pretext/` | news_intel, jobs_intel, sec_edgar |
+| `identity/` | theharvester, hunter, email_format, breach_lookup, maigret, holehe, leakcheck |
+| `intel/` | shodan, censys, virustotal, greynoise, urlscan, abuseipdb, zoomeye, netlas, ipinfo, leakix |
+| `code/` | github_recon, gitleaks, trufflehog, gitdorker, postman |
+| `web/` | httpx, wayback, webtech, favicon, gau, katana, nuclei, sslyze, wafw00f (+ stubs `gowitness`, `dorks`) |
+| `vuln/` | nvd, kev, epss, exploitdb, github_advisory, osv, nuclei_template, vulners |
+| `mobile/` | apk_analyzer, playstore |
+| `pretext/` | news_intel, jobs_intel, sec_edgar, conference_speaker, business_partner |
 
 ---
 
@@ -623,8 +637,15 @@ Each file defines an agent class inheriting from `BaseNexusAgent`. The class-lev
 | `CorrelationAgent` | correlation | Cross-source finding correlation |
 | `RiskAnalystAgent` | risk_analyst | Attack surface prioritization |
 | `VulnCorrelatorAgent` | vuln_correlator | CVE/KEV matching against fingerprints |
-| `EvidenceAuditorAgent` | evidence_auditor | Citation validation (blocks uncited findings) |
+| `EvidenceAuditorAgent` | evidence_auditor | Citation-completeness check (drops findings missing required fields) |
 | `ExecutiveReporterAgent` | executive_reporter | Synthesizes final executive summary |
+| `MasterReporterAgent` | master_reporter | Writes the cohesive `master_report.md` narrative |
+| `PhishingDrafterAgent` | phishing_drafter | Per-target phishing drafts (behind `--generate-phishing`) |
+| `DynamicDispatcherAgent` | dynamic_dispatcher | Chooses follow-up tools for the reflection/dispatch loop |
+
+Thirteen agent classes are registered in `AGENT_REGISTRY`. Note `pretext_humint`
+is registered but not currently invoked by any phase (phase 7.7 pretext work is
+done by tools plus the phishing drafter).
 
 **`base.py`**, `BaseNexusAgent` is a plain class (not a dataclass). Key attributes: `role`, `goal`, `backstory`, `max_steps`, `tools`. `sanitize_scraped_content()` strips common prompt injection patterns before passing web-scraped content to the LLM.
 
@@ -644,7 +665,7 @@ Each file defines an agent class inheriting from `BaseNexusAgent`. The class-lev
 
 ### `nexusrecon/reports/`: Report Engine
 
-**`engine.py`**, `ReportEngine.generate_all(state)` generates every report from the final campaign state dict (17 deliverables total, see [`nexusrecon/docs/REPORT_GUIDE.md`](nexusrecon/docs/REPORT_GUIDE.md) for the index). Reports are pure Python string templating (no Jinja2 used for the core reports). The PDF report requires `weasyprint` (optional dependency, prints a console hint if missing). Reports are written to `./campaigns/<client>/<engagement_id>/<campaign_id>/reports/`.
+**`engine.py`**, `ReportEngine.generate_all(state)` generates every report from the final campaign state dict (~22 deliverables, see [`nexusrecon/docs/REPORT_GUIDE.md`](nexusrecon/docs/REPORT_GUIDE.md) for the index). Reports are pure Python string templating (no Jinja2 used for the core reports). The PDF report requires `weasyprint` (optional dependency, prints a console hint if missing). Reports are written to `./campaigns/<client>/<engagement_id>/<campaign_id>/reports/`.
 
 ---
 
@@ -680,7 +701,7 @@ Tools that require **no API keys and no binaries** work out of the box:
 | `webtech` | Web technology fingerprinting |
 | `favicon` | Favicon hash matching (Shodan icon search) |
 | `metadata` | Document metadata extraction |
-| `dorks` | Google/Bing dork generation |
+| `dorks` | Google/Bing dork generation (**stubbed**: SERP scraping defeated by consent walls; returns a clean failure) |
 
 Tools requiring **API keys only** (no binary install):
 
@@ -706,7 +727,7 @@ Tools requiring **binaries** (no API keys):
 | `httpx` | `httpx` | go install projectdiscovery/httpx |
 | `gitleaks` | `gitleaks` | brew install gitleaks |
 | `trufflehog` | `trufflehog` | brew install trufflehog |
-| `gowitness` | `gowitness` | go install sensepost/gowitness |
+| `gowitness` (**stubbed**; installing the binary has no effect) | `gowitness` | go install sensepost/gowitness |
 | `gau` | `gau` | go install lc/gau |
 | `maigret` | `maigret` | pip install maigret |
 
@@ -715,78 +736,85 @@ Tools requiring **binaries** (no API keys):
 ## 8. Campaign Modes and Tier System
 
 The full **tier definition table** (T0-T3, contact level, examples) lives in
-[`README.md`](README.md#tier-system). This section documents how `--mode` maps
-those tiers onto the phase runner.
+[`README.md`](README.md#tier-system). This section documents how phase coverage
+is decided.
 
-### Mode → tier-cap and phase coverage
+### What gates which phases run
 
-| Mode | Tier cap | Phases Run | Typical Time |
-|---|---|---|---|
-| `light` | T0 | 1-4, 7-9 | 5-15 min |
-| `medium` | T2 | 1-5, 7-9 | 30-90 min |
-| `deep` | T3 | All 9 | 2-6 hours |
-| `monitor` | T0 | 1-4, 7-9 | 5-15 min (scheduled) |
+On the default sequential runner, **the scope's `constraints.max_tier` is the
+only thing that gates phases**, not `--mode`. `run_campaign` reads
+`scope_model.tier_value()` and skips any phase whose tier floor exceeds it. So:
 
-**T2 and T3 phases only run if `max_tier` in the scope file allows it.** A scope with `max_tier: T1` will never execute Phase 5 (httpx) or Phase 6 (content discovery), regardless of the `--mode` flag, the scope file is the legal boundary, `--mode` is just an upper envelope below that boundary.
+| Scope `max_tier` | Phases that run |
+|---|---|
+| T0 / T1 | 1, 2, 2.5, 3, 4, 7, 7.5, 7.7, 8, 9 (phase 5 and 6 skipped) |
+| T2 | adds phase 5 (Light Active) |
+| T3 | adds phase 6 (Active) = all 12 |
+
+`--mode light/medium/deep/monitor` selects the planner/campaign strategy and
+cost/time envelope; it does **not** change which phases run on the default
+runner. (A separate `MODE_TIER_LIMITS` map exists only on the `--use-graph`
+path.) To enable T2/T3 active scanning, raise `constraints.max_tier` in the
+scope file, the scope is the legal boundary.
 
 ---
 
 ## 9. What Happens During a Campaign
 
+The default runner executes 12 phases (`nexusrecon/core/campaign_runner.py`).
+Phases 2.5, 7.5, and 7.7 have a tier floor of 0, so they run on every campaign;
+phases 5 (T2) and 6 (T3) run only when the scope `max_tier` allows.
+
 ### Phase 1: Passive Footprinting
-Tools: `crtsh`, `subfinder`, `amass` (parallel), then `dns`, `whois`, `asn_bgp` (parallel per seed).  
-Produces: `subdomain_intel` dict and `domain_intel` dict. The Passive Recon Specialist agent synthesizes the findings.
+Tools: `crtsh`, `subfinder`, `amass` (parallel), then `dns`, `whois`, `asn_bgp`; plus dark-web / leak intel (`ransomwatch`, `ahmia`, `pastebin_scan`, `certstream_recent`).  
+Produces: `subdomain_intel`, `domain_intel`, and `dark_intel`. The Passive Recon Specialist agent synthesizes the findings.
 
 ### Phase 2: Identity & Cloud
-Tools: `azure_m365_recon`, `aws_recon`, `gcp_recon`, `theharvester`, `hunter`, `email_format`.  
-Produces: `email_intel` (emails + inferred format) and `cloud_intel` (M365 federation type, S3 buckets, GCS buckets).
+Tools: `azure_m365_recon`, `aws_recon`, `gcp_recon`, `theharvester`, `hunter`, `email_format`, `holehe`, `maigret`, `playstore`.  
+Produces: `email_intel` (emails + inferred format), `cloud_intel` (M365 federation type, S3/GCS buckets), and identity/mobile intel.
+
+### Phase 2.5: Personal Identity Pivot
+No new external tools. Bridges corporate identities to personal identities and breach-credential exposure: builds `state['identity_graph']` (an IdentityGraph) and the credential punch list that feeds `credential_exposure_paths.md`. Breach lookups stay gated by the scope's `allow_breach_db_lookup`.
 
 ### Phase 3: Code Leakage
-Tools: `github_recon`, `gitleaks`, `trufflehog`, `gitdorker`, `postman`, `dockerhub`, all run in parallel across seeds.  
+Tools: `github_recon`, `gitleaks`, `trufflehog`, `gitdorker`, `postman` (parallel across seeds), plus recursive subdomain enumeration on high-value hits.  
 Produces: `code_intel` (repos, secrets, API exposure).
 
 ### Phase 4: Correlation
-No tool calls. Pure logic: correlates Phase 1-3 findings. Identifies executive emails, public buckets, M365 federation type, secret leaks. Produces `hypotheses`, `confirmed_leads`, `open_questions`, and a simple `entity_graph` dict (subdomains + emails lists). The Correlation Agent synthesizes.
+No tool calls. Correlates phase 1-3 findings, promotes hypotheses to leads, and builds a typed `EntityGraph` via `EntityGraph.from_state(state)`, serialized as `state['entity_graph']` (nodes / edges / stats) for downstream phases and the risk analyst. Produces `hypotheses`, `confirmed_leads`, `open_questions`. The Correlation Agent synthesizes.
 
 ### Phase 5: Light Active (T2 required)
-Tools: `httpx` (parallel, Semaphore(20)), `shodan`, `virustotal`, `greynoise` (on IPs from httpx results).  
+Tools: `httpx`, `shodan`, `virustotal`, `greynoise`, `subdomain_takeover`, `wafw00f`, `sslyze`.  
 Produces: live host data in `infra_intel`. Skipped entirely if scope `max_tier` < T2.
 
 ### Phase 6: Active (T3 required)
-No tool registry calls. Direct httpx probes with `UserAgentPool` and `Semaphore(25)`: alt-port sweep (30 subs × 9 ports) and content discovery (20 subs × 24 paths).  
+Routes active probes through `registry.opsec_http_get` (the OPSEC stack: proxy injection, JA3/TLS impersonation, per-source rate limiter, stealth jitter): alt-port sweep (30 subs × 9 ports) and content discovery (20 subs × 27 paths).  
 Produces: `alt_ports` and `discovered_paths` in `infra_intel`. Skipped entirely if scope `max_tier` < T3.
 
-### Phase 7: Vulnerability Correlation
-Tools: `kev` (CISA catalog), `nvd` (CVEs for fingerprinted products, parallel).  
-Produces: `vuln_intel` with `enriched_cves` dict.
+### Phase 7: Vulnerability & Pretext Correlation
+Tools: `nvd`, `kev`, `epss`, `exploitdb`, `github_advisory`, `osv`, `vulners`, `nuclei`, `nuclei_template` (CVE correlation against fingerprinted technologies).  
+Produces: `vuln_intel` with `enriched_cves`.
 
 ### Phase 7.5: Credential Harvest
-Runs immediately after Phase 7, before attack surface scoring. Scans every
-`infra_intel` discovered-paths entry for credential patterns:
-- `.env` files: `KEY=VALUE` pairs matched against 25+ credential type patterns
-- Git config files, CI/CD configs, log files  
-- AWS access keys (`AKIA...`), GitHub tokens (`ghp_...`), JWTs, database URLs, etc.
+Extracts credential patterns from prior-phase intel (`.env` / config / log content). Matches `KEY=VALUE` pairs against ~11 credential-type patterns: AWS access + secret keys, GitHub tokens + OAuth, Slack tokens, Stripe secrets, private keys, JWTs, database URLs, and generic passwords / API keys. Each credential is **masked** (`AKIA***KE`) and **hashed** (SHA-256); the raw value is never stored. `--validate-creds` additionally validates AWS / GitHub / Slack keys and JWTs via read-only API calls (off by default).  
+Produces: `harvested_credentials`.
 
-Each credential is **masked** (`AKIA***KE`) and **hashed** (SHA-256 of the original
-value). The original value is never stored. Set `--validate-creds` to attempt
-read-only validation against official APIs.
-
-Produces: `harvested_credentials` list of dicts.
+### Phase 7.7: Pretext Intelligence
+Builds the RelationshipGraph, scores per-target pretext candidates (sender × topic × timing), and writes `spear_phishing_intelligence.md` + `pretext_candidates.json`. Tools: `conference_speaker`, `news_intel`, `business_partner`, and social-handle lookups. `--pretext-targets` narrows the target set; `--generate-phishing` adds per-target email drafts.
 
 ### Phase 8: Attack Surface Prioritization
 No tool calls. Scores all discovered CVEs using:
 
 ```
-score = (cvss / 10) × max(epss, 0.05) × kev_multiplier × msf_multiplier
+score = (cvss / 10) × max(epss, 0.05) × kev_mult × exploit_mult × nuclei_mult
 ```
 
-Where `kev_multiplier = 3.0` (CISA KEV) and `msf_multiplier = 2.5` (Metasploit module exists).
-Scores are normalized to [0, 1]. Top 10 findings become `ranked_threads`.
+where `kev_mult = 3.0` (CISA KEV), `exploit_mult = 2.5` if a Metasploit module exists (else `2.0` if a public PoC exists), and `nuclei_mult = 1.3` if a nuclei template exists. Top 10 findings become `ranked_threads`.
 
-Risk Analyst agent produces PRE-ATT&CK mapped attack surface matrix.
+Risk Analyst agent produces the PRE-ATT&CK mapped attack surface matrix.
 
 ### Phase 9: Reporting
-Evidence Auditor validates citations. Executive Reporter synthesizes the final summary. Then `ReportEngine.generate_all()` writes all report files.
+The Evidence Auditor runs a citation-completeness check (drops findings missing `source` / `timestamp` / `raw_evidence_hash` / `confidence`; it is a field-presence check, not a legal-defensibility gate). The Executive / Master Reporter synthesizes the narrative. Then `ReportEngine.generate_all()` writes all report files.
 
 ### Between Phases: Reflection Node + Dynamic Dispatcher
 A `reflection_node` runs between phases (both in `--use-graph` mode and in the
@@ -875,7 +903,7 @@ Campaign ID: nr-YYYYMMDD-HHMMSS-xxxxxxxx
 Output: ./campaigns/test_corp/TEST-001/nr-...
 ```
 
-**What to check:** No exceptions. Campaign ID is printed. No `./campaigns/` directory is created yet (dry run writes nothing to disk).
+**What to check:** No exceptions. Campaign ID is printed. The campaign directory tree, audit log, cache DB, and `scope_metadata.json` are created by `campaign.setup()`, then the dry run exits before any tool or phase runs (it does not fire tools or make LLM calls).
 
 ---
 
@@ -921,8 +949,8 @@ ls ./campaigns/test_corp/TEST-001/
 ls ./campaigns/test_corp/TEST-001/nr-*/reports/
 # Should contain: master_report.md, executive_summary.md, full_report.md,
 # top_threads.md, asset_inventory.md, phishing_package.md, cloud_posture.md,
-# attack_surface.md, vuln_correlation.md, findings.json, campaign_meta.json,
-# and more (17 deliverables total, see nexusrecon/docs/REPORT_GUIDE.md).
+# attack_surface.md, vulnerability_correlation.md, findings.json, campaign_meta.json,
+# and more (~22 deliverables, see nexusrecon/docs/REPORT_GUIDE.md).
 
 cat ./campaigns/test_corp/TEST-001/nr-*/reports/executive_summary.md
 cat ./campaigns/test_corp/TEST-001/nr-*/reports/findings.json
@@ -943,10 +971,12 @@ cat ./campaigns/test_corp/TEST-001/nr-*/reports/findings.json
 cat ./campaigns/test_corp/TEST-001/nr-*/logs/audit.jsonl | head -5
 # Each line should be a JSON object with a "prev_hash" field
 
-# The audit chain can be verified programmatically:
+# Verify the chain with the supported API (do not hand-roll the hash, the
+# real algorithm hashes prev_hash|timestamp|sorted-data with a sha256: prefix
+# and excludes seq/entry_hash/prev_hash/timestamp from the hashed payload):
 python3 -c "
-import json, hashlib
 from pathlib import Path
+from nexusrecon.core.audit import AuditLog
 
 logs = list(Path('./campaigns').rglob('audit.jsonl'))
 if not logs:
@@ -954,18 +984,8 @@ if not logs:
 else:
     log = logs[0]
     print(f'Checking: {log}')
-    lines = [l for l in log.read_text().splitlines() if l.strip()]
-    prev = 'genesis'
-    ok = True
-    for i, line in enumerate(lines):
-        entry = json.loads(line)
-        if entry.get('prev_hash') != prev and i > 0:
-            print(f'CHAIN BROKEN at line {i}')
-            ok = False
-            break
-        prev = hashlib.sha256(line.encode()).hexdigest()
-    if ok:
-        print(f'Audit chain VALID ({len(lines)} entries)')
+    audit = AuditLog(log_path=log, campaign_id='verify', scope_hash='verify')
+    print('Audit chain VALID' if audit.verify_chain() else 'Audit chain BROKEN')
 "
 ```
 
@@ -1152,7 +1172,7 @@ nexusrecon run \
   --use-graph
 ```
 
-**Expected:** Same output as the sequential runner but using LangGraph's state graph internally. The SQLite checkpointer writes state to `nexusrecon.db` in the campaign directory, enabling mid-run resume via LangGraph's built-in checkpointing.
+**Expected:** Same output as the sequential runner but using LangGraph's state graph internally. Note the SQLite checkpointer currently runs in-memory (`db_path=":memory:"` from the CLI path), so cross-process mid-run resume is not persisted; use `nexusrecon resume` (checkpoint from `state.json`) for resumption.
 
 ---
 
@@ -1182,14 +1202,18 @@ campaigns/
                 ├── phishing_package.md
                 ├── cloud_posture.md
                 ├── attack_surface.md
-                ├── vuln_correlation.md
-                ├── people_map.md
+                ├── vulnerability_correlation.md
+                ├── people_identity_map.md
                 ├── vendor_supply_chain.md
-                ├── harvested_credentials.md    ← Only if creds were found (Secret)
+                ├── credential_exposure_paths.md ← Personal->corp punch list (phase 2.5)
+                ├── spear_phishing_intelligence.md ← Pretext dossiers (phase 7.7)
+                ├── harvested_credentials.md    ← Masked/hashed creds (Secret)
+                ├── entity_graph.html           ← Interactive graph view
+                ├── jira_tracker.csv
+                ├── executive_briefing.pptx
                 ├── findings.json
                 ├── campaign_meta.json
-                ├── maltego_export.csv
-                └── report.pdf                  ← Only if weasyprint is installed
+                └── report.pdf                  ← report.html fallback without weasyprint
 ```
 
 The canonical index with content schemas is
@@ -1261,7 +1285,7 @@ brew install pango
 
 ### The audit chain shows BROKEN
 
-This should not happen in normal operation. It can happen if you manually edited `audit.jsonl` or if a crash interrupted a write mid-line. The chain being broken does not prevent the campaign from running, it only affects legal defensibility of the log.
+This should not happen in normal operation. It can happen if you manually edited `audit.jsonl` or if a crash interrupted a write mid-line. The chain being broken does not prevent the campaign from running, it only means the log's tamper-evidence no longer holds (an edit or a truncated write occurred).
 
 ### ToolResult.success is False for every tool
 
