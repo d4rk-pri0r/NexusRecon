@@ -58,6 +58,21 @@ import importlib
 import platform
 import sys
 
+# Quiet structlog before anything imports the registry: registration logs
+# every tool at debug, which buries the matrix-ready RESULT line. The
+# verifier's own checks use print(), not structlog, so filtering to ERROR
+# keeps the output to one clean paste without hiding any failure. (The CLI
+# configures structlog the same way; this heredoc does not go through it.)
+try:
+    import logging as _logging
+
+    import structlog as _structlog
+    _structlog.configure(
+        wrapper_class=_structlog.make_filtering_bound_logger(_logging.ERROR),
+    )
+except Exception:
+    pass
+
 fail: list[str] = []
 
 # 1) Package import + version.

@@ -45,7 +45,7 @@ cleanly on that platform.
 
 | Platform | Arch | Python | install.sh | verify_install | Date | Notes |
 |---|---|---|---|---|---|---|
-| macOS (M-series) | arm64 | 3.13.13 | ok | PASS (80/97 active) | 2026-05-30 | 11/13 binaries present (`maigret`, `arjun` absent); extras `tls`+`avatar` present. Verified on the dev workstation. |
+| macOS (M-series) | arm64 | 3.13.13 | ok | PASS (79/97 active) | 2026-07-14 | 11/13 binaries present (`maigret`, `arjun` absent); 2 stubs (`gowitness`, `dorks`); extras `tls`+`avatar` present. Re-verified on the dev workstation. |
 | Linux x86_64 | x86_64 | | not yet run | not yet run | | Debian/Ubuntu/Kali path in `install.sh`. |
 | Linux arm64 | arm64 | | not yet run | not yet run | | Same Debian path; confirm Go-tool and gitleaks/amass arm64 release URLs resolve. |
 

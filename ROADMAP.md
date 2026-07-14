@@ -231,11 +231,22 @@ exists actually deliver on its claim.
 ### Release readiness (ship what exists, not new features)
 
 - [ ] **Fresh-VM install verification.** `scripts/verify_install.sh` plus the
-      coverage matrix in `docs/install-verification.md` exist; the macOS row is
-      verified. The two Linux rows (x86_64, arm64) still need a run on that
-      hardware, plus `pipx install nexusrecon` confirmed once published.
-- [ ] **The 90-second wizard-to-results gif.** Recording setup is committed
-      (`make demo`); it is a one-command maintainer step that cannot run in CI.
+      coverage matrix in `docs/install-verification.md` exist. The verifier was
+      hardened to a clean one-paste output (it now quiets structlog before
+      building the registry, so tool-registration debug no longer buries the
+      `RESULT:` line), and the macOS (arm64) row was re-verified 2026-07-14:
+      `PASS, 79/97 active` (79, down from 80, after `dorks` was stubbed).
+      Maintainer-only remainder: run the verifier on Linux x86_64 and Linux
+      arm64 hardware (no VM access from the dev loop) and confirm
+      `pipx install nexusrecon` once the package is published to PyPI.
+- [ ] **The demo gif.** Recording setup is committed and audited: `make demo`
+      guards for `vhs`, renders `docs/demo/nexusrecon.tape` (a TUI walkthrough:
+      dashboard, tool catalogue, config, command palette) to
+      `docs/demo/nexusrecon.gif`, the path the README embeds. `RECORDING.md`
+      documents setup. Maintainer-only remainder: run `make demo` (needs `vhs`
+      and a live TUI; cannot run in CI) to produce the gif, and review it for
+      TUI-keybinding drift; until it is rendered the README image is
+      unresolved.
 
 ---
 
