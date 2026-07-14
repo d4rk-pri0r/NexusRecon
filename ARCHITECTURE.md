@@ -200,7 +200,7 @@ There are also three **utility agents** that don't fit a single phase:
 |-------|---------------|--------------|
 | **dynamic_dispatcher** | Between phases (lite: after 1/4/7; full: after every phase) | Decides which 0-5 follow-up tools to run before the next phase. Capped at 30 total dispatches per campaign. |
 | **phishing_drafter** | During phase 9 reporting (if `--generate-phishing` is set) | Generates per-target spearphishing draft emails with role-specific lures, sender-domain strategy based on DMARC posture, OSINT citations, and an authorization banner. One LLM call per target. |
-| **evidence_auditor** | During phase 9 | Validates every finding has required citation fields (source, timestamp, evidence_hash, confidence). Filters out malformed findings before they reach reports. |
+| **evidence_auditor** | During phase 9 | Citation-completeness check: confirms every finding has the required fields (`source`, `timestamp`, `raw_evidence_hash`, `confidence`) and drops those missing any. A field-presence check, not a legal-defensibility gate; it does not recompute or verify the hash. |
 
 ### How an agent run actually works
 
@@ -452,13 +452,14 @@ specific audience and purpose.
 | `top_threads.json` | Same data, structured for tooling | Pipeline integrations, dashboards |
 | `findings.json` | Full raw findings export with hashes | Programmatic consumption, evidence chain |
 | `attack_surface.md` | Severity × confidence × MITRE technique matrix | Mid-engagement triage; client meetings |
-| `audit_log.jsonl` (`logs/`) | Hash-chained record of every tool call + scope hash | Legal/compliance, dispute resolution |
+| `audit.jsonl` (`logs/`) | Hash-chained, tamper-evident record of every tool call + scope hash | Provenance / dispute resolution (tamper-evidence, not court-grade evidence integrity) |
 | `state.json` | Complete campaign state at termination | Debugging, comparing campaigns |
 
 ### Client-facing (deliverables)
 
 | File | Purpose | Audience |
 |------|---------|----------|
+| `master_report.md` | The cohesive narrative deliverable (snapshot, run health, brief, threads, evidence, recommendations) | The one file to hand a client |
 | `executive_summary.md` | One-page summary with key findings + analyst assessment | Client engagement lead |
 | `report.pdf` (or HTML fallback) | Full PDF report | Client deliverable |
 | `executive_briefing.pptx` | PowerPoint deck | Client executive presentation |
@@ -468,8 +469,10 @@ specific audience and purpose.
 
 | File | Purpose |
 |------|---------|
+| `spear_phishing_intelligence.md` + `pretext_candidates.json` | Per-target pretext dossiers and scored candidates from phase 7.7 (relationship graph + scoring). |
 | `phishing_drafts.md` + per-target files + `phishing_campaign.json` | Per-target spearphishing email drafts with OSINT citations + GoPhish-compatible export. Generated only with `--generate-phishing`. |
-| `harvested_credentials.md` + `.json` | Exposed credentials with redaction + validation status. Generated only with `--validate-creds`. |
+| `credential_exposure_paths.md` + `credential_punch_list.json` | Personal-to-corporate credential punch list from phase 2.5. |
+| `harvested_credentials.md` + `.json` | Exposed credentials with redaction + validation status. Always written (states when none were found). |
 | `people_identity_map.md` | Org chart synthesis: employees by department/role, executive targets flagged |
 | `cloud_posture.md` | M365 federation status, AWS surface, public storage, DMARC/SPF |
 | `vulnerability_correlation.md` | CVE-to-asset mapping with exploit availability |
@@ -565,7 +568,7 @@ NexusRecon does the boring parts.
 | **Dispatcher** | The LLM-driven decision-maker that runs between phases and selects 0-5 follow-up tools based on what's missing from state. |
 | **EPSS** | Exploit Prediction Scoring System, FIRST.org's data feed estimating the probability a given CVE will be exploited in the next 30 days. |
 | **Evidence hash** | A sha256 hash tying a finding to its source data (a tool output, an agent's response, or a synthetic deterministic hash for LLM-derived findings). Used by the evidence auditor. |
-| **Finding** | A structured record: `{severity, title, description, source, confidence, category, affected_assets, next_steps, mitre_techniques, recommendation, evidence_hash, phase, timestamp}`. Produced by agents (via FINDINGS_JSON) or by the scoring engine from tool data. |
+| **Finding** | A structured record: `{severity, title, description, source, confidence, category, affected_assets, next_steps, mitre_techniques, recommendation, raw_evidence_hash, evidence_integrity, provenance, phase, timestamp}`. Produced by agents (via FINDINGS_JSON) or by the scoring engine from tool data. |
 | **KEV** | CISA Known Exploited Vulnerabilities catalogue, CVEs confirmed exploited in the wild. |
 | **Phase** | A campaign checkpoint with a defined role (passive recon, identity & cloud, etc.). 12 numbered phases: 1, 2, 2.5, 3, 4, 5, 6, 7, 7.5, 7.7, 8, 9. |
 | **Ranked thread** | An entry in `ranked_threads`, sourced from the scoring engine's normalised + sorted findings. The top 10 form the operator's "where to start" list. |

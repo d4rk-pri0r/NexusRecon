@@ -166,6 +166,8 @@ extra time.
 |----------|---------------|-----------|------|------------|------|
 | `CRUNCHBASE_API_KEY` | `crunchbase` (org/funding/leadership intel) | None | Expensive, Enterprise tier only as of writing | https://about.crunchbase.com/products/crunchbase-api/ | 30+ min (sales call) |
 | `BING_SEARCH_API_KEY` *(optional)* | `linkedin_dorks`, `public_collab` (live web search vs static dork list) | Without: dorks only, no execution. With: live results. | Free 1000/month tier on Azure | https://portal.azure.com/ → Cognitive Services → Bing Search | 15 min (Azure signup) |
+| `NEWSAPI_API_KEY` *(optional)* | `news_intel` (company news signals) | Free developer tier | Free / paid tiers | https://newsapi.org/ | 5 min |
+| `ADZUNA_APP_ID` + `ADZUNA_API_KEY` *(optional)* | `jobs_intel` (job-listing intelligence) | Free tier | Free | https://developer.adzuna.com/ | 10 min |
 
 **Realistic recommendation:** skip Crunchbase for testing; it's locked
 behind sales. The keyless `wikipedia` and `sec_edgar` tools cover much of
@@ -214,7 +216,8 @@ use.
 |----------|---------|---------|----------------|
 | `NEXUS_PROXY_URL` | OPSEC-aware tool requests (BaseHTTPTool paths + phase6 probes) | unset (`.env.example` seeds `socks5://127.0.0.1:9050`) | When you have a SOCKS5 proxy (commercial proxy service, Tor, custom). Note: some tools build bare HTTP clients and are not yet proxy-routed. |
 | `NEXUS_TOR_PROXY` | Tor entry for the OPSEC proxy rotator | unset (`.env.example` seeds `socks5://127.0.0.1:9050`) | Consumed by the ProxyRotator (`opsec/proxy.py`); it is NOT wired into credential validation |
-| `NEXUS_DNS_RESOLVERS` | Custom DNS servers (comma-separated) | `1.1.1.1,8.8.8.8,9.9.9.9` | Set to your own resolver if doing private/passive DNS |
+| `NEXUS_DNS_RESOLVERS` | Custom DNS servers (comma-separated) | code default `1.1.1.1,8.8.8.8` (`.env.example` seeds `1.1.1.1,8.8.8.8,9.9.9.9`) | Set to your own resolver if doing private/passive DNS |
+| `NEXUS_TLS_IMPERSONATE` *(optional)* | JA3 / TLS-fingerprint impersonation target (e.g. `chrome120`); requires the `[tls]` extra (`pip install nexusrecon[tls]`, curl_cffi) | unset (plain httpx client) | Set to blend TLS fingerprints with a real browser; no effect without the `[tls]` extra |
 | `NEXUS_VALIDATE_VIA_TOR` | (not wired) the TUI writes this flag, but the credential validators use a bare HTTP client and do not read it | `false` | No effect today; credential validation calls are not routed through Tor. Tracked as a follow-up |
 
 **Default safety note:** the proxy/Tor settings are commented `# SOCKS5

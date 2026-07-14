@@ -106,7 +106,7 @@ observation if relevant.
       vs `api.example.com`) shouldn't produce two entries.
 - [ ] **Each subdomain has at least one source attribution**.
 
-### `vuln_correlation.md`
+### `vulnerability_correlation.md`
 
 - [ ] **Every CVE cited matches `CVE-YYYY-NNNN`** format. (Automated
       check at `test_report_quality.py::TestCVECitationFormat`, but

@@ -348,7 +348,7 @@ for installed community packs.
 |------|------|---------------------|----------|
 | T0 | Pure passive | None, public datasets only | crt.sh, Shodan, GitHub, breach DBs, WHOIS |
 | T1 | Semi-passive | DNS resolution, passive DNS | DNS sweep, SecurityTrails, urlscan |
-| T2 | Light active | HTTP probes, screenshots | httpx, gowitness, favicon hashing |
+| T2 | Light active | HTTP probes, tech fingerprint | httpx, favicon hashing, WAF/TLS detect |
 | T3 | Active | Brute force, fuzzing | ffuf, gobuster, recursive amass |
 
 **Default ceiling is T1.** T2 and T3 require explicit scope
@@ -375,18 +375,21 @@ Every campaign writes to `./campaigns/<client>/<engagement>/<campaign-id>/report
 **Client-facing**
 - `phishing_package.md`, validated emails, pretext hooks, DMARC gaps
 - `cloud_posture.md`, M365 federation, AWS account, public buckets
-- `vuln_correlation.md`, CVE/KEV findings matched to fingerprinted
-  tech
+- `vulnerability_correlation.md`, CVE/KEV findings matched to
+  fingerprinted tech
+- `credential_exposure_paths.md`, personal-to-corporate credential
+  punch list (Phase 2.5)
 - `harvested_credentials.md`, masked + hashed exposed creds
 - `asset_inventory.md` / `.json` / `.csv`, discovered assets
-- `report.pdf`, full report as PDF (requires `weasyprint`)
+- `entity_graph.html`, interactive living-graph view
+- `report.pdf`, full report as PDF (requires `weasyprint`; falls back to
+  `report.html`)
 - `master_report.obsidian.md`, parallel master report with
   `[[wikilinks]]` + Obsidian callouts (with `--obsidian`)
 
 **Interop**
 - `stix2-bundle.json` + `stix2-bundle.json.receipt.json` (with
   `nexusrecon export … --format stix2 && nexusrecon sign …`)
-- `maltego_export.csv`, Maltego-compatible entity import
 - Jira NDJSON, Nuclei target list, Cobalt Strike profile stub (with
   `nexusrecon export … --format jira / nuclei-targets /
   cobaltstrike-profile`)
