@@ -73,7 +73,7 @@ still complete but lose the prose analysis layer.
 | `NEXUS_LLM_MODEL` | Specific model ID | | e.g. `claude-opus-4-5`, `gpt-4o`, `llama3.1:8b` |
 | `NEXUS_LLM_TEMPERATURE` | Sampling temperature | | `0.1` recommended (low for reproducible analysis) |
 
-**Recommended default:** Anthropic with Claude Sonnet 4.5 or 4.6. Best
+**Recommended default:** Anthropic with `claude-opus-4-5` (the shipped default in `config.py` / `.env.example`). Best
 reasoning per dollar for OSINT synthesis. Anthropic accounts also include
 prompt caching which cuts cost ~40% on multi-phase campaigns.
 
@@ -119,7 +119,7 @@ The top 5 alone get you ~80% of infrastructure intel coverage.
 | `HUNTER_API_KEY` | `hunter` (email harvesting + format) | 50 searches/month | Paid from $34/mo | https://hunter.io/users/sign_up | 5 min |
 | `HAVEIBEENPWNED_API_KEY` | `breach_lookup` (email→breaches) | None | $3.50/month minimum | https://haveibeenpwned.com/API/Key | 5 min |
 | `EMAILREP_API_KEY` *(optional)* | `emailrep` (email reputation) | Free tier without key (low volume); key for high volume | Invite-only paid | https://emailrep.io/ | varies |
-| `DEHASHED_USERNAME` + `DEHASHED_API_KEY` | (not yet implemented; planned breach source) | None | ~$5/month minimum | https://www.dehashed.com/login | 10 min |
+| `DEHASHED_USERNAME` + `DEHASHED_API_KEY` | `dehashed` tool + optional `breach_lookup` enrichment | None | ~$5/month minimum | https://www.dehashed.com/login | 10 min |
 | `INTELX_API_KEY` | `phonebook` (Intelligence X email/subdomain search) | None | Paid, varies | https://intelx.io/account?tab=developer | 10 min |
 | `LEAKCHECK_API_KEY` | `leakcheck` (breach DB queries) | None | Paid from $9/mo | https://leakcheck.io/ | 5 min |
 
@@ -212,10 +212,10 @@ use.
 
 | Variable | Purpose | Default | When to change |
 |----------|---------|---------|----------------|
-| `NEXUS_PROXY_URL` | All outbound HTTP traffic | `socks5://127.0.0.1:9050` | When you have a SOCKS5 proxy (commercial proxy service, Tor, custom). Comment out to disable. |
-| `NEXUS_TOR_PROXY` | Tor-specific routing (for `--validate-via-tor` flag) | `socks5://127.0.0.1:9050` | Only used when validating harvested credentials via Tor to avoid CloudTrail correlation back to operator IP |
+| `NEXUS_PROXY_URL` | OPSEC-aware tool requests (BaseHTTPTool paths + phase6 probes) | unset (`.env.example` seeds `socks5://127.0.0.1:9050`) | When you have a SOCKS5 proxy (commercial proxy service, Tor, custom). Note: some tools build bare HTTP clients and are not yet proxy-routed. |
+| `NEXUS_TOR_PROXY` | Tor entry for the OPSEC proxy rotator | unset (`.env.example` seeds `socks5://127.0.0.1:9050`) | Consumed by the ProxyRotator (`opsec/proxy.py`); it is NOT wired into credential validation |
 | `NEXUS_DNS_RESOLVERS` | Custom DNS servers (comma-separated) | `1.1.1.1,8.8.8.8,9.9.9.9` | Set to your own resolver if doing private/passive DNS |
-| `NEXUS_VALIDATE_VIA_TOR` | When `--validate-creds` is set, route validation calls through Tor | `false` | Set `true` if you want CloudTrail/audit logs to show Tor exit IPs rather than your real IP |
+| `NEXUS_VALIDATE_VIA_TOR` | (not wired) the TUI writes this flag, but the credential validators use a bare HTTP client and do not read it | `false` | No effect today; credential validation calls are not routed through Tor. Tracked as a follow-up |
 
 **Default safety note:** the proxy/Tor settings are commented `# SOCKS5
 proxy...` in `.env.example` but ACTIVE. If you don't have Tor running on
@@ -236,16 +236,15 @@ artifacts go (gigabytes possible for large engagements).
 
 ---
 
-# §11 Vault Integration (optional, production)
+# §11 Vault Integration (not implemented)
 
-| Variable | Purpose | When to use |
-|----------|---------|-------------|
-| `OP_SERVICE_ACCOUNT_TOKEN` | 1Password service account token | Production deploys where keys are managed in a vault rather than `.env` |
-| `VAULT_ADDR` + `VAULT_TOKEN` | HashiCorp Vault | Enterprise deploys with existing Vault infrastructure |
-
-**Skip for testing.** These are for production multi-operator deployments
-where you don't want plaintext keys on disk. NexusRecon's secret loader
-checks the vault if these are set, otherwise falls back to `.env`.
+There is no secret-manager / vault integration today. The config loader
+(`nexusrecon/core/config.py`) reads secrets only from process environment
+variables and `.env` (env takes precedence). `OP_SERVICE_ACCOUNT_TOKEN`,
+`VAULT_ADDR`, and `VAULT_TOKEN` are not consulted by any code path. External
+secret management (1Password, HashiCorp Vault) is a possible future addition,
+not a current feature; for now, manage `.env` with your OS/file permissions or
+inject the env vars from your own secret store at launch.
 
 ---
 

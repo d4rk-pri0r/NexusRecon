@@ -14,6 +14,13 @@ four of five moonshot capabilities. See
 [`ARCHITECTURE.md`](ARCHITECTURE.md) sections 13-22 for design
 deep-dives.
 
+> Note (2026-07-14): the suite has since grown to ~2695 tests; the 590
+> figure is the count at the 0.7.0 tag. And of the four core bets,
+> Continuous Confidence ships in-tree and unit-tested but is
+> experimental / opt-in and does NOT run on a default `nexusrecon run`
+> (see the 2026-06-09 note below); Living Graph, Strategic Reasoning,
+> and the Pack format are wired into the default path.
+
 ### Phase 0: Living Intelligence Graph
 
 - **Step 0.0**: `EntityGraph.from_state(state)` reconstructor +

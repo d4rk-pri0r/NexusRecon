@@ -35,7 +35,7 @@ When you run `nexusrecon run`, this is what genuinely delivers:
   class turns 401/403/429/5xx into explicit failures instead of silent empties,
   paid-API and breach gating is honest, and the registry returns an explicit
   "prerequisites not met" rather than faking success.
-- **The report engine.** The best-integrated subsystem in the build. About 25
+- **The report engine.** The best-integrated subsystem in the build. About 22
   operator-facing deliverables rendered from live state, with deterministic
   CVE-provenance scrubbing so hallucinated CVEs never ship to a client, a
   run-health trust banner, a coverage appendix, and scope-hash plus version
@@ -325,6 +325,6 @@ in `ARCHITECTURE.md`.
   and pretext scoring (now wired into the default run).
 - OPSEC stack (stealth jitter, rate limiting, proxy injection, opt-in JA3) with
   the known gaps tracked in items 3.
-- Report engine with about 25 deliverables, Obsidian export, and the signed
+- Report engine with about 22 deliverables, Obsidian export, and the signed
   STIX path (happy path fixed in item 7).
 - TUI front door, killer-demo sample run, live-drift CI schedule.

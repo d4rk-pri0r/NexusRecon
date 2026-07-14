@@ -61,7 +61,13 @@ nexusrecon run --scope scope.yaml --dispatch-mode off
 | Constant | Value | Effect |
 |----------|-------|--------|
 | `MAX_PER_CYCLE` | 5 | LLM may propose many items; only the first 5 are executed per invocation |
-| `MAX_TOTAL` | 30 | Total items in `dynamic_dispatch_log` across the entire campaign; dispatcher exits immediately if this is reached |
+| `MAX_TOTAL` | 30 (lite/default) | Total items in `dynamic_dispatch_log` across the campaign; the dispatcher stops once it is reached |
+
+At runtime the caps and phase-eligibility come from the active `DispatchPolicy`
+(`nexusrecon/strategy/policy.py`), not these module constants directly: `off` =
+0, `lite`/default `max_total` = 30, and `FullPolicy` raises it to 50 (so
+`--dispatch-mode full` allows 50). `MAX_PER_CYCLE` / `MAX_TOTAL` are the legacy
+default constants the policies and tests build on.
 
 These caps prevent runaway token spend and infinite tool loops.
 
@@ -82,10 +88,11 @@ correlation pivot; phase 7 has fresh CVE/KEV data to act on immediately.
 
 The dispatcher prompt includes:
 
-1. **Current phase** and `completed_phases`
+1. **Current phase**
 2. **Seeds** (initial targets)
-3. A **summary of populated state keys**, which intel dicts are non-empty
-4. A **findings snippet** (first 10 finding titles)
+3. A **summary of populated state keys** (subdomain/email counts, which
+   dark/cloud/code intel dicts are non-empty)
+4. A **total findings count** and the **open hypotheses** (not per-finding titles)
 5. **Already-dispatched pairs** `(tool, target)` to prevent re-runs
 6. A JSON schema for the required output format
 
@@ -149,7 +156,8 @@ key using this mapping:
 | `social` | `social_intel` |
 | `pretext` / `news` | `pretext_intel` |
 
-The state key is updated via `state[state_key][target] = tool_result_data`.
+The state key is updated under a namespaced sub-key:
+`state[state_key]["dynamic/{tool}/{target}"] = result.data`.
 
 ---
 
@@ -190,8 +198,9 @@ Each executed item is appended to `state["dynamic_dispatch_log"]`:
 }
 ```
 
-The log is serialized into `state.json` at campaign end and visible in the
-`full_report.md` under the _Dynamic Intelligence Augmentation_ section.
+The log is serialized into `state.json` (written after each phase). It is not
+currently rendered in any generated report; inspect `dynamic_dispatch_log` in
+`state.json` to review it.
 
 ---
 

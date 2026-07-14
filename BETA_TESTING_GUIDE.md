@@ -29,7 +29,7 @@ and produces:
 - Asset inventories, attack-surface matrices, vulnerability correlations,
   cloud posture briefs, vendor/supply-chain reports, Jira-ready CSV
 - An interactive entity-graph HTML
-- PDF + PPTX executive deliverables
+- PPTX executive deliverable (PDF too, if the `[pdf]` extra / weasyprint is installed; otherwise an HTML fallback `report.html` is written)
 
 The agentic loop fires a "dispatcher" LLM between phases 1/4/7 that
 chooses follow-up tools based on gaps in the campaign state, e.g., if
@@ -82,7 +82,7 @@ The audit log will show you scanned them; that's not a defense.
 | Python 3.11, 3.12, or 3.13 (NOT 3.14) | CrewAI compatibility window | `python3.13 --version` |
 | Anthropic API key | LLM provider (required for agent synthesis) | https://console.anthropic.com/ |
 | ~$10 budget for initial testing | Real-target campaigns are ~$2 each | n/a |
-| 12 external binaries | Tool integrations (installed by `install.sh`) | see step 4.2 |
+| 13 external binaries | Tool integrations (installed by `install.sh`) | see step 4.1 |
 
 **Optional but high-leverage keys (configure if you have them):**
 
@@ -149,7 +149,7 @@ Minimum to be useful:
 ```
 ANTHROPIC_API_KEY=sk-ant-...
 NEXUS_LLM_PROVIDER=anthropic
-NEXUS_LLM_MODEL=claude-sonnet-4-6
+NEXUS_LLM_MODEL=claude-opus-4-5
 ```
 
 Add as many of the optional keys as you have. The platform degrades
@@ -221,8 +221,11 @@ nexusrecon run \
   --dispatch-mode off
 ```
 
-This is the cheapest, fastest path to a working campaign. Light mode
-runs phases 1-5 + 7-9 with no agentic dispatcher. Expected:
+This is the cheapest, fastest path to a working campaign, with no agentic
+dispatcher. With the recommended minimal scope (`constraints.max_tier: T1`),
+phases 1-4 + 7-9 run; phase 5 (T2) and phase 6 (T3) are skipped because the
+scope tier is below their floor. Raise `max_tier` to enable them; `--mode`
+does not change the phase set on the default runner. Expected:
 
 - 5-10 min runtime
 - ~$1-$2 in Anthropic API spend on a real target (a few cents on a thin
@@ -434,9 +437,9 @@ Less useful at this stage:
 Some things to remember:
 
 - **You're an operator, not the platform.** Findings are starting points
-  for your judgment, not conclusions. The platform produces an
-  Identity Intelligence Gap finding if it can't harvest emails, that's
-  signal, not an attack vector.
+  for your judgment, not conclusions. When it can't harvest emails, the
+  platform records an open question ("No emails found, expand identity
+  harvesting") rather than an attack vector, that's signal too.
 - **Phishing drafts are drafts.** They require operator review before any
   send. The drafts include explicit `⚠ AUTHORIZATION REQUIRED ⚠`
   banners; do not strip them when sharing with teammates.
@@ -444,9 +447,12 @@ Some things to remember:
   immediately if they belong to assets you're authorized to remediate;
   for client engagements, deliver via secure channels (encrypted ZIP,
   vault drop, secure portal).
-- **The audit log is hash-chained.** If you need to demonstrate provenance
-  to a client or in court, the chain at `logs/audit.jsonl` is the
-  authoritative record.
+- **The audit log is hash-chained and tamper-evident.** `verify_chain`
+  detects any post-hoc edit to `logs/audit.jsonl`, so it is a solid
+  provenance trail for what the tool did. It attests the log was not altered
+  after writing; it does not independently verify the evidence behind each
+  finding (agent findings carry `evidence_integrity="unverified"`), so treat
+  it as a tamper-evident activity record, not court-grade evidence.
 
 ---
 
@@ -471,16 +477,14 @@ nexusrecon export <campaign_id> --format csv      # export findings
 
 | Flag | Effect |
 |------|--------|
-| `--mode light` | Runs phases 1-5+7-9, no T2/T3 active scanning |
-| `--mode medium` | Adds T1/T2 active fingerprinting + scanning |
-| `--mode deep` | Adds T3 intrusive ops (only if scope authorizes) |
+| `--mode light/medium/deep` | Selects the planner/campaign strategy. On the default runner it does NOT gate which phases run (that is driven by the scope's `constraints.max_tier`); raise `max_tier` to T2/T3 to enable phase 5 / phase 6 active scanning |
 | `--dispatch-mode off` | Disables agentic dispatcher; cheapest, most predictable |
 | `--dispatch-mode lite` | Dispatcher fires after phases 1, 4, 7 (default) |
 | `--dispatch-mode full` | Dispatcher fires after every phase (most LLM cost) |
-| `--validate-creds` | Runs phase 7.5 credential harvest from exposed configs |
+| `--validate-creds` | Credential harvest (phase 7.5) runs on every campaign; this flag additionally validates harvested creds via read-only provider API calls (AWS sts / GitHub /user) |
 | `--generate-phishing` | Generates per-target phishing email drafts |
 | `--use-graph` | Use LangGraph workflow engine (alternative to direct loop) |
-| `--dry-run` | Validate scope + plan without running tools |
+| `--dry-run` | Validate scope and print a scope summary; no tools, LLM calls, or planner run (use `--plan-only` to preview the Strategy) |
 
 ### Recommended first-week test sequence
 

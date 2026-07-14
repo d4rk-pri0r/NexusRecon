@@ -3,8 +3,9 @@
 How to set up a dev environment, where the code lives, and what a
 mergeable pull request looks like. The hard rules that aren't covered
 here (no telemetry, no scope-guard bypass, no swallowed errors) live in
-[DISCLAIMER.md](DISCLAIMER.md) and the "Design invariants" section of
-[ARCHITECTURE.md](ARCHITECTURE.md).
+[DISCLAIMER.md](DISCLAIMER.md) and the invariants noted throughout
+[ARCHITECTURE.md](ARCHITECTURE.md) (see "Key invariants the architecture
+enforces" in the Architecture map section).
 
 ---
 
@@ -45,7 +46,7 @@ pipx install maigret                  # pipx isolates its networkx<3 pin
 ```
 
 Tools whose binaries aren't present are auto-marked unavailable by
-``OSINTTool.is_available()`` ── they skip cleanly during campaigns
+``OSINTTool.is_available()``; they skip cleanly during campaigns
 rather than crashing.
 
 ---
@@ -54,13 +55,13 @@ rather than crashing.
 
 ```
 nexusrecon/
-├── agents/         # LLM agent personas (8 phase + 3 utility)
+├── agents/         # LLM agent personas (13: 10 phase + 3 utility)
 ├── cli/            # Typer CLI (run, validate, resume, diff, tui, smoke, …)
 ├── core/           # Scope, audit, cache, entity graph, cost tracker
 ├── graph/          # LangGraph workflow + dynamic dispatcher
 ├── models/         # Pydantic data models (Scope, Campaign, Finding, …)
 ├── opsec/          # Stealth profiles, rate limiter, UA pool, proxy
-├── reports/        # Report engine (17 deliverables)
+├── reports/        # Report engine (22 deliverables)
 ├── tools/          # OSINT tool registry, organized by category
 └── tui/            # Textual UI screens, banner, env editor
 tests/

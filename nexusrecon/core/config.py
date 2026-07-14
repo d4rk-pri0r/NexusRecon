@@ -52,6 +52,19 @@ class NexusConfig(BaseSettings):
     abuseipdb_api_key: SecretStr | None = Field(default=None, alias="ABUSEIPDB_API_KEY")
     urlscan_api_key: SecretStr | None = Field(default=None, alias="URLSCAN_API_KEY")
     securitytrails_api_key: SecretStr | None = Field(default=None, alias="SECURITYTRAILS_API_KEY")
+    # These were exposed in the TUI config editor and .env.example but had no
+    # loader Field, so with extra="ignore" the env var was silently dropped and
+    # get_secret() always returned None, leaving each tool permanently "not set"
+    # (required-key tools) or stuck on the free tier (optional-key tools). Wired
+    # here so a configured key is actually honored.
+    zoomeye_api_key: SecretStr | None = Field(default=None, alias="ZOOMEYE_API_KEY")
+    netlas_api_key: SecretStr | None = Field(default=None, alias="NETLAS_API_KEY")
+    ipinfo_api_key: SecretStr | None = Field(default=None, alias="IPINFO_API_KEY")
+    leakix_api_key: SecretStr | None = Field(default=None, alias="LEAKIX_API_KEY")
+    otx_api_key: SecretStr | None = Field(default=None, alias="OTX_API_KEY")
+    certspotter_api_key: SecretStr | None = Field(default=None, alias="CERTSPOTTER_API_KEY")
+    chaos_api_key: SecretStr | None = Field(default=None, alias="CHAOS_API_KEY")
+    vulners_api_key: SecretStr | None = Field(default=None, alias="VULNERS_API_KEY")
 
     # ── API Keys — Identity ─────────────────────────────────────
     hunter_api_key: SecretStr | None = Field(default=None, alias="HUNTER_API_KEY")
@@ -65,6 +78,10 @@ class NexusConfig(BaseSettings):
     newsapi_api_key: SecretStr | None = Field(default=None, alias="NEWSAPI_API_KEY")
     adzuna_app_id: str | None = Field(default=None, alias="ADZUNA_APP_ID")
     adzuna_api_key: SecretStr | None = Field(default=None, alias="ADZUNA_API_KEY")
+    # Same missing-Field fix as the infrastructure block above.
+    leakcheck_api_key: SecretStr | None = Field(default=None, alias="LEAKCHECK_API_KEY")
+    crunchbase_api_key: SecretStr | None = Field(default=None, alias="CRUNCHBASE_API_KEY")
+    bing_search_api_key: SecretStr | None = Field(default=None, alias="BING_SEARCH_API_KEY")
 
     # ── API Keys — Code ─────────────────────────────────────────
     github_token: SecretStr | None = Field(default=None, alias="GITHUB_TOKEN")
