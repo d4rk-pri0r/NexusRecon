@@ -261,7 +261,10 @@ deep-dives.
   `NEXUS_LLM_CLI_TIMEOUT` (per-CLI-call timeout) and `XAI_API_KEY`
   (direct endpoint `https://api.x.ai/v1`). `requirements.txt` now mirrors
   the existing `langchain-openai` core dependency so installer/Docker
-  fallback paths retain OpenAI and xAI API-key clients. A cloud provider with
+  fallback paths retain OpenAI and xAI API-key clients. The dev extra now
+  includes the existing optional `curl_cffi` test dependency so CI can execute
+  the two JA3 exception-translation tests instead of failing at import time.
+  A cloud provider with
   neither login nor key now raises an actionable error instead of
   silently selecting `MockLLM`; the mock is explicit-only via
   `NEXUS_LLM_PROVIDER=mock`.
