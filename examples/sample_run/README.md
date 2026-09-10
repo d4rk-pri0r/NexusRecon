@@ -47,14 +47,16 @@ surface, with PII redacted and per-employee findings withheld.
 
 ## Reproducing this campaign
 
-Anyone with the framework installed and the relevant API keys can re-run:
+Anyone with the framework installed and the relevant credentials can re-run:
 
 ```bash
-# Required:
-#   - ANTHROPIC_API_KEY (for the LLM agents)
+# Required LLM access (choose one):
+#   - nexusrecon auth login anthropic  (Claude Pro/Max subscription)
+#   - ANTHROPIC_API_KEY                (direct metered API)
+#   - or configure another supported provider / Ollama
 # Recommended (more tools fire with more keys):
 #   - SHODAN_API_KEY, VIRUSTOTAL_API_KEY, GITHUB_TOKEN, HUNTER_API_KEY,
-#     ABUSEIPDB_API_KEY, OPENAI_API_KEY (fallback LLM)
+#     ABUSEIPDB_API_KEY
 #
 # Optional binaries (one-off install):
 #   pipx install maigret    # username account checking (~3000 sites)

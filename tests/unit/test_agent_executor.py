@@ -56,23 +56,50 @@ class TestMockLLM:
 # ── get_llm_from_config Tests ────────────────────────────────────────────────
 
 class TestGetLLMFromConfig:
-    def test_falls_back_to_mock_with_no_keys(self):
+    """``get_llm_from_config`` now routes through the ``nexusrecon.llm`` factory.
+
+    The old "silently fall back to MockLLM for any keyless provider" contract
+    is gone (provider-oauth plan): operators who want the deterministic mock
+    select ``provider=mock``. A keyless, login-less provider must raise a clear
+    ``LLMAuthenticationError`` naming the API-key variable.
+    """
+
+    def test_mock_provider_returns_mock(self):
         config = MagicMock()
-        config.llm_provider = "openai"
+        config.llm_provider = "mock"
+        config.llm_auth_mode = "auto"
+        config.llm_model = "mock"
+        config.llm_temperature = 0.0
         config.get_secret = MagicMock(return_value=None)
         llm = get_llm_from_config(config)
         assert isinstance(llm, MockLLM)
 
-    def test_falls_back_to_mock_with_unknown_provider(self):
+    def test_api_key_mode_missing_key_raises_with_remediation(self):
+        from nexusrecon.llm.auth import LLMAuthenticationError
+        config = MagicMock()
+        config.llm_provider = "openai"
+        config.llm_auth_mode = "api_key"
+        config.llm_model = "gpt-4o"
+        config.llm_temperature = 0.2
+        config.get_secret = MagicMock(return_value=None)
+        with pytest.raises(LLMAuthenticationError) as ei:
+            get_llm_from_config(config)
+        assert "OPENAI_API_KEY" in str(ei.value)
+
+    def test_unknown_provider_raises_clear_error_not_silent_mock(self):
         config = MagicMock()
         config.llm_provider = "nonexistent"
+        config.llm_auth_mode = "api_key"
+        config.llm_model = "x"
+        config.llm_temperature = 0.0
         config.get_secret = MagicMock(return_value="some_key")
-        llm = get_llm_from_config(config)
-        assert isinstance(llm, MockLLM)
+        with pytest.raises(ValueError):
+            get_llm_from_config(config)
 
-    def test_ollama_provider_falls_back_without_package(self):
+    def test_ollama_provider_bypasses_auth(self):
         config = MagicMock()
         config.llm_provider = "ollama"
+        config.llm_auth_mode = "auto"
         config.ollama_model = "llama3"
         config.ollama_base_url = "http://localhost:11434"
         config.llm_model = "llama3"
@@ -81,15 +108,15 @@ class TestGetLLMFromConfig:
         # May return ChatOllama if package is installed; verify it's not None
         assert llm is not None
 
-    def test_anthropic_falls_back_without_package(self):
+    def test_anthropic_api_key_is_direct_chat_client(self):
         config = MagicMock()
         config.llm_provider = "anthropic"
+        config.llm_auth_mode = "api_key"
         config.llm_model = "claude-opus-4-5"
         config.llm_temperature = 0.7
         config.get_secret = MagicMock(return_value="sk-ant-xxx")
         llm = get_llm_from_config(config)
-        # May return ChatAnthropic if package is installed; verify it's not None
-        assert llm is not None
+        assert type(llm).__name__ == "ChatAnthropic"
 
 
 # ── AgentExecutor Tests ──────────────────────────────────────────────────────
@@ -290,3 +317,78 @@ class TestMockProvenanceLabeling:
         assert agent.role.strip() and agent.role.strip() in ctx
         assert agent.goal.strip() and agent.goal.strip() in ctx
         assert agent.backstory.strip() and agent.backstory.strip() in ctx
+
+
+# ── provider-oauth: subscription zero-cost telemetry ─────────────────────────
+
+class _SubscriptionResponse:
+    """Shape of a successful OAuth-CLI (subscription-backed) response."""
+
+    content = "Analysis complete.\nFINDINGS_JSON:[]"
+    usage_metadata = {"input_tokens": 1000, "output_tokens": 2000}
+    billing_mode = "subscription"
+
+
+class _SubscriptionLLM:
+    """Fake OAuth-CLI-backed model: subscription billing, real token counts."""
+
+    model_name = "claude"
+
+    def invoke(self, prompt):
+        return _SubscriptionResponse()
+
+
+class TestSubscriptionZeroCostTelemetry:
+    """provider-oauth: subscription-backed responses carry
+    ``billing_mode="subscription"``, and AgentExecutor + cost tracking record
+    ZERO estimated USD for them while retaining token counts and provenance."""
+
+    async def _run_subscription_agent(self):
+        from nexusrecon.core.cost_tracker import CostTracker
+
+        config = MagicMock()
+        config.llm_provider = "mock"  # only so __init__ builds no real client
+        config.llm_auth_mode = "auto"
+        config.llm_model = "mock"
+        config.llm_temperature = 0.0
+        config.get_secret = MagicMock(return_value=None)
+        executor = AgentExecutor(config)
+        executor.llm = _SubscriptionLLM()  # avoid any real API call
+        tracker = CostTracker("camp", max_llm_cost_usd=50.0)
+        executor.bind_cost_tracker(tracker)
+        state = {
+            "current_phase": "phase1",
+            "llm_cost_usd": 0.0,
+            "max_llm_cost_usd": 50.0,
+        }
+        result = await executor.run_agent(
+            "passive_recon", {"seeds": ["acme.com"]}, "analyze", state
+        )
+        return executor, tracker, state, result
+
+    def test_subscription_response_carries_billing_mode(self):
+        assert _SubscriptionResponse.billing_mode == "subscription"
+
+    def test_subscription_call_costs_zero_usd_but_retains_tokens(self):
+        import asyncio
+
+        _, tracker, state, _ = asyncio.run(self._run_subscription_agent())
+        assert tracker.total_llm_calls == 1
+        assert tracker.total_input_tokens == 1000
+        assert tracker.total_output_tokens == 2000
+        summary = tracker.summary()
+        agent_row = summary["by_agent"]["passive_recon"]
+        assert agent_row["input_tokens"] == 1000
+        assert agent_row["output_tokens"] == 2000
+        assert tracker.total_llm_cost_usd == 0.0
+        assert agent_row["cost_usd"] == 0.0
+        assert state["llm_cost_usd"] == 0.0
+
+    def test_subscription_call_is_recorded_as_live_not_mock(self):
+        import asyncio
+
+        _, tracker, state, result = asyncio.run(self._run_subscription_agent())
+        assert state["llm_calls_by_model"] == {"claude": 1}
+        assert "mock_llm" not in state["llm_calls_by_model"]
+        assert "error" not in result
+        assert result["output"] == _SubscriptionResponse.content

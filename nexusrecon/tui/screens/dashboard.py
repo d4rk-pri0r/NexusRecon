@@ -118,6 +118,64 @@ def _human_when(when: datetime) -> str:
         return "earlier"
 
 
+def _llm_auth_ready(config=None, env=None) -> bool:
+    """Readiness for the selected LLM provider.
+
+    Codex and Claude delegate keyring/file validation to their documented
+    non-interactive status commands. Grok has no status command, so its native
+    store is only a readiness hint and is validated/refreshed on first use.
+    Local ``ollama`` and explicit ``mock`` need no cloud auth.
+    """
+    try:
+        import os
+
+        from nexusrecon.core.config import get_config
+        from nexusrecon.llm.auth import (
+            build_auth_status,
+            capture_runner,
+            normalize_provider,
+            store_metadata,
+        )
+
+        cfg = config if config is not None else get_config()
+        raw_provider = getattr(cfg, "llm_provider", None)
+        if not isinstance(raw_provider, str):
+            return any(
+                cfg.get_secret(key_field)
+                for key_field in (
+                    "anthropic_api_key", "openai_api_key", "xai_api_key"
+                )
+            )
+        provider = normalize_provider(raw_provider)
+        if provider in {"ollama", "mock"}:
+            return True
+
+        key_field = {
+            "anthropic": "anthropic_api_key",
+            "openai": "openai_api_key",
+            "xai": "xai_api_key",
+        }.get(provider)
+        if key_field is None:
+            return False
+        if cfg.get_secret(key_field):
+            return True
+        if getattr(cfg, "llm_auth_mode", "auto") == "api_key":
+            return False
+
+        process_env = os.environ if env is None else env
+        if provider in {"openai", "anthropic"}:
+            status = build_auth_status(
+                provider,
+                env=process_env,
+                runner=capture_runner,
+                probe_timeout=2,
+            )
+            return status.get("status") == "subscription"
+        return bool(store_metadata(provider, env=process_env).get("exists"))
+    except Exception:
+        return False
+
+
 def _next_step_hint() -> str:
     """Single context-aware "what should I do next?" hint.
 
@@ -138,19 +196,16 @@ def _next_step_hint() -> str:
 
         from nexusrecon.core.config import get_config
         cfg = get_config()
-        # Check for any configured LLM key first.
-        has_key = any(
-            cfg.get_secret(k)
-            for k in ("anthropic_api_key", "openai_api_key")
-        )
+        # Check for any usable LLM auth (API key OR official OAuth store).
+        has_key = _llm_auth_ready()
         out_dir = _Path(cfg.output_dir)
         campaigns = (
             list(out_dir.rglob("state.json")) if out_dir.exists() else []
         )
         if not has_key and not campaigns:
             return (
-                "👋  Press [bold]c[/bold] to configure your LLM "
-                "provider key — required before your first campaign."
+                "👋  Press [bold]c[/bold] to configure LLM "
+                "authentication — required before your first campaign."
             )
         if not campaigns:
             return (
@@ -197,6 +252,7 @@ def _detect_orphan_session() -> dict | None:
     """
     try:
         import json
+
         from nexusrecon.tui.app import _session_lock_path
         path = _session_lock_path()
         if not path.exists():
@@ -465,9 +521,8 @@ def _should_show_onboarding() -> bool:
         )
         if has_campaigns:
             return False
-        for key in ("anthropic_api_key", "openai_api_key"):
-            if cfg.get_secret(key):
-                return False
+        if _llm_auth_ready():
+            return False
         return True
     except Exception:
         return False

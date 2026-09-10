@@ -7,6 +7,7 @@ import logging
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 import structlog
 import typer
@@ -1584,7 +1585,7 @@ def tool_new(
 ) -> None:
     """Generate a new tool. Interactive capability picker for
     category / target_types / tier when flags are omitted."""
-    from rich.prompt import IntPrompt, Prompt
+    from rich.prompt import Prompt
 
     from nexusrecon.packs.loader import _resolve_pack_dir
     from nexusrecon.sdk.tool_scaffolder import (
@@ -1705,7 +1706,7 @@ def policy_new(
 ) -> None:
     """Generate a new dispatch policy. Interactive picker for
     eligible_phases when the flag is omitted."""
-    from rich.prompt import IntPrompt, Prompt
+    from rich.prompt import Prompt
 
     from nexusrecon.packs.loader import _resolve_pack_dir
     from nexusrecon.sdk.policy_scaffolder import (
@@ -2743,7 +2744,6 @@ def vision_scan(
 ) -> None:
     """Scan a single visual artifact + fold it into a
     campaign's graph."""
-    from nexusrecon.core.entity_graph import EntityGraph
     from nexusrecon.vision import (
         NoopVisionBackend,
         VisionExtractor,
@@ -2809,7 +2809,6 @@ def vision_scan_dir(
     noop: bool = typer.Option(False, "--noop"),
 ) -> None:
     """Walk a directory + scan every supported artifact."""
-    from nexusrecon.core.entity_graph import EntityGraph
     from nexusrecon.vision import (
         NoopVisionBackend,
         VisionExtractor,
@@ -2862,6 +2861,147 @@ def vision_scan_dir(
             border_style="green",
         )
     )
+
+
+# ── provider-oauth: auth login/status ────────────────────────────────
+
+auth_app = typer.Typer(
+    help=(
+        "LLM provider OAuth login + status. Delegates to each provider's "
+        "maintained official CLI (codex / claude / grok); NexusRecon never "
+        "stores or logs provider credentials."
+    ),
+)
+app.add_typer(auth_app, name="auth")
+
+
+@auth_app.command("login")
+def auth_login(
+    provider: str = typer.Argument(
+        ..., help="openai | openai-codex | anthropic | xai",
+    ),
+    device: bool = typer.Option(
+        False, "--device",
+        help="Use device-code login (not supported by anthropic).",
+    ),
+) -> None:
+    """Log in to a provider's official CLI.
+
+    Streams the official CLI's interactive login (browser / auth-code
+    paste) directly to the terminal. Credentials are written by the
+    official CLI to its own store — never captured or logged here.
+    """
+    from nexusrecon.llm import auth as llm_auth
+
+    valid_names = {*llm_auth.PROVIDER_CONTRACTS, *llm_auth.PROVIDER_ALIASES}
+    if provider not in valid_names:
+        console.print(
+            f"[bold red]Unknown provider '{provider}'.[/bold red] "
+            f"Choose from {', '.join(sorted(valid_names))}."
+        )
+        raise typer.Exit(2)
+    console.print(
+        f"Starting official-CLI login for [cyan]{provider}[/cyan] — "
+        "follow the prompts in your terminal..."
+    )
+    try:
+        rc = llm_auth.run_login(provider, device=device)
+    except llm_auth.LLMAuthenticationError as exc:
+        console.print(f"[bold red]{exc}[/bold red]")
+        raise typer.Exit(1)
+    except ValueError as exc:
+        console.print(f"[bold red]{exc}[/bold red]")
+        raise typer.Exit(2)
+    if rc == 0:
+        console.print(f"[green]✓[/green] {provider}: logged in.")
+    else:
+        console.print(
+            f"[bold red]{provider}: login failed (exit {rc}).[/bold red]"
+        )
+        raise typer.Exit(rc)
+
+
+@auth_app.command("status")
+def auth_status(
+    provider: str | None = typer.Option(
+        None, "--provider", "-p",
+        help="openai | openai-codex | anthropic | xai | all (default: all).",
+    ),
+) -> None:
+    """Show provider login readiness.
+
+    Reports binary + credential-store presence and login state per
+    provider. Never prints tokens, keys, or credential values.
+    """
+    from nexusrecon.llm import auth as llm_auth
+
+    requested = (provider or "all").lower()
+    valid_names = {*llm_auth.PROVIDER_CONTRACTS, *llm_auth.PROVIDER_ALIASES}
+    if requested != "all" and requested not in valid_names:
+        console.print(
+            f"[bold red]Unknown provider '{provider}'.[/bold red] "
+            f"Choose from {', '.join(sorted(valid_names))}."
+        )
+        raise typer.Exit(2)
+
+    providers = (
+        list(llm_auth.PROVIDER_CONTRACTS)
+        if requested == "all"
+        else [llm_auth.normalize_provider(requested)]
+    )
+    for name in providers:
+        contract = llm_auth.PROVIDER_CONTRACTS[name]
+        # openai/anthropic probe the official status command; xai uses cheap
+        # store-metadata presence (no documented status probe).
+        runner = None if name == "xai" else llm_auth.capture_runner
+        status = llm_auth.build_auth_status(name, runner=runner)
+        _print_auth_status(status, contract)
+
+
+def _print_auth_status(status: dict, contract: object) -> None:
+    """Render one provider's readiness row without exposing values."""
+    st = status.get("status", "unknown")
+    if st == "subscription":
+        state_text = "[green]subscription login ready[/green]"
+    elif st == "api_billed":
+        state_text = "[yellow]API-billed CLI login (not subscription)[/yellow]"
+    elif st == "unknown_login":
+        state_text = "[yellow]login type unverified[/yellow]"
+    elif st == "store_present":
+        state_text = "[yellow]credential present (validated on use)[/yellow]"
+    elif st == "missing_binary":
+        state_text = f"[red]CLI not installed ({status.get('binary', '?')})[/red]"
+    else:
+        state_text = "[yellow]not logged in[/yellow]"
+    store_text = (
+        "[green]store present[/green]"
+        if status.get("store_present")
+        else "[dim]no store file[/dim]"
+    )
+    console.print(
+        f"  [bold]{status.get('provider', '?')}[/bold]  "
+        f"binary={contract.binary}  {state_text}  {store_text}"
+    )
+    if st == "not_logged_in":
+        from nexusrecon.llm.auth import login_command
+        try:
+            login_hint = " ".join(login_command(status.get("provider", "")))
+        except ValueError:
+            login_hint = f"{status.get('binary', '?')} login"
+        console.print(
+            f"      [dim]log in:[/dim] [bold]{login_hint}[/bold]  "
+            f"or set {status.get('api_key_env_var', '')}"
+        )
+    elif st in {"api_billed", "unknown_login"}:
+        console.print(
+            "      [dim]not used as subscription; re-login with the provider "
+            f"subscription or set {status.get('api_key_env_var', '')}[/dim]"
+        )
+    elif st == "missing_binary":
+        console.print(
+            f"      [dim]install:[/dim] [bold]{contract.binary}[/bold] "
+            "and run the provider's login."
+        )
 
 
 def main() -> None:

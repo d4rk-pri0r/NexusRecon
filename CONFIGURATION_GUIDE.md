@@ -25,12 +25,13 @@
 
 ## Profiles, pick your starting point
 
-### Minimum tester (5 keys, ~25 min)
+### Minimum tester (5 credentials, ~25 min)
 
 Sufficient to exercise every campaign phase against a controlled target.
 
 ```
-ANTHROPIC_API_KEY        (LLM, paid, you likely already have one)
+LLM access               (official-CLI login: `nexusrecon auth login anthropic`,
+                          or ANTHROPIC_API_KEY for metered billing)
 GITHUB_TOKEN             (free; unlocks 5 code/secret tools)
 VIRUSTOTAL_API_KEY       (free; 500/day)
 SHODAN_API_KEY           (free tier limited; $5-$59 one-time is worth it)
@@ -59,27 +60,76 @@ Realistic monthly cost: $50-$200 depending on volume.
 
 # §1 LLM Providers (REQUIRED)
 
-NexusRecon needs at least ONE LLM provider configured. Without one, agent
-synthesis is replaced by `MockLLM` (keyword-counted summaries), campaigns
-still complete but lose the prose analysis layer.
+NexusRecon needs ONE LLM backend configured. Cloud providers
+(`anthropic`, `openai`, `xai`) can authenticate two ways: an
+**official-CLI subscription login** (recommended — uses your existing
+Claude / ChatGPT / Grok subscription, no key) or a **provider API key**
+(direct metered billing). `ollama` uses a local model; `mock` is the
+explicit offline provider. A cloud provider with neither a login nor a
+key raises an actionable error naming the exact login command and the
+key variable — the `MockLLM` fallback is never selected silently; it
+runs only when you set `NEXUS_LLM_PROVIDER=mock`.
+
+### Auth mode
+
+| Variable | Purpose | Default | Notes |
+|----------|---------|---------|-------|
+| `NEXUS_LLM_AUTH_MODE` | Credential resolution | `auto` | `auto` prefers the official-CLI subscription login, falls back to the provider API key when one is set. `oauth` is the same preference and keeps the key fallback. `api_key` forces direct SDK clients and never touches the CLIs. |
+| `NEXUS_LLM_CLI_TIMEOUT` | Per-invocation timeout (seconds) for official-CLI calls | `600` | `1`-`3600` |
+| `NEXUS_LLM_PROVIDER` | Which provider to use | `anthropic` | `anthropic` \| `openai` \| `openai-codex` \| `xai` \| `ollama` \| `mock`; `openai-codex` is a public alias for the existing OpenAI Codex OAuth adapter. |
+| `NEXUS_LLM_MODEL` | Specific model ID | `claude-opus-4-5` for the default Anthropic provider | An explicitly configured value is passed to every backend. If `openai-codex` or `xai` is selected without setting this variable, the maintained CLI chooses its current provider default. |
+| `NEXUS_LLM_TEMPERATURE` | Sampling temperature | `0.1` | Low for reproducible analysis |
+
+### Providers, official CLIs, and credential stores
+
+| Provider | Official CLI | Install | Login | Native credential store |
+|----------|--------------|---------|-------|-------------------------|
+| `anthropic` | Claude Code (`claude`) | `npm install -g @anthropic-ai/claude-code` | `nexusrecon auth login anthropic` | Claude Code system credential store, or `~/.claude/.credentials.json` (override with `CLAUDE_CONFIG_DIR`). Default official login is the Claude.ai subscription (Pro/Max). |
+| `openai` / `openai-codex` | Codex (`codex`) | `npm install -g @openai/codex` | `nexusrecon auth login openai-codex` (browser) or `nexusrecon auth login openai-codex --device` | OS keyring, or `~/.codex/auth.json` (override with `CODEX_HOME`). `openai-codex` is a thin public alias normalized to the `openai` provider contract. |
+| `xai` | Grok Build (`grok`) | `npm install -g @xai-official/grok` | `nexusrecon auth login xai` (browser) or `nexusrecon auth login xai --device` | `~/.grok/auth.json` (override with `GROK_HOME`) |
+| `ollama` | — (local HTTP) | https://ollama.com | — | None; `OLLAMA_BASE_URL` + `OLLAMA_MODEL` |
+
+Check readiness at any time (never prints tokens or keys):
+
+```bash
+nexusrecon auth status --provider anthropic   # or openai-codex | openai | xai | all
+```
+
+For `anthropic` and `openai`, status probes the official CLI's own
+status command. For `xai` there is no documented non-interactive status
+probe, so a present `~/.grok/auth.json` is reported as
+"credential present (validated on use)" — the store is unverified until
+the first inference, when Grok validates/refreshes it.
+
+### API keys (direct metered billing)
 
 | Variable | Purpose | Cost | Notes |
 |----------|---------|------|-------|
-| `ANTHROPIC_API_KEY` | Primary LLM (Claude). Recommended. | Paid, ~$3 per campaign typical | https://console.anthropic.com/ |
-| `OPENAI_API_KEY` | Alternate LLM (GPT-4o etc.) | Paid, ~$4 per campaign typical | https://platform.openai.com/api-keys |
+| `ANTHROPIC_API_KEY` | Claude via direct SDK | Paid, ~$3 per campaign typical | https://console.anthropic.com/ — also the `api_key`-mode fallback if a subscription login later fails to refresh |
+| `OPENAI_API_KEY` | OpenAI via direct SDK | Paid, ~$4 per campaign typical | https://platform.openai.com/api-keys |
+| `XAI_API_KEY` | xAI Grok via direct SDK | Paid, metered | Direct endpoint `https://api.x.ai/v1` |
 | `OLLAMA_BASE_URL` | Local LLM endpoint | Free (your hardware) | Default `http://localhost:11434`; needs Ollama running |
 | `OLLAMA_MODEL` | Local model name | | e.g. `llama3.1:8b`, `qwen2.5:14b`; must already be pulled in Ollama |
-| `NEXUS_LLM_PROVIDER` | Which provider to use | | `anthropic` \| `openai` \| `ollama` |
-| `NEXUS_LLM_MODEL` | Specific model ID | | e.g. `claude-opus-4-5`, `gpt-4o`, `llama3.1:8b` |
-| `NEXUS_LLM_TEMPERATURE` | Sampling temperature | | `0.1` recommended (low for reproducible analysis) |
 
-**Recommended default:** Anthropic with `claude-opus-4-5` (the shipped default in `config.py` / `.env.example`). Best
-reasoning per dollar for OSINT synthesis. Anthropic accounts also include
-prompt caching which cuts cost ~40% on multi-phase campaigns.
+**Recommended default:** `NEXUS_LLM_AUTH_MODE=auto` (the shipped
+default) with `NEXUS_LLM_PROVIDER=anthropic` and a one-time
+`nexusrecon auth login anthropic`. Campaign analysis then runs against
+your Claude subscription; subscription calls preserve token telemetry
+but record **zero metered USD** in the campaign budget. API-key calls
+retain normal cost accounting against the scope's `max_llm_cost_usd`.
 
 **Local-only option:** set `NEXUS_LLM_PROVIDER=ollama` and point at any
 reasonably capable local model. Quality drops noticeably below 8B params;
 Qwen 2.5 14B or Llama 3.1 70B (if your hardware allows) work well.
+
+**Vision caveat:** OAuth inference is text-only in this release. Image
+content fails closed with a clear instruction — it is never silently
+dropped. Use `NEXUS_LLM_AUTH_MODE=api_key` with the provider's key (or
+Ollama) for vision workloads.
+
+**First run:** the native OAuth credentials must exist before an actual
+live campaign — log in once per provider with the commands above, then
+confirm with `nexusrecon auth status`.
 
 ---
 
@@ -305,7 +355,9 @@ verification round-trips.
 
 ```
 TIER 1, Minimum tester (~25 min total)
-[ ] LLM provider (Anthropic recommended)           ~5 min
+[ ] LLM access (`nexusrecon auth login anthropic`      ~5 min
+    after `npm install -g @anthropic-ai/claude-code`,
+    or ANTHROPIC_API_KEY for metered billing)
 [ ] GITHUB_TOKEN                                    ~5 min
 [ ] VIRUSTOTAL_API_KEY                              ~3 min
 [ ] SHODAN_API_KEY (free or $5-$59 one-time)        ~5 min

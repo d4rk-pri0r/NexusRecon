@@ -47,12 +47,24 @@ CATEGORIES: list[ConfigCategory] = [
         vars=[
             ConfigVar(
                 key="NEXUS_LLM_PROVIDER",
-                help="anthropic (recommended) · openai · ollama",
-                choices=["anthropic", "openai", "ollama"],
+                help="anthropic (recommended) · openai · openai-codex · xai · ollama · mock",
+                choices=["anthropic", "openai", "openai-codex", "xai", "ollama", "mock"],
+            ),
+            ConfigVar(
+                key="NEXUS_LLM_AUTH_MODE",
+                help=(
+                    "auto (prefer OAuth login, fall back to key) · "
+                    "oauth · api_key"
+                ),
+                choices=["auto", "oauth", "api_key"],
+            ),
+            ConfigVar(
+                key="NEXUS_LLM_CLI_TIMEOUT",
+                help="Seconds before an OAuth CLI call times out (default 600).",
             ),
             ConfigVar(
                 key="NEXUS_LLM_MODEL",
-                help="Model ID. e.g. claude-sonnet-4-6, gpt-4o, llama3.1:8b",
+                help="Model ID. e.g. claude-sonnet-4-6, gpt-4o, grok-3-mini, llama3.1:8b",
             ),
             ConfigVar(
                 key="NEXUS_LLM_TEMPERATURE",
@@ -67,6 +79,11 @@ CATEGORIES: list[ConfigCategory] = [
                 key="OPENAI_API_KEY",
                 sensitive=True,
                 help="From platform.openai.com/api-keys. Format: sk-...",
+            ),
+            ConfigVar(
+                key="XAI_API_KEY",
+                sensitive=True,
+                help="From console.x.ai → API keys. Format: xai-...",
             ),
             ConfigVar(
                 key="OLLAMA_BASE_URL",

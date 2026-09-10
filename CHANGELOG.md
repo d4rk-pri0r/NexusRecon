@@ -240,6 +240,34 @@ deep-dives.
 
 ### Added
 
+- **Provider-OAuth LLM authentication** (`nexusrecon/llm/`): new
+  `NEXUS_LLM_AUTH_MODE=auto|oauth|api_key` setting (default `auto`)
+  resolves cloud-provider credentials by preferring the official CLI
+  subscription login and falling back to the provider API key when set;
+  `api_key` forces direct metered SDK clients. First-class provider
+  values are `anthropic`, `openai`, `openai-codex`, `xai`, `ollama`,
+  and the explicit offline `mock`; `openai-codex` is a thin public
+  alias to the existing OpenAI Codex contract requested in issue #4.
+  New `nexusrecon auth login <provider> [--device]` and
+  `nexusrecon auth status [--provider <p>]` commands delegate login,
+  refresh, and storage to the official CLIs (Claude Code, Codex, Grok
+  Build) — NexusRecon never copies tokens. Inference subprocesses run
+  in a private temporary directory with tools disabled/read-only,
+  provider API-key env vars stripped, and no prompt in argv. OAuth
+  inference is text-only in this release; image content fails closed
+  with remediation guidance. Subscription calls preserve token
+  telemetry but record zero metered USD in the campaign budget;
+  API-key calls retain normal pricing. New config knobs:
+  `NEXUS_LLM_CLI_TIMEOUT` (per-CLI-call timeout) and `XAI_API_KEY`
+  (direct endpoint `https://api.x.ai/v1`). `requirements.txt` now mirrors
+  the existing `langchain-openai` core dependency so installer/Docker
+  fallback paths retain OpenAI and xAI API-key clients. The dev extra now
+  includes the existing optional `curl_cffi` test dependency so CI can execute
+  the two JA3 exception-translation tests instead of failing at import time.
+  A cloud provider with
+  neither login nor key now raises an actionable error instead of
+  silently selecting `MockLLM`; the mock is explicit-only via
+  `NEXUS_LLM_PROVIDER=mock`.
 - **Phase E: Relationship graph + pretext scoring**: full
   identity-attribution expansion from human-to-human edges to
   spear-phish intelligence. Six PRs:

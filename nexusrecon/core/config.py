@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 from pydantic import Field, SecretStr
@@ -36,8 +36,17 @@ class NexusConfig(BaseSettings):
     llm_provider: str = Field(default="anthropic", alias="NEXUS_LLM_PROVIDER")
     llm_model: str = Field(default="claude-opus-4-5", alias="NEXUS_LLM_MODEL")
     llm_temperature: float = Field(default=0.1, alias="NEXUS_LLM_TEMPERATURE")
+    # provider-oauth: auth resolution — auto | oauth | api_key
+    llm_auth_mode: Literal["auto", "oauth", "api_key"] = Field(
+        default="auto", alias="NEXUS_LLM_AUTH_MODE"
+    )
+    # provider-oauth: per-invocation timeout for official OAuth CLI calls
+    llm_cli_timeout: int = Field(
+        default=600, ge=1, le=3600, alias="NEXUS_LLM_CLI_TIMEOUT"
+    )
     anthropic_api_key: SecretStr | None = Field(default=None, alias="ANTHROPIC_API_KEY")
     openai_api_key: SecretStr | None = Field(default=None, alias="OPENAI_API_KEY")
+    xai_api_key: SecretStr | None = Field(default=None, alias="XAI_API_KEY")
     ollama_base_url: str = Field(default="http://localhost:11434", alias="OLLAMA_BASE_URL")
     ollama_model: str = Field(default="llama3.1:8b", alias="OLLAMA_MODEL")
 
@@ -142,7 +151,7 @@ class NexusConfig(BaseSettings):
             "github_token", "securitytrails_api_key", "urlscan_api_key",
             "abuseipdb_api_key", "intelx_api_key", "dehashed_api_key",
             "newsapi_api_key", "adzuna_api_key",
-            "anthropic_api_key", "openai_api_key",
+            "anthropic_api_key", "openai_api_key", "xai_api_key",
         ]
         return {f: getattr(self, f) is not None for f in key_fields}
 

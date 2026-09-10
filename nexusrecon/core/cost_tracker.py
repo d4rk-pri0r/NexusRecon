@@ -96,21 +96,29 @@ class CostTracker:
         model: str,
         input_tokens: int,
         output_tokens: int,
+        billing_mode: str = "metered",
     ) -> float:
         """
         Record an LLM API call and return the cost in USD.
         Raises BudgetExceededError if total cost exceeds limit.
-        """
-        # Normalize model name
-        model_key = model.lower().split("/")[-1]  # e.g. "anthropic/claude-opus-4-5" -> "claude-opus-4-5"
-        pricing = MODEL_PRICING.get(model_key, MODEL_PRICING.get("claude-opus-4-5"))
-        if pricing is None:
-            pricing = {"input": 3.0, "output": 15.0}
 
-        cost_usd = (
-            input_tokens * pricing["input"] / 1_000_000
-            + output_tokens * pricing["output"] / 1_000_000
-        )
+        ``billing_mode="subscription"`` (OAuth-CLI subscription-backed calls)
+        records token counts and call counts but charges zero estimated USD —
+        the operator's subscription covers the spend.
+        """
+        if billing_mode == "subscription":
+            cost_usd = 0.0
+        else:
+            # Normalize model name
+            model_key = model.lower().split("/")[-1]  # e.g. "anthropic/claude-opus-4-5" -> "claude-opus-4-5"
+            pricing = MODEL_PRICING.get(model_key, MODEL_PRICING.get("claude-opus-4-5"))
+            if pricing is None:
+                pricing = {"input": 3.0, "output": 15.0}
+
+            cost_usd = (
+                input_tokens * pricing["input"] / 1_000_000
+                + output_tokens * pricing["output"] / 1_000_000
+            )
 
         with self._lock:
             self.total_input_tokens += input_tokens

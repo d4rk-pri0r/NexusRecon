@@ -137,20 +137,32 @@ source venv/bin/activate
 which nexusrecon   # should resolve to .../venv/bin/nexusrecon
 ```
 
-### 4.3 Configure API keys
+### 4.3 Configure LLM authentication and API keys
 
 ```bash
 cp .env.example .env
 $EDITOR .env
 ```
 
-Minimum to be useful:
+Minimum to be useful—choose a subscription login, API key, or local model.
+For the requested Codex/ChatGPT subscription path:
 
+```bash
+npm install -g @openai/codex
+nexusrecon auth login openai-codex          # add --device for device login
 ```
-ANTHROPIC_API_KEY=sk-ant-...
-NEXUS_LLM_PROVIDER=anthropic
-NEXUS_LLM_MODEL=claude-opus-4-5
+
+```env
+NEXUS_LLM_PROVIDER=openai-codex
+NEXUS_LLM_AUTH_MODE=auto
+NEXUS_LLM_MODEL=gpt-5-codex
 ```
+
+`openai-codex` is normalized to the existing OpenAI Codex adapter; the
+official CLI owns its OAuth store and refresh lifecycle. API-key mode remains
+available with `NEXUS_LLM_PROVIDER=openai`, `NEXUS_LLM_AUTH_MODE=api_key`, and
+`OPENAI_API_KEY`. Anthropic, xAI, and Ollama alternatives are documented in
+`CONFIGURATION_GUIDE.md`.
 
 Add as many of the optional keys as you have. The platform degrades
 gracefully, missing keys mean specific tools are skipped, but the

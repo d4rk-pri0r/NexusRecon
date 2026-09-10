@@ -72,8 +72,10 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
-# ── Claude Code session config (per-machine) ────────────────
+# ── Provider CLI session config / token stores (per-machine) ──
 .claude/
+.codex/
+.grok/
 
 # ── Logs and temp artifacts ─────────────────────────────────
 *.log

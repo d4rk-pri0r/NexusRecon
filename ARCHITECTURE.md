@@ -210,8 +210,9 @@ For a single agent invocation (the heart of every phase):
 2. The executor builds a prompt: agent's role/goal/backstory + a
    universal `FINDINGS_JSON:` schema requirement + an `ATTRIBUTION RULE`
    block + the task-specific prompt + serialized state slices.
-3. The LLM (Anthropic Claude by default; OpenAI or local Ollama
-   supported) is called.
+3. The LLM (Anthropic Claude by default; OpenAI, xAI, or local Ollama
+   supported; cloud providers may run through their official CLI's
+   subscription login — see section 23) is called.
 4. The response is parsed: `FINDINGS_JSON:[...]` block is extracted and
    each entry validated; the remainder is preserved as analysis prose.
 5. Each parsed finding is annotated with a synthetic evidence hash
@@ -629,12 +630,17 @@ Post-0.5 layers (sections 13-22 below describe each):
 - `packs/burp/`, First-party Burp Suite XML handoff pack.
 - `scripts/nexusrecon-verify.py`, Standalone single-file
   verifier for signed STIX bundles.
+- `nexusrecon/llm/`, Provider-OAuth LLM auth. Auth-mode
+  resolution, per-provider official-CLI contracts, and the
+  OAuth CLI inference backend (section 23).
 
 ---
 
 # Post-0.5 Architecture Additions
 
 Sections 13-22 cover the major layers added in 0.6.x / 0.7.x.
+Section 23 covers the provider-OAuth LLM authentication layer added
+post-0.7.0.
 Each follows the same shape: *what problem it solves, the public
 surface, the invariants it preserves, what's deliberately out of
 scope.*
@@ -1177,3 +1183,81 @@ that orchestrates the whole pipeline.
 | **Receipt** | The sidecar JSON file produced by `sign_bundle`. Carries algorithm tags, bundle hash, signer fingerprint, base64url signature. V1.0 schema. |
 | **Adversarial finding** | A detector verdict (poisoned data / tool pattern / inconsistency / prompt injection) with severity + downgrade record. |
 | **Vision call** | One backend-driven multi-modal LLM invocation. Counted against `Strategy.tool_budgets["vision_calls"]`. |
+| **Auth mode** | The `NEXUS_LLM_AUTH_MODE` resolution policy: `auto` (subscription login first, API-key fallback), `oauth` (same preference, keeps the fallback), `api_key` (direct metered SDK clients only). |
+| **Provider contract** | The per-provider record in `nexusrecon/llm/auth.py` naming the official CLI binary, its native credential store and override env var, the API-key variable, and any non-interactive status probe. |
+| **Subscription billing** | The `billing_mode="subscription"` semantics of OAuth CLI inference: token telemetry preserved, zero metered USD added to the campaign budget. API-key calls retain normal pricing. |
+
+---
+
+## 23. Provider-OAuth LLM authentication (post-0.7)
+
+**Problem.** API keys meter every LLM call to the operator's platform
+account and their rotation/expiry had to be managed by hand. Worse, the
+old fallback path silently degraded synthesis to `MockLLM` when no key
+was configured, hiding the loss of the analysis layer instead of
+surfacing it.
+
+**What landed.** `nexusrecon/llm/`, split into three modules:
+
+- **`auth.py`** — per-provider `ProviderContract` records for the three
+  cloud providers: the official binary (`codex` / `claude` / `grok`),
+  native credential store and override env var. The public
+  `openai-codex` provider value normalizes to the existing `openai`
+  contract, so issue #4's operator surface adds no duplicate auth or
+  inference implementation. Store mappings are `CODEX_HOME` →
+  `~/.codex/auth.json`, `CLAUDE_CONFIG_DIR` →
+  `~/.claude/.credentials.json`, and `GROK_HOME` → `~/.grok/auth.json`.
+  Each contract also names the API-key variable and — where documented —
+  a non-interactive status probe. NexusRecon deliberately never re-implements
+  OAuth / PKCE / device / refresh: the official CLI owns login, expiry,
+  refresh, and native token storage. NexusRecon never copies tokens.
+- **`factory.py`** — auth-mode resolution (see the **Auth mode**
+  glossary entry) and canonical provider aliasing (`openai-codex` →
+  `openai`). `mock` and `ollama` bypass resolution entirely. A
+  cloud provider with neither a usable login nor a key raises
+  `LLMAuthenticationError` naming the exact login command and the key
+  variable — never a silent MockLLM. xAI's direct client targets
+  `https://api.x.ai/v1`. An explicitly configured `NEXUS_LLM_MODEL` is
+  passed to every backend; provider-only OpenAI Codex/xAI configuration
+  defers to the maintained CLI's current default instead of passing the
+  Anthropic config default.
+- **`cli_backend.py`** — `OAuthCLIChatModel`, a LangChain-shaped
+  **text-only** chat model whose `invoke()` runs the official CLI in a
+  private empty working directory and parses its stdout contract.
+
+**CLI surface.** `nexusrecon auth login <provider> [--device]`
+(`--device` is unsupported for anthropic, whose official flow is the
+interactive auth-code paste) and `nexusrecon auth status
+[--provider <p>]`. Status reports binary presence, credential-store
+presence, and login state — never token values; surfaced error text is
+run through secret redaction first.
+
+**Security invariants** (locked by unit tests):
+
+- argv never carries the prompt or a credential: openai/anthropic read
+  the prompt on stdin; xai reads a mode-`0600` temp prompt file that is
+  deleted immediately after the CLI returns.
+- The subprocess runs in a private empty temporary directory with an
+  environment scrubbed of provider keys, OAuth-token overrides, and base-URL
+  overrides (`OAUTH_STRIPPED_ENV_KEYS`) so a native-store subscription call
+  cannot silently become a metered key call or switch accounts.
+- The official CLIs run with tools disabled / read-only:
+  `codex exec --sandbox read-only --ignore-user-config --ignore-rules`,
+  `claude --safe-mode --tools "" --no-session-persistence`,
+  `grok --tools "" --no-plan --no-subagents --no-memory
+  --disable-web-search --max-turns 1`.
+- Auth failures raise sanitized `LLMAuthenticationError` — no key / JWT
+  / Bearer-shaped text survives surfacing.
+- Multimodal (image) input fails closed with remediation guidance (use
+  `NEXUS_LLM_AUTH_MODE=api_key` plus the provider key, or Ollama, for
+  vision) — image bytes are never silently dropped.
+
+**Billing semantics.** Subscription responses carry
+`billing_mode="subscription"`: token telemetry is preserved but zero
+metered USD is recorded in the campaign budget. API-key clients retain
+normal cost accounting against the scope's `max_llm_cost_usd`.
+
+**Out of scope.** xAI has no documented non-interactive status probe, so
+its readiness signal is store presence only — `~/.grok/auth.json`
+presence is unverified until the first inference, when Grok
+validates/refreshes it.

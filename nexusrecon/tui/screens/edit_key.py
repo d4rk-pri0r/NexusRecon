@@ -56,7 +56,7 @@ class EditKeyModal(ModalScreen[str | None]):
                 if self.var.choices:
                     yield Select.from_values(
                         self.var.choices,
-                        value=self._current if self._current in self.var.choices else Select.BLANK,
+                        value=self._current if self._current in self.var.choices else Select.NULL,
                         id="edit-select",
                     )
                 else:
