@@ -746,3 +746,114 @@ class TestToolsScreenDirectEdit:
         _var, key, kind = target
         assert key == "HAVEIBEENPWNED_API_KEY"
         assert kind == "required"
+
+
+class TestProviderOAuthConfigSchema:
+    """provider-oauth: the LLM config category gains an auth mode, the xAI
+    provider/key, and the CLI timeout. Keys stay sensitive (masked)."""
+
+    def test_provider_choices_include_xai_and_explicit_mock(self):
+        from nexusrecon.tui.config_schema import find_var
+        v = find_var("NEXUS_LLM_PROVIDER")
+        assert v is not None
+        for choice in ("anthropic", "openai", "ollama", "xai", "mock"):
+            assert choice in v.choices, choice
+
+    def test_auth_mode_var_exists_with_auto_oauth_api_key_choices(self):
+        from nexusrecon.tui.config_schema import find_category_for_var, find_var
+
+        provider = find_var("NEXUS_LLM_PROVIDER")
+        assert provider is not None
+        assert provider.choices is not None
+        assert "openai-codex" in provider.choices
+
+        v = find_var("NEXUS_LLM_AUTH_MODE")
+        assert v is not None
+        assert v.choices == ["auto", "oauth", "api_key"]
+        assert v.sensitive is False
+        pair = find_category_for_var("NEXUS_LLM_AUTH_MODE")
+        assert pair is not None
+        assert pair[0].id == "llm"
+
+    def test_cli_timeout_var_exists(self):
+        from nexusrecon.tui.config_schema import find_var
+        v = find_var("NEXUS_LLM_CLI_TIMEOUT")
+        assert v is not None
+        assert v.sensitive is False
+
+    def test_xai_api_key_is_in_schema_and_sensitive(self):
+        from nexusrecon.tui.config_schema import find_category_for_var, find_var
+        v = find_var("XAI_API_KEY")
+        assert v is not None
+        assert v.sensitive  # must be masked in the TUI
+        pair = find_category_for_var("XAI_API_KEY")
+        assert pair is not None
+        assert pair[0].id == "llm"
+
+    def test_existing_provider_keys_remain_sensitive(self):
+        from nexusrecon.tui.config_schema import find_var
+        assert find_var("ANTHROPIC_API_KEY").sensitive
+        assert find_var("OPENAI_API_KEY").sensitive
+
+
+class TestDashboardProviderAuthReadiness:
+    @staticmethod
+    def _config(provider: str, mode: str, secrets: dict[str, str]):
+        cfg = MagicMock()
+        cfg.llm_provider = provider
+        cfg.llm_auth_mode = mode
+        cfg.get_secret.side_effect = lambda name: secrets.get(name)
+        return cfg
+
+    def test_unrelated_provider_key_does_not_mark_selected_provider_ready(self):
+        from nexusrecon.tui.screens.dashboard import _llm_auth_ready
+
+        cfg = self._config(
+            "xai", "api_key", {"anthropic_api_key": "placeholder-not-a-real-key"}
+        )
+        assert _llm_auth_ready(config=cfg, env={}) is False
+
+    def test_selected_provider_key_marks_ready(self):
+        from nexusrecon.tui.screens.dashboard import _llm_auth_ready
+
+        cfg = self._config(
+            "xai", "api_key", {"xai_api_key": "placeholder-not-a-real-key"}
+        )
+        assert _llm_auth_ready(config=cfg, env={}) is True
+
+    def test_local_provider_does_not_require_cloud_credentials(self):
+        from nexusrecon.tui.screens.dashboard import _llm_auth_ready
+
+        cfg = self._config("ollama", "auto", {})
+        assert _llm_auth_ready(config=cfg, env={}) is True
+
+    def test_keychain_backed_login_uses_official_status_probe(self):
+        from nexusrecon.tui.screens.dashboard import _llm_auth_ready
+
+        cfg = self._config("anthropic", "auto", {})
+        status = {
+            "provider": "anthropic",
+            "binary_present": True,
+            "store_present": False,
+            "status": "subscription",
+            "auth_kind": "subscription",
+        }
+        with patch("nexusrecon.llm.auth.build_auth_status", return_value=status) as probe:
+            assert _llm_auth_ready(config=cfg, env={}) is True
+        probe.assert_called_once()
+        assert probe.call_args.kwargs["probe_timeout"] == 2
+
+    def test_openai_codex_alias_uses_codex_subscription_probe(self):
+        from nexusrecon.tui.screens.dashboard import _llm_auth_ready
+
+        cfg = self._config("openai-codex", "auto", {})
+        status = {
+            "provider": "openai",
+            "binary_present": True,
+            "store_present": True,
+            "status": "subscription",
+            "auth_kind": "subscription",
+        }
+        with patch("nexusrecon.llm.auth.build_auth_status", return_value=status) as probe:
+            assert _llm_auth_ready(config=cfg, env={}) is True
+        assert probe.call_args.args[0] == "openai"

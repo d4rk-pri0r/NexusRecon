@@ -1,0 +1,15 @@
+{
+  "text": "Analysis: two public buckets expose backup artifacts and a hardcoded AWS key.\nFINDINGS_JSON:[]",
+  "stopReason": "end_turn",
+  "sessionId": "sess_PLACEHOLDER_0000",
+  "requestId": "req_PLACEHOLDER_0000",
+  "num_turns": 1,
+  "usage": {
+    "input_tokens": 900,
+    "cache_read_input_tokens": 0,
+    "cache_creation_input_tokens": 0,
+    "output_tokens": 410,
+    "reasoning_tokens": 0,
+    "total_tokens": 1310
+  }
+}

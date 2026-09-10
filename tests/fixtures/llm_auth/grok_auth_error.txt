@@ -1,0 +1,1 @@
+Error: POST https://api.x.ai/v1/chat/completions returned 401 Unauthorized: invalid API key xai-PLACEHOLDER_00000000000000000000000000000000. Authenticate with `grok login --oauth` or set XAI_API_KEY.

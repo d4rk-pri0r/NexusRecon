@@ -51,10 +51,11 @@ The tape script assumes:
 1. **`nexusrecon` is on `$PATH`** (e.g. via `pipx install -e .` from the
    repo root, or `source venv/bin/activate` in a venv where the
    package is installed in editable mode).
-2. **An LLM provider key is configured** so the dashboard's onboarding
-   nudge is dismissed and the demo lands on a populated dashboard.
+2. **An LLM credential is configured** (official-CLI OAuth login or the
+   selected provider API key) so the dashboard's onboarding nudge is
+   dismissed and the demo lands on a populated dashboard.
    The tape doesn't run a campaign, so token cost is zero — but the
-   key needs to exist or the "👋 Press c to configure" nudge will
+   credential needs to exist or the "👋 Press c to configure" nudge will
    linger.
 3. **A clean `~/.nexusrecon/.onboarding_dismissed` flag** so the
    nudge stays hidden:

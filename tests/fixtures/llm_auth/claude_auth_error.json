@@ -1,0 +1,9 @@
+{
+  "type": "result",
+  "subtype": "error",
+  "is_error": true,
+  "result": "Authentication failed: 401 invalid x-api-key sk-ant-api03-PLACEHOLDER_0000_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; run `claude auth login`",
+  "session_id": "sess_PLACEHOLDER_0000",
+  "duration_ms": 23,
+  "num_turns": 0
+}

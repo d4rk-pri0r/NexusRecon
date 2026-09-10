@@ -155,7 +155,7 @@ done
 useful set for early phases is `subfinder`, `dnsx`, `httpx`, `nuclei`,
 `katana`.
 
-### 1.6 API keys (.env)
+### 1.6 LLM authentication and API keys (.env)
 
 Copy the template and populate:
 
@@ -163,17 +163,23 @@ Copy the template and populate:
 cp .env.example .env
 ```
 
-**Open `.env` in an editor.** For the FIRST run, you only need:
+**For the first run, choose one LLM path.** Codex/ChatGPT subscription:
 
 ```bash
-# Required: at least one LLM provider
-ANTHROPIC_API_KEY=sk-ant-...
-# (or OPENAI_API_KEY, or set NEXUS_LLM_PROVIDER=ollama if you have a local model)
+npm install -g @openai/codex
+nexusrecon auth login openai-codex          # add --device when needed
+```
 
-NEXUS_LLM_PROVIDER=anthropic
-NEXUS_LLM_MODEL=claude-sonnet-4-6
+```env
+NEXUS_LLM_PROVIDER=openai-codex
+NEXUS_LLM_AUTH_MODE=auto
+NEXUS_LLM_MODEL=gpt-5-codex
 NEXUS_LLM_TEMPERATURE=0.1
 ```
+
+Alternatively use `anthropic` or `xai` with `nexusrecon auth login`, configure
+the matching provider API key with `NEXUS_LLM_AUTH_MODE=api_key`, or select
+`ollama` for a local model. See `CONFIGURATION_GUIDE.md` for exact commands.
 
 **Nice-to-have for early tests** (skip if you don't have them; tools degrade
 gracefully):

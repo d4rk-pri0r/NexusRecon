@@ -39,6 +39,11 @@ from nexusrecon.agents.reporter import ExecutiveReporterAgent
 from nexusrecon.agents.risk_analyst import RiskAnalystAgent
 from nexusrecon.agents.vuln_correlator import VulnCorrelatorAgent
 from nexusrecon.core.cost_tracker import BudgetExceededError, CostTracker
+from nexusrecon.llm.auth import LLMAuthenticationError
+
+# Re-exported so `from nexusrecon.graph.agent_executor import MockLLM` (the
+# pre-provider-oauth import path) keeps working for tests and consumers.
+from nexusrecon.llm.mock import MockLLM, MockLLMResponse  # noqa: F401
 
 log = structlog.get_logger(__name__)
 
@@ -64,157 +69,14 @@ def get_llm_from_config(config: Any):
     """
     Create a LangChain LLM object from the NexusConfig.
 
-    Supports Anthropic, OpenAI, and Ollama.
-    Falls back to a mock LLM if no API keys are configured.
+    Routes through the ``nexusrecon.llm`` factory (provider-oauth plan): the
+    factory owns auth-mode resolution (auto/oauth/api_key), the explicit
+    mock/ollama bypass paths, direct API-key clients, and the OAuth→API-key
+    fallback. A keyless, login-less provider raises ``LLMAuthenticationError``
+    with remediation instead of silently falling back to MockLLM.
     """
-    provider = config.llm_provider.lower()
-    model = config.llm_model
-    temperature = config.llm_temperature
-
-    if provider == "anthropic":
-        api_key = config.get_secret("anthropic_api_key")
-        if api_key:
-            try:
-                from langchain_anthropic import ChatAnthropic
-                return ChatAnthropic(
-                    model=model,
-                    temperature=temperature,
-                    api_key=api_key,
-                )
-            except ImportError:
-                log.warning("langchain-anthropic not installed, falling back to mock")
-
-    elif provider == "openai":
-        api_key = config.get_secret("openai_api_key")
-        if api_key:
-            try:
-                from langchain_openai import ChatOpenAI
-                return ChatOpenAI(
-                    model=model,
-                    temperature=temperature,
-                    api_key=api_key,
-                )
-            except ImportError:
-                log.warning("langchain-openai not installed, falling back to mock")
-
-    elif provider == "ollama":
-        try:
-            from langchain_ollama import ChatOllama
-            return ChatOllama(
-                model=config.ollama_model,
-                base_url=config.ollama_base_url,
-                temperature=temperature,
-            )
-        except ImportError:
-            log.warning("langchain-ollama not installed, falling back to mock")
-
-    # Fallback: mock LLM that returns structured analysis without calling an API
-    log.info("No LLM API configured — using MockLLM for analysis")
-    return MockLLM()
-
-
-class MockLLM:
-    """
-    Mock LLM for environments without API keys.
-
-    Produces deterministic analysis summaries based on input data.
-    Useful for testing and air-gapped deployments.
-
-    Always appends a FINDINGS_JSON block so the findings pipeline
-    (B24) is exercised even without a real LLM.
-    """
-
-    def __init__(self):
-        self.model_name = "mock_llm"
-
-    def invoke(self, prompt: str) -> Any:
-        """Return a structured analysis based on input content."""
-        return MockLLMResponse(self._generate_response(prompt))
-
-    def _generate_response(self, prompt: str) -> str:
-        """Generate a deterministic analysis from the prompt."""
-        # Extract key data points from the prompt
-        lines = prompt.split("\n")
-        findings_mentioned = 0
-        subdomains_mentioned = 0
-        emails_mentioned = 0
-
-        for line in lines:
-            lower = line.lower()
-            if "subdomain" in lower:
-                subdomains_mentioned += 1
-            if "email" in lower:
-                emails_mentioned += 1
-            if "finding" in lower or "vuln" in lower or "expos" in lower:
-                findings_mentioned += 1
-
-        if findings_mentioned > 3:
-            prose = (
-                "Analysis: Multiple intelligence findings identified. "
-                f"Subdomain indicators: {subdomains_mentioned}. "
-                f"Email indicators: {emails_mentioned}. "
-                f"Finding indicators: {findings_mentioned}. "
-                "Recommendation: Correlate findings across sources for high-confidence attack vectors. "
-                "Priority should be given to cloud exposure and credential leak findings."
-            )
-            finding = {
-                "severity": "medium",
-                "title": "Multiple intelligence findings identified",
-                "description": (
-                    f"Analysis identified {findings_mentioned} potential finding indicators "
-                    "requiring correlation across sources."
-                ),
-                "source": "mock_llm",
-                "confidence": 0.6,
-                "category": "reconnaissance",
-            }
-        elif subdomains_mentioned > 0 or emails_mentioned > 0:
-            prose = (
-                f"Analysis: Intelligence data collected. "
-                f"Subdomain indicators: {subdomains_mentioned}. "
-                f"Email indicators: {emails_mentioned}. "
-                "Recommendation: Continue correlation phase to identify connections."
-            )
-            finding = {
-                "severity": "info",
-                "title": "Reconnaissance data collected",
-                "description": (
-                    f"Passive OSINT phase complete. "
-                    f"Subdomain indicators: {subdomains_mentioned}, "
-                    f"email indicators: {emails_mentioned}."
-                ),
-                "source": "mock_llm",
-                "confidence": 0.5,
-                "category": "reconnaissance",
-            }
-        else:
-            prose = (
-                "Analysis: No significant intelligence findings detected in current data. "
-                "Recommendation: Expand reconnaissance scope or continue to next phase."
-            )
-            finding = {
-                "severity": "info",
-                "title": "No significant findings in current phase",
-                "description": (
-                    "Analysis found no high-confidence intelligence items in the current data set."
-                ),
-                "source": "mock_llm",
-                "confidence": 0.4,
-                "category": "reconnaissance",
-            }
-
-        # Always emit a FINDINGS_JSON block so the findings pipeline is exercised (B24)
-        # B25: FINDINGS_JSON leads — mirrors the prompt structure for real LLMs
-        findings_json = json.dumps([finding])
-        return f"FINDINGS_JSON:{findings_json}\n\n{prose}"
-
-
-class MockLLMResponse:
-    def __init__(self, content: str):
-        self.content = content
-
-    def __str__(self):
-        return self.content
+    from nexusrecon.llm.factory import build_llm_from_config
+    return build_llm_from_config(config)
 
 
 class AgentExecutor:
@@ -228,8 +90,18 @@ class AgentExecutor:
 
     def __init__(self, config: Any) -> None:
         self.config = config
-        self.llm = get_llm_from_config(config)
         self._step_count = 0
+        # Auth resolution happens lazily: the factory raises
+        # LLMAuthenticationError for a keyless/login-less provider, but some
+        # callers construct an executor and swap in a test/direct LLM before
+        # any run. Defer the raise to first use so that construction stays
+        # possible; run_agent re-raises the stored error.
+        self._llm_error: Exception | None = None
+        try:
+            self.llm = get_llm_from_config(config)
+        except LLMAuthenticationError as exc:
+            self.llm = None
+            self._llm_error = exc
         # B23: high internal limit — per-campaign budget enforced via state["max_llm_cost_usd"]
         # Default private tracker for standalone executors (intent parser,
         # planner, report engine). During a campaign run, bind_cost_tracker()
@@ -272,6 +144,10 @@ class AgentExecutor:
         """
         if agent_name not in AGENT_REGISTRY:
             raise ValueError(f"Unknown agent: {agent_name}")
+        if self.llm is None:
+            raise self._llm_error or LLMAuthenticationError(
+                "unknown", "No LLM client is configured"
+            )
 
         # B23: enforce per-campaign LLM budget before consuming tokens
         if state is not None:
@@ -299,8 +175,16 @@ class AgentExecutor:
             model_name = getattr(
                 self.llm, "model_name", getattr(self.llm, "model", "unknown")
             )
+            # provider-oauth: subscription-backed (OAuth CLI) responses carry
+            # billing_mode="subscription" and cost zero estimated USD while
+            # still counting tokens (the subscription covers the spend).
+            billing_mode = getattr(response, "billing_mode", "metered")
             call_cost = self._cost_tracker.record_llm_call(
-                agent_name, model_name, in_tok, out_tok
+                agent_name,
+                model_name,
+                in_tok,
+                out_tok,
+                billing_mode=billing_mode,
             )
 
             # Sync accumulated cost back to campaign state (B23) and record

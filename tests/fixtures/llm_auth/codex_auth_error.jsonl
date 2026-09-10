@@ -1,0 +1,1 @@
+{"type":"turn.failed","error":{"message":"Authentication failed: ChatGPT session expired (run `codex login`). Details: invalid token [PLACEHOLDER_TOKEN]"}}

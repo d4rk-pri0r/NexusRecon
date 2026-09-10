@@ -424,11 +424,33 @@ cp .env.example .env
 $EDITOR .env
 ```
 
-Required for any meaningful run:
+Required for any meaningful run — one of:
 
-- One LLM provider key, `ANTHROPIC_API_KEY` (recommended) or
-  `OPENAI_API_KEY`, or set `NEXUS_LLM_PROVIDER=ollama` for a local
-  model.
+- **Subscription login (recommended, no key):** install the provider's
+  official CLI (`npm install -g @anthropic-ai/claude-code`,
+  `npm install -g @openai/codex`, or `npm install -g @xai-official/grok`)
+  and log in once — `nexusrecon auth login anthropic`,
+  `nexusrecon auth login openai [--device]`, or
+  `nexusrecon auth login xai [--device]`. Check readiness with
+  `nexusrecon auth status --provider <provider>` (never prints tokens).
+  NexusRecon then runs analysis through the official CLI against your
+  existing subscription; subscription calls record zero metered USD in
+  the campaign budget. OAuth inference is text-only in this release.
+- **Codex feature-request path:** set `NEXUS_LLM_PROVIDER=openai-codex` and
+  log in with `nexusrecon auth login openai-codex [--device]`. This public
+  provider value is a thin alias to the existing OpenAI Codex OAuth adapter;
+  it does not duplicate transport, token storage, or refresh logic.
+- **API key:** `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `XAI_API_KEY`
+  (xAI direct endpoint `https://api.x.ai/v1`) for direct metered
+  billing.
+- **Local model:** set `NEXUS_LLM_PROVIDER=ollama`.
+- **Offline:** set `NEXUS_LLM_PROVIDER=mock` explicitly — the mock is
+  never selected silently. A cloud provider with neither a login nor a
+  key raises an actionable error.
+
+Auth resolution follows `NEXUS_LLM_AUTH_MODE` (`auto` by default:
+subscription login first, API-key fallback when set; `api_key` forces
+the direct SDK client).
 
 Recommended:
 
