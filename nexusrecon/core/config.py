@@ -38,8 +38,16 @@ class NexusConfig(BaseSettings):
     llm_temperature: float = Field(default=0.1, alias="NEXUS_LLM_TEMPERATURE")
     anthropic_api_key: SecretStr | None = Field(default=None, alias="ANTHROPIC_API_KEY")
     openai_api_key: SecretStr | None = Field(default=None, alias="OPENAI_API_KEY")
+    # Redirects the "openai" provider at a self-hosted/custom OpenAI-compatible
+    # endpoint (vLLM, LiteLLM proxy, Together, etc.) instead of api.openai.com.
+    openai_base_url: str | None = Field(default=None, alias="OPENAI_BASE_URL")
     ollama_base_url: str = Field(default="http://localhost:11434", alias="OLLAMA_BASE_URL")
     ollama_model: str = Field(default="llama3.1:8b", alias="OLLAMA_MODEL")
+    # Cost-per-million-token override for models outside MODEL_PRICING's catalog
+    # (nexusrecon/core/cost_tracker.py) — e.g. a custom/self-hosted model, which
+    # would otherwise silently default to Opus pricing. Both must be set together.
+    llm_input_cost_per_m: float | None = Field(default=None, alias="NEXUS_LLM_INPUT_COST_PER_M")
+    llm_output_cost_per_m: float | None = Field(default=None, alias="NEXUS_LLM_OUTPUT_COST_PER_M")
 
     # ── API Keys — Infrastructure ───────────────────────────────
     shodan_api_key: SecretStr | None = Field(default=None, alias="SHODAN_API_KEY")

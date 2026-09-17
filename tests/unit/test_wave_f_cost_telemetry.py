@@ -118,3 +118,39 @@ class TestExecutorRecordsIntoBoundTracker:
         # Provenance is still recorded so the report can say "fallback used".
         assert state["llm_calls_by_model"] == {"mock_llm": 1}
         assert llm_provenance_from_state(state)["mode"] == "mock"
+
+
+class TestPricingOverride:
+    """A model outside MODEL_PRICING must not be silently billed at Opus
+    rates — NEXUS_LLM_INPUT_COST_PER_M / NEXUS_LLM_OUTPUT_COST_PER_M let an
+    operator supply the real per-token cost for a custom/self-hosted model.
+    """
+
+    def teardown_method(self):
+        get_config.cache_clear()
+
+    def test_unknown_model_defaults_to_opus_pricing(self, monkeypatch):
+        monkeypatch.delenv("NEXUS_LLM_INPUT_COST_PER_M", raising=False)
+        monkeypatch.delenv("NEXUS_LLM_OUTPUT_COST_PER_M", raising=False)
+        get_config.cache_clear()
+        t = CostTracker("c", max_llm_cost_usd=1_000_000)
+        cost = t.record_llm_call("a", "my-custom-model", 1_000_000, 1_000_000)
+        assert cost == MODEL_PRICING["claude-opus-4-5"]["input"] + MODEL_PRICING["claude-opus-4-5"]["output"]
+
+    def test_override_applies_to_unknown_model(self, monkeypatch):
+        monkeypatch.setenv("NEXUS_LLM_INPUT_COST_PER_M", "1.0")
+        monkeypatch.setenv("NEXUS_LLM_OUTPUT_COST_PER_M", "2.0")
+        get_config.cache_clear()
+        t = CostTracker("c", max_llm_cost_usd=1_000_000)
+        cost = t.record_llm_call("a", "my-custom-model", 1_000_000, 1_000_000)
+        assert cost == 3.0
+
+    def test_partial_override_is_ignored(self, monkeypatch):
+        monkeypatch.setenv("NEXUS_LLM_INPUT_COST_PER_M", "1.0")
+        monkeypatch.delenv("NEXUS_LLM_OUTPUT_COST_PER_M", raising=False)
+        get_config.cache_clear()
+        t = CostTracker("c", max_llm_cost_usd=1_000_000)
+        cost = t.record_llm_call("a", "my-custom-model", 1_000_000, 1_000_000)
+        # Falls back to the catalog default rather than guessing at the
+        # missing half of the override.
+        assert cost == MODEL_PRICING["claude-opus-4-5"]["input"] + MODEL_PRICING["claude-opus-4-5"]["output"]

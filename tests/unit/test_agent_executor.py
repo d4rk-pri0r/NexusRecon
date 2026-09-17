@@ -91,6 +91,39 @@ class TestGetLLMFromConfig:
         # May return ChatAnthropic if package is installed; verify it's not None
         assert llm is not None
 
+    def test_openai_honors_custom_base_url(self):
+        config = MagicMock()
+        config.llm_provider = "openai"
+        config.llm_model = "custom-model"
+        config.llm_temperature = 0.1
+        config.get_secret = MagicMock(
+            side_effect=lambda field: {
+                "openai_api_key": "sk-test",
+                "openai_base_url": "http://localhost:8000/v1",
+            }.get(field)
+        )
+        llm = get_llm_from_config(config)
+        assert llm is not None
+        assert not isinstance(llm, MockLLM)
+        base_url = getattr(llm, "openai_api_base", None)
+        assert base_url == "http://localhost:8000/v1"
+
+    def test_openai_defaults_to_no_custom_base_url(self):
+        config = MagicMock()
+        config.llm_provider = "openai"
+        config.llm_model = "gpt-4o"
+        config.llm_temperature = 0.1
+        config.get_secret = MagicMock(
+            side_effect=lambda field: {
+                "openai_api_key": "sk-test",
+                "openai_base_url": None,
+            }.get(field)
+        )
+        llm = get_llm_from_config(config)
+        assert llm is not None
+        assert not isinstance(llm, MockLLM)
+        assert getattr(llm, "openai_api_base", None) is None
+
 
 # ── AgentExecutor Tests ──────────────────────────────────────────────────────
 

@@ -69,12 +69,27 @@ CATEGORIES: list[ConfigCategory] = [
                 help="From platform.openai.com/api-keys. Format: sk-...",
             ),
             ConfigVar(
+                key="OPENAI_BASE_URL",
+                help="Optional. Redirect the openai provider at a self-hosted "
+                "OpenAI-compatible endpoint (vLLM, LiteLLM, etc.). Blank = api.openai.com",
+            ),
+            ConfigVar(
                 key="OLLAMA_BASE_URL",
                 help="Local Ollama endpoint. Default: http://localhost:11434",
             ),
             ConfigVar(
                 key="OLLAMA_MODEL",
                 help="Local model. Must already be pulled: ollama pull <name>",
+            ),
+            ConfigVar(
+                key="NEXUS_LLM_INPUT_COST_PER_M",
+                help="Optional. USD per million input tokens — overrides the built-in "
+                "pricing table for a model not in it (e.g. a custom endpoint).",
+            ),
+            ConfigVar(
+                key="NEXUS_LLM_OUTPUT_COST_PER_M",
+                help="Optional. USD per million output tokens. Must be set together "
+                "with NEXUS_LLM_INPUT_COST_PER_M, or both are ignored.",
             ),
         ],
     ),
