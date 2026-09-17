@@ -197,6 +197,7 @@ def _detect_orphan_session() -> dict | None:
     """
     try:
         import json
+
         from nexusrecon.tui.app import _session_lock_path
         path = _session_lock_path()
         if not path.exists():

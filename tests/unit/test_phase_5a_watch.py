@@ -34,19 +34,14 @@ Coverage
 from __future__ import annotations
 
 import json
-import tempfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
 
 import pytest
 
 from nexusrecon.core.entity_graph import EntityGraph
 from nexusrecon.models.entities import (
-    DomainEntity,
-    LeadEntity,
     RelationshipType,
-    SubdomainEntity,
 )
 from nexusrecon.watch import (
     EntitySensor,
@@ -62,8 +57,7 @@ from nexusrecon.watch import (
     list_watches,
     tick,
 )
-from nexusrecon.watch.severity import Severity, SeverityConfig
-
+from nexusrecon.watch.severity import Severity
 
 # ──────────────────────────────────────────────────────────────────────
 # Fixtures

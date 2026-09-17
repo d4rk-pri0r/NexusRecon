@@ -661,38 +661,53 @@ class TestAvailabilityReport:
         reg = ToolRegistry()
 
         class _Active(OSINTTool):
-            name = "pf_active"; tier = Tier.T0; category = Category.DOMAIN
+            name = "pf_active"
+            tier = Tier.T0
+            category = Category.DOMAIN
             requires_keys = []
             async def run(self, target, **kwargs):
                 return ToolResult(success=True, source=self.name)
 
         class _MissingBin(OSINTTool):
-            name = "pf_missing_bin"; tier = Tier.T0; category = Category.WEB
-            requires_keys = []; binary_required = "definitely_not_a_real_binary_xyz"
+            name = "pf_missing_bin"
+            tier = Tier.T0
+            category = Category.WEB
+            requires_keys = []
+            binary_required = "definitely_not_a_real_binary_xyz"
             async def run(self, target, **kwargs):
                 return ToolResult(success=True, source=self.name)
 
         class _MissingKey(OSINTTool):
-            name = "pf_missing_key"; tier = Tier.T0; category = Category.INFRASTRUCTURE
+            name = "pf_missing_key"
+            tier = Tier.T0
+            category = Category.INFRASTRUCTURE
             requires_keys = ["NONEXISTENT_KEY_XYZ_F_A3"]
             async def run(self, target, **kwargs):
                 return ToolResult(success=True, source=self.name)
 
         class _Paid(OSINTTool):
-            name = "pf_paid"; tier = Tier.T0; category = Category.INFRASTRUCTURE
-            requires_keys = []; paid_api = True
+            name = "pf_paid"
+            tier = Tier.T0
+            category = Category.INFRASTRUCTURE
+            requires_keys = []
+            paid_api = True
             async def run(self, target, **kwargs):
                 return ToolResult(success=True, source=self.name)
 
         class _OverTier(OSINTTool):
-            name = "pf_over_tier"; tier = Tier.T2; category = Category.WEB
+            name = "pf_over_tier"
+            tier = Tier.T2
+            category = Category.WEB
             requires_keys = []
             async def run(self, target, **kwargs):
                 return ToolResult(success=True, source=self.name)
 
         class _Stub(OSINTTool):
-            name = "pf_stub"; tier = Tier.T0; category = Category.WEB
-            requires_keys = []; stubbed = True
+            name = "pf_stub"
+            tier = Tier.T0
+            category = Category.WEB
+            requires_keys = []
+            stubbed = True
             async def run(self, target, **kwargs):
                 return ToolResult(success=True, source=self.name)
 
@@ -785,6 +800,7 @@ class TestHttpGetWithRetry:
 
     def test_retries_on_timeout_then_succeeds(self):
         import httpx
+
         from nexusrecon.tools.base import http_get_with_retry
         client = _FakeClient([httpx.ConnectTimeout("boom"), _FakeResp(200)])
         resp = asyncio.run(http_get_with_retry(client, "http://x", retries=2))

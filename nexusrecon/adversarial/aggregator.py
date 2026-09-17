@@ -30,7 +30,6 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
-
 # Default response factors (locked in: "downgrade + flag for
 # review"). Keep these matching the contradiction detector's
 # defaults so a finding from either subsystem applies a

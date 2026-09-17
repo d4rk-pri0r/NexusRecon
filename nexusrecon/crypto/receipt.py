@@ -47,7 +47,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-
 RECEIPT_VERSION: str = "1.0"
 
 

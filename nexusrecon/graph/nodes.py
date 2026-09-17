@@ -19,7 +19,6 @@ import structlog
 from nexusrecon.core.config import get_config
 from nexusrecon.core.scoring import (
     annotate_next_steps,
-    score_findings,
     score_findings_with_coverage,
     unavailable_tools_from_preflight,
     unproductive_tools_from_audit,

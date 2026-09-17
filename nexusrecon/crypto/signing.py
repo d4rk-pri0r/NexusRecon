@@ -31,7 +31,6 @@ from __future__ import annotations
 import base64
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 
 import structlog
 from cryptography.exceptions import InvalidSignature
@@ -67,7 +66,7 @@ def _signed_message(bundle_hash: str, algorithm: str = "ed25519") -> bytes:
     covers. Tagging with the algorithm name short-circuits
     algorithm-substitution attacks in future multi-algorithm
     verifiers."""
-    return f"{algorithm}|{bundle_hash}".encode("utf-8")
+    return f"{algorithm}|{bundle_hash}".encode()
 
 
 def sign_bundle(
