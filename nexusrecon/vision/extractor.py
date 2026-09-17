@@ -32,7 +32,6 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
 
 import structlog
 
@@ -214,7 +213,7 @@ class VisionExtractor:
         if result.description:
             hyp_id = graph.add_hypothesis(
                 result.description,
-                source=f"imported_from:vision",
+                source="imported_from:vision",
                 cites=ids,
                 confidence=0.6,
                 generated_by=f"vision/{self.backend.name}",
@@ -364,7 +363,7 @@ class VisionExtractor:
         if result.description:
             hyp_id = graph.add_hypothesis(
                 result.description,
-                source=f"imported_from:vision",
+                source="imported_from:vision",
                 cites=ids,
                 confidence=0.6,
                 generated_by=f"vision/{self.backend.name}",
@@ -389,7 +388,7 @@ class VisionExtractor:
                 from nexusrecon.models.entities import URLEntity
                 graph.add_entity(URLEntity(
                     value=data,
-                    sources=[f"imported_from:vision:qr"],
+                    sources=["imported_from:vision:qr"],
                     confidence=0.85,
                 ))
                 added += 1

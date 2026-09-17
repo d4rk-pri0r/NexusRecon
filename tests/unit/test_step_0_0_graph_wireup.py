@@ -28,8 +28,6 @@ from __future__ import annotations
 
 from typing import Any
 
-import pytest
-
 from nexusrecon.core.entity_graph import EntityGraph
 from nexusrecon.core.graph_context import GraphContext
 from nexusrecon.models.entities import (
@@ -39,7 +37,6 @@ from nexusrecon.models.entities import (
     OpenQuestionEntity,
     RelationshipType,
 )
-
 
 # ──────────────────────────────────────────────────────────────────────
 # Entity type registration

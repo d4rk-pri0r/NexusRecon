@@ -56,7 +56,7 @@ class EditKeyModal(ModalScreen[str | None]):
                 if self.var.choices:
                     yield Select.from_values(
                         self.var.choices,
-                        value=self._current if self._current in self.var.choices else Select.BLANK,
+                        value=self._current if self._current in self.var.choices else Select.NULL,
                         id="edit-select",
                     )
                 else:
@@ -138,7 +138,7 @@ class EditKeyModal(ModalScreen[str | None]):
         """Read the staged value from whichever input widget is in use."""
         if self.var.choices:
             sel = self.query_one("#edit-select", Select).value
-            return "" if sel is Select.BLANK else str(sel)
+            return "" if sel is Select.NULL else str(sel)
         return self.query_one("#edit-input", Input).value or ""
 
     def action_save(self) -> None:
