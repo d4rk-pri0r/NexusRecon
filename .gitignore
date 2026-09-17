@@ -9,6 +9,11 @@
 .env.local
 .env.*
 !.env.example
+# 1Password CLI (op run) reference files — see CONFIGURATION_GUIDE.md §11.
+# These hold only op:// pointers, never real secrets, but are excluded
+# anyway since they're easy to mistake for a real .env at a glance.
+secrets.env.op
+*.env.op
 
 # ── Editor / interactive session artefacts ─────────────────
 # Stray Claude Code / terminal transcript dumps.

@@ -11,7 +11,7 @@ operator can scan rows without committing to a full open.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -229,7 +229,7 @@ class CampaignsScreen(Screen):
         when = "?"
         try:
             when = datetime.fromtimestamp(
-                c["mtime"], tz=timezone.utc,
+                c["mtime"], tz=UTC,
             ).strftime("%Y-%m-%d %H:%M UTC")
         except Exception:
             pass

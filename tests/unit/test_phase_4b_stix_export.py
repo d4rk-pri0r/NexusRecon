@@ -29,7 +29,6 @@ from __future__ import annotations
 
 import json
 import re
-import uuid
 from pathlib import Path
 from typing import Any
 
@@ -37,30 +36,15 @@ import pytest
 
 from nexusrecon.core.entity_graph import EntityGraph
 from nexusrecon.export import (
-    STIXBundle,
     build_stix_bundle,
     write_stix_bundle,
 )
 from nexusrecon.models.entities import (
-    CVEEntity,
-    CertificateEntity,
-    CloudAssetEntity,
-    DomainEntity,
-    EmailEntity,
-    HypothesisEntity,
-    IPAddressEntity,
     LeadEntity,
-    OpenQuestionEntity,
     OrganizationEntity,
     PersonEntity,
     RelationshipType,
-    RepositoryEntity,
-    SecretEntity,
-    SubdomainEntity,
-    TechnologyEntity,
-    URLEntity,
 )
-
 
 # ──────────────────────────────────────────────────────────────────────
 # Helpers
@@ -243,7 +227,6 @@ class TestEntityMapping:
             source="trufflehog",
         )
         bundle = build_stix_bundle(graph).bundle
-        body = json.dumps(bundle)
         # Secret value is the entity's value — but we
         # explicitly DO NOT export anything secret. We only
         # record THAT a secret was observed of a certain
@@ -401,7 +384,8 @@ class TestRelationshipMapping:
         # Add an unsupported entity type via raw add (no
         # builder method ships for, say, FILE_ARTIFACT).
         from nexusrecon.models.entities import (
-            BaseEntity, EntityType,
+            BaseEntity,
+            EntityType,
         )
 
         class _RawWeird(BaseEntity):

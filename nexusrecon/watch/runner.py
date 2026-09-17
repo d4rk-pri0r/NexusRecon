@@ -24,7 +24,6 @@ from nexusrecon.watch.actions import (
     ActionResult,
     apply_action,
 )
-from nexusrecon.watch.sensors import SensorFingerprint
 from nexusrecon.watch.severity import (
     SeverityConfig,
     classify_diff,

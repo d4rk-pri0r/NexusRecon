@@ -846,7 +846,9 @@ class EntityGraph:
         reports.
         """
         from nexusrecon.models.entities import (
-            EmailEntity, PersonEntity, UsernameEntity,
+            EmailEntity,
+            PersonEntity,
+            UsernameEntity,
         )
 
         # Idempotency: if this identity is already in the graph

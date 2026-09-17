@@ -29,15 +29,12 @@ Coverage
 """
 from __future__ import annotations
 
-import asyncio
 import shutil
 import sys
 import textwrap
 from pathlib import Path
-from typing import Any
 
 import pytest
-
 
 # Add the in-tree pack to sys.path so its module is
 # importable in tests. The pack loader does this at runtime

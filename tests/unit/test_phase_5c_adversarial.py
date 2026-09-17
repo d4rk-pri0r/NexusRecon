@@ -33,10 +33,7 @@ Coverage
 """
 from __future__ import annotations
 
-import json
-from datetime import UTC, datetime, timedelta
 from typing import Any
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -51,7 +48,6 @@ from nexusrecon.adversarial import (
 from nexusrecon.core.entity_graph import EntityGraph
 from nexusrecon.models.entities import (
     EmailEntity,
-    EntityRelationship,
     OrganizationEntity,
     PersonEntity,
     RelationshipType,

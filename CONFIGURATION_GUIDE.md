@@ -239,15 +239,98 @@ artifacts go (gigabytes possible for large engagements).
 
 ---
 
-# §11 Vault Integration (not implemented)
+# §11 Vault Integration
 
-There is no secret-manager / vault integration today. The config loader
-(`nexusrecon/core/config.py`) reads secrets only from process environment
-variables and `.env` (env takes precedence). `OP_SERVICE_ACCOUNT_TOKEN`,
-`VAULT_ADDR`, and `VAULT_TOKEN` are not consulted by any code path. External
-secret management (1Password, HashiCorp Vault) is a possible future addition,
-not a current feature; for now, manage `.env` with your OS/file permissions or
-inject the env vars from your own secret store at launch.
+There is no secret-manager / vault integration *built into NexusRecon*. The
+config loader (`nexusrecon/core/config.py`) reads secrets only from process
+environment variables and `.env`, in that priority order — a real
+environment variable always wins over a `.env` entry of the same name.
+`OP_SERVICE_ACCOUNT_TOKEN`, `VAULT_ADDR`, and `VAULT_TOKEN`
+are not consulted by any code path, and there's no plugin point for one.
+
+What NexusRecon *does* support, because it's just reading `os.environ` like
+any other process, is having your secret manager inject real environment
+variables into the process at launch. The recommended way to do that with
+1Password is `op run` — below is the exact recipe. (HashiCorp Vault, AWS
+Secrets Manager, etc. work the same way: resolve to real env vars, hand off
+to `nexusrecon`, nothing touches `.env`.)
+
+## Using the 1Password CLI (`op run`)
+
+Prerequisites: the [1Password CLI](https://developer.1password.com/docs/cli/get-started/)
+installed and signed in (`op signin`, or the desktop app's "Integrate with
+1Password CLI" toggle for biometric unlock instead of a session token).
+
+**1. Store each key as its own item.** Use 1Password's built-in **API
+Credential** item type — it has a field literally named `credential`, which
+is what the recipe below references. One item per env var keeps the
+`op://` reference file below self-documenting; putting everything in a
+single item with many custom fields works too, just adjust the paths.
+
+**2. Write a reference file — not a `.env`.** This file holds only
+`op://vault/item/field` pointers, no real secret material, so it's safe
+even if it leaks (though it should still stay out of version control —
+see the `.gitignore` note below):
+
+```
+# secrets.env.op — op:// references only, no real values
+ANTHROPIC_API_KEY=op://NexusRecon/Anthropic/credential
+OPENAI_API_KEY=op://NexusRecon/OpenAI/credential
+SHODAN_API_KEY=op://NexusRecon/Shodan/credential
+VIRUSTOTAL_API_KEY=op://NexusRecon/VirusTotal/credential
+GITHUB_TOKEN=op://NexusRecon/GitHub/credential
+# ... one line per key, using the exact NEXUS_*/*_API_KEY alias names
+# from §1-§9 above so pydantic-settings picks them up
+```
+
+**3. Run NexusRecon through `op run`:**
+
+```bash
+op run --env-file="secrets.env.op" -- nexusrecon
+```
+
+`op run` authenticates against your 1Password session, resolves every
+`op://` reference at launch, and sets them as real environment variables
+for that **one child process only** — nothing is written to `.env` or to
+disk, and `op run` also redacts any matching secret value it sees echoed
+back on stdout/stderr as a safety net.
+
+**4. TUI gotcha: masking breaks TTY detection.** `nexusrecon tui` (and
+`nexusrecon` with no args) checks `sys.stdin.isatty()` /
+`sys.stdout.isatty()` (`nexusrecon/tui/app.py`, `nexusrecon/cli/main.py`)
+to decide whether to launch the interactive UI. `op run`'s default output
+masking pipes the child's stdout/stderr through itself to scan for secret
+values, which makes that check see a pipe instead of a real terminal —
+even when you're at a real TTY, the TUI silently falls back to CLI mode
+with `[info] No TTY detected`. Fix:
+
+```bash
+op run --no-masking --env-file="secrets.env.op" -- nexusrecon tui
+```
+
+`--no-masking` turns off `op run`'s stdout/stderr secret-redaction pass —
+reasonable for the TUI since it doesn't echo key values back to the
+screen, but weigh it if your terminal setup logs/records the session. If
+you'd rather keep masking on, force a real pty instead:
+
+```bash
+op run --env-file="secrets.env.op" -- script -q /dev/null nexusrecon tui
+```
+
+**5. Optional: make `nexusrecon` always load from the vault.** Add to your
+shell profile:
+
+```bash
+nexusrecon() { op run --no-masking --env-file="$HOME/path/to/secrets.env.op" -- command nexusrecon "$@"; }
+```
+
+**Keep the reference file out of git.** It holds no secrets, but its
+*existence* signals your vault layout, and it's easy to confuse with a
+real `.env` at a glance. `.gitignore` already excludes `.env*`; if you
+name your reference file with a leading dot (`.env.op` or
+`.env.1password`) it's covered automatically. This repo's `.gitignore`
+also explicitly excludes `secrets.env.op` and `*.env.op` for anyone who
+prefers that naming.
 
 ---
 

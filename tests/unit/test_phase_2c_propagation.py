@@ -30,17 +30,13 @@ import pytest
 
 from nexusrecon.core.entity_graph import EntityGraph
 from nexusrecon.models.entities import (
-    CloudAssetEntity,
-    DomainEntity,
     HypothesisEntity,
     LeadEntity,
     RelationshipType,
-    SubdomainEntity,
 )
 from nexusrecon.verification import (
     ConfidencePropagator,
     ContradictionDetector,
-    PropagationVerdict,
     VerificationOrchestrator,
 )
 
