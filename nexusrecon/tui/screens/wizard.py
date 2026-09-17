@@ -502,7 +502,7 @@ class WizardScreen(Screen):
         try:
             if event.select.id != "f-preset":
                 return
-            if event.value is Select.BLANK:
+            if event.value is Select.NULL:
                 return
             preset = preset_by_id(str(event.value))
             if preset is None:

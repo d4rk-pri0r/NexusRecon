@@ -18,8 +18,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 
 def _fake_registry(counts: dict, buckets: dict | None = None) -> MagicMock:
     """A registry stand-in whose ``availability_report`` returns crafted

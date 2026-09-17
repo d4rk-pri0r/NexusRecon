@@ -39,6 +39,33 @@ MODEL_PRICING: dict[str, dict[str, float]] = {
 }
 
 
+def _pricing_override() -> dict[str, float] | None:
+    """Operator-supplied cost-per-million-token override.
+
+    Lets a model outside MODEL_PRICING's catalog (e.g. a custom/self-hosted
+    endpoint) report accurate spend instead of silently defaulting to Opus
+    pricing. Both env vars must be set together; a partial override is
+    ignored rather than guessed at.
+    """
+    from nexusrecon.core.config import get_config
+
+    config = get_config()
+    input_cost = config.llm_input_cost_per_m
+    output_cost = config.llm_output_cost_per_m
+    if input_cost is None and output_cost is None:
+        return None
+    if input_cost is None or output_cost is None:
+        log.warning(
+            "llm_pricing_override_incomplete",
+            detail=(
+                "Both NEXUS_LLM_INPUT_COST_PER_M and NEXUS_LLM_OUTPUT_COST_PER_M "
+                "must be set to override pricing; ignoring partial override."
+            ),
+        )
+        return None
+    return {"input": input_cost, "output": output_cost}
+
+
 class BudgetExceededError(Exception):
     """Raised when LLM spend exceeds the campaign budget."""
 
@@ -101,11 +128,13 @@ class CostTracker:
         Record an LLM API call and return the cost in USD.
         Raises BudgetExceededError if total cost exceeds limit.
         """
-        # Normalize model name
-        model_key = model.lower().split("/")[-1]  # e.g. "anthropic/claude-opus-4-5" -> "claude-opus-4-5"
-        pricing = MODEL_PRICING.get(model_key, MODEL_PRICING.get("claude-opus-4-5"))
+        pricing = _pricing_override()
         if pricing is None:
-            pricing = {"input": 3.0, "output": 15.0}
+            # Normalize model name
+            model_key = model.lower().split("/")[-1]  # e.g. "anthropic/claude-opus-4-5" -> "claude-opus-4-5"
+            pricing = MODEL_PRICING.get(model_key, MODEL_PRICING.get("claude-opus-4-5"))
+            if pricing is None:
+                pricing = {"input": 3.0, "output": 15.0}
 
         cost_usd = (
             input_tokens * pricing["input"] / 1_000_000

@@ -13,12 +13,8 @@ for Campaigns, list of ``ReportEntry`` for Reports) differs.
 from __future__ import annotations
 
 import asyncio
-import json
 from pathlib import Path
 from typing import Any
-
-import pytest
-from unittest.mock import patch
 
 from nexusrecon.tui.app import NexusReconApp
 from nexusrecon.tui.screens.campaigns import CampaignsScreen
@@ -27,7 +23,6 @@ from nexusrecon.tui.screens.reports_browser import (
     ReportEntry,
     ReportsBrowserScreen,
 )
-
 
 # ──────────────────────────────────────────────────────────────────────
 # Campaigns filter

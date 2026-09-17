@@ -31,8 +31,6 @@ Coverage
 """
 from __future__ import annotations
 
-import pytest
-
 from nexusrecon.core.entity_graph import EntityGraph
 from nexusrecon.core.identity_graph import (
     Identifier,
@@ -45,7 +43,6 @@ from nexusrecon.core.relationship_graph import (
     RelationshipGraph,
 )
 from nexusrecon.models.entities import EntityType, RelationshipType
-
 
 # ──────────────────────────────────────────────────────────────────────
 # Single identity merge
