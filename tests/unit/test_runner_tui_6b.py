@@ -27,7 +27,6 @@ testable without an app.
 from __future__ import annotations
 
 import asyncio
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -39,7 +38,6 @@ from nexusrecon.tui.widgets import (
     MiniSparkline,
     PhaseStrip,
 )
-
 
 # ──────────────────────────────────────────────────────────────────────
 # Scope fixture helper

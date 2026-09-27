@@ -8,7 +8,6 @@ covered separately in the dashboard pilot tests.
 from __future__ import annotations
 
 import pytest
-
 from rich.text import Text
 
 from nexusrecon.tui.widgets.gauges import (

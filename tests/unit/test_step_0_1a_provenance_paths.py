@@ -21,19 +21,14 @@ Coverage
 """
 from __future__ import annotations
 
-import pytest
-
 from nexusrecon.core.entity_graph import EntityGraph
 from nexusrecon.core.graph_context import GraphContext
 from nexusrecon.models.entities import (
     DomainEntity,
     EmailEntity,
-    EntityType,
     ProvenanceRecord,
     RelationshipType,
-    SubdomainEntity,
 )
-
 
 # ──────────────────────────────────────────────────────────────────────
 # Provenance
@@ -247,7 +242,7 @@ class TestMostCitedEntities:
     def test_ranks_by_inbound_degree(self):
         g = EntityGraph(campaign_id="t", engagement_id="e")
         popular = g.add_domain("popular.com", "x")
-        lonely = g.add_domain("lonely.com", "x")
+        g.add_domain("lonely.com", "x")
         # Two hypotheses cite ``popular``; none cite ``lonely``.
         g.add_hypothesis("h1", source="x", cites=[popular])
         g.add_hypothesis("h2", source="x", cites=[popular])

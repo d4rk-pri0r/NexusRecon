@@ -64,17 +64,17 @@ from nexusrecon.verification.contradictions import (
     resolve_contradiction,
 )
 from nexusrecon.verification.corroboration import (
+    SOURCE_INDEPENDENCE_CLASSES,
     CorroborationEngine,
     CorroborationVerdict,
-    SOURCE_INDEPENDENCE_CLASSES,
 )
 from nexusrecon.verification.orchestrator import (
     VerificationOrchestrator,
     Verifier,
 )
 from nexusrecon.verification.propagation import (
-    ConfidencePropagator,
     PROPAGATING_REL_TYPES,
+    ConfidencePropagator,
     PropagationStep,
     PropagationVerdict,
 )

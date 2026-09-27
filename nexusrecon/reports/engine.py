@@ -8,11 +8,10 @@ Reports are saved to ./reports/<client>/<engagement_id>/<timestamp>/.
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any
-
-import re
 
 import structlog
 
@@ -103,7 +102,7 @@ def scrub_unsourced_cves(text: str, allowed: frozenset[str], *, agent: str = "")
     if not text:
         return text
 
-    def _replace(match: "re.Match[str]") -> str:
+    def _replace(match: re.Match[str]) -> str:
         token = match.group(0)
         if token.upper() in allowed:
             return token

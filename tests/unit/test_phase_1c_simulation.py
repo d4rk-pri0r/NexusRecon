@@ -36,13 +36,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from nexusrecon.strategy.simulation import (
-    SimulationResult,
     _DEFAULT_EXPECTED_NEW_NODES,
     _EXPECTED_NEW_NODES_PER_TOOL,
     append_simulation_log,
     simulate_dispatch_plan,
 )
-
 
 # ──────────────────────────────────────────────────────────────────────
 # Test doubles

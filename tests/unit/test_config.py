@@ -96,3 +96,28 @@ class TestNexusConfig:
         # Use the field alias NEXUS_LLM_MODEL since pydantic alias is required
         cfg = NexusConfig(**{"NEXUS_LLM_MODEL": "gpt-4"})
         assert cfg.llm_model == "gpt-4", f"Expected gpt-4, got {cfg.llm_model}"
+
+    def test_openai_base_url_default_none(self, monkeypatch):
+        monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+        cfg = NexusConfig(_env_file=None)
+        assert cfg.openai_base_url is None
+
+    def test_openai_base_url_from_env(self, monkeypatch):
+        monkeypatch.setenv("OPENAI_BASE_URL", "http://localhost:8000/v1")
+        cfg = NexusConfig()
+        assert cfg.openai_base_url == "http://localhost:8000/v1"
+        assert cfg.get_secret("openai_base_url") == "http://localhost:8000/v1"
+
+    def test_llm_cost_override_default_none(self, monkeypatch):
+        monkeypatch.delenv("NEXUS_LLM_INPUT_COST_PER_M", raising=False)
+        monkeypatch.delenv("NEXUS_LLM_OUTPUT_COST_PER_M", raising=False)
+        cfg = NexusConfig(_env_file=None)
+        assert cfg.llm_input_cost_per_m is None
+        assert cfg.llm_output_cost_per_m is None
+
+    def test_llm_cost_override_from_env(self, monkeypatch):
+        monkeypatch.setenv("NEXUS_LLM_INPUT_COST_PER_M", "1.5")
+        monkeypatch.setenv("NEXUS_LLM_OUTPUT_COST_PER_M", "6.0")
+        cfg = NexusConfig()
+        assert cfg.llm_input_cost_per_m == 1.5
+        assert cfg.llm_output_cost_per_m == 6.0

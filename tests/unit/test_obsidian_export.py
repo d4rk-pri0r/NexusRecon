@@ -18,7 +18,6 @@ from nexusrecon.reports.obsidian_export import (
     upgrade_severity_blockquotes,
 )
 
-
 # ──────────────────────────────────────────────────────────────────────
 # Frontmatter
 # ──────────────────────────────────────────────────────────────────────

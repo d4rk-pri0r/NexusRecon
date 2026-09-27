@@ -36,7 +36,6 @@ import pytest
 from nexusrecon.core.entity_graph import EntityGraph
 from nexusrecon.vision import (
     CostGate,
-    CostGateDecision,
     NoopVisionBackend,
     VisionBackend,
     VisionExtractor,
@@ -46,7 +45,6 @@ from nexusrecon.vision import (
     is_supported_pdf,
 )
 from nexusrecon.vision.extractor import _list, _parse_response
-
 
 # ──────────────────────────────────────────────────────────────────────
 # Fixtures + test doubles

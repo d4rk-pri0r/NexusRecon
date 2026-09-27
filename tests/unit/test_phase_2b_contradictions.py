@@ -47,15 +47,11 @@ import pytest
 from nexusrecon.core.audit import AuditLog
 from nexusrecon.core.entity_graph import EntityGraph
 from nexusrecon.models.entities import (
-    CloudAssetEntity,
     DomainEntity,
-    EntityRelationship,
     RelationshipType,
-    SubdomainEntity,
 )
 from nexusrecon.verification import (
     ContradictionDetector,
-    ContradictionVerdict,
     VerificationOrchestrator,
     resolve_contradiction,
 )
@@ -64,7 +60,6 @@ from nexusrecon.verification.contradictions import (
     _grade_sticky_severity,
     _severity_meets,
 )
-
 
 # ──────────────────────────────────────────────────────────────────────
 # Fixtures
@@ -84,7 +79,7 @@ def graph() -> EntityGraph:
 class TestGraphConflictEvents:
     def test_sticky_conflict_fires_on_merge_divergence(self, graph: EntityGraph):
         # Seed: cloud_provider = aws.
-        eid = graph.add_cloud_asset(
+        graph.add_cloud_asset(
             "acme-bucket", provider="aws",
             service="s3", source="cloud_enum",
         )
@@ -111,7 +106,7 @@ class TestGraphConflictEvents:
     def test_no_sticky_conflict_when_field_was_empty(self, graph: EntityGraph):
         """If the existing entity has no value for a sticky
         field, the merge fills it in — not a conflict."""
-        eid = graph.add_subdomain("api.acme.com", "acme.com", "subfinder")
+        graph.add_subdomain("api.acme.com", "acme.com", "subfinder")
         events: list[dict[str, Any]] = []
         graph.register_mutation_listener(events.append)
 

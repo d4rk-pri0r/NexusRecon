@@ -67,11 +67,13 @@ still complete but lose the prose analysis layer.
 |----------|---------|------|-------|
 | `ANTHROPIC_API_KEY` | Primary LLM (Claude). Recommended. | Paid, ~$3 per campaign typical | https://console.anthropic.com/ |
 | `OPENAI_API_KEY` | Alternate LLM (GPT-4o etc.) | Paid, ~$4 per campaign typical | https://platform.openai.com/api-keys |
+| `OPENAI_BASE_URL` *(optional)* | Redirects the `openai` provider at a self-hosted OpenAI-compatible endpoint (vLLM, LiteLLM proxy, Together, Groq's OpenAI-compat API, etc.) instead of `api.openai.com` | Free/paid depends on the endpoint | Set `NEXUS_LLM_PROVIDER=openai`, `OPENAI_API_KEY` to whatever the endpoint expects (a dummy value if unchecked), and this to the endpoint's `/v1` URL |
 | `OLLAMA_BASE_URL` | Local LLM endpoint | Free (your hardware) | Default `http://localhost:11434`; needs Ollama running |
 | `OLLAMA_MODEL` | Local model name | | e.g. `llama3.1:8b`, `qwen2.5:14b`; must already be pulled in Ollama |
 | `NEXUS_LLM_PROVIDER` | Which provider to use | | `anthropic` \| `openai` \| `ollama` |
-| `NEXUS_LLM_MODEL` | Specific model ID | | e.g. `claude-opus-4-5`, `gpt-4o`, `llama3.1:8b` |
+| `NEXUS_LLM_MODEL` | Specific model ID | | e.g. `claude-opus-4-5`, `gpt-4o`, `llama3.1:8b`, or whatever your custom endpoint calls its model |
 | `NEXUS_LLM_TEMPERATURE` | Sampling temperature | | `0.1` recommended (low for reproducible analysis) |
+| `NEXUS_LLM_INPUT_COST_PER_M` / `NEXUS_LLM_OUTPUT_COST_PER_M` *(optional)* | USD per million input/output tokens | | Overrides `MODEL_PRICING` (`nexusrecon/core/cost_tracker.py`) for a model not in its catalog — e.g. a custom endpoint, which otherwise silently defaults to Opus pricing. Both must be set together or the override is ignored |
 
 **Recommended default:** Anthropic with `claude-opus-4-5` (the shipped default in `config.py` / `.env.example`). Best
 reasoning per dollar for OSINT synthesis. Anthropic accounts also include
@@ -80,6 +82,12 @@ prompt caching which cuts cost ~40% on multi-phase campaigns.
 **Local-only option:** set `NEXUS_LLM_PROVIDER=ollama` and point at any
 reasonably capable local model. Quality drops noticeably below 8B params;
 Qwen 2.5 14B or Llama 3.1 70B (if your hardware allows) work well.
+
+**Custom/self-hosted OpenAI-compatible endpoint:** set `NEXUS_LLM_PROVIDER=openai`,
+`OPENAI_BASE_URL` to your endpoint, and `NEXUS_LLM_MODEL` to whatever model
+name your endpoint expects — it's passed through verbatim. Also set
+`NEXUS_LLM_INPUT_COST_PER_M` / `NEXUS_LLM_OUTPUT_COST_PER_M` if you want
+accurate cost tracking instead of the Opus-pricing fallback.
 
 ---
 

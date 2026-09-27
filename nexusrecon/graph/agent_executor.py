@@ -64,7 +64,9 @@ def get_llm_from_config(config: Any):
     """
     Create a LangChain LLM object from the NexusConfig.
 
-    Supports Anthropic, OpenAI, and Ollama.
+    Supports Anthropic, OpenAI, and Ollama. The "openai" provider honors
+    ``openai_base_url`` (env ``OPENAI_BASE_URL``), so it also covers any
+    self-hosted OpenAI-compatible endpoint (vLLM, LiteLLM proxy, etc.).
     Falls back to a mock LLM if no API keys are configured.
     """
     provider = config.llm_provider.lower()
@@ -93,6 +95,7 @@ def get_llm_from_config(config: Any):
                     model=model,
                     temperature=temperature,
                     api_key=api_key,
+                    base_url=config.get_secret("openai_base_url"),
                 )
             except ImportError:
                 log.warning("langchain-openai not installed, falling back to mock")

@@ -41,11 +41,9 @@ from nexusrecon.sdk.policy_scaffolder import (
 )
 from nexusrecon.sdk.tool_scaffolder import (
     ToolScaffoldInputs,
-    _tool_class_name,
     scaffold_tool,
     validate_tool_inputs,
 )
-
 
 # ──────────────────────────────────────────────────────────────────────
 # Tool scaffolder — validation

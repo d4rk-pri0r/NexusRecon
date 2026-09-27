@@ -7,6 +7,7 @@ import logging
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 import structlog
 import typer
@@ -1584,7 +1585,7 @@ def tool_new(
 ) -> None:
     """Generate a new tool. Interactive capability picker for
     category / target_types / tier when flags are omitted."""
-    from rich.prompt import IntPrompt, Prompt
+    from rich.prompt import Prompt
 
     from nexusrecon.packs.loader import _resolve_pack_dir
     from nexusrecon.sdk.tool_scaffolder import (
@@ -1705,7 +1706,7 @@ def policy_new(
 ) -> None:
     """Generate a new dispatch policy. Interactive picker for
     eligible_phases when the flag is omitted."""
-    from rich.prompt import IntPrompt, Prompt
+    from rich.prompt import Prompt
 
     from nexusrecon.packs.loader import _resolve_pack_dir
     from nexusrecon.sdk.policy_scaffolder import (
@@ -2743,7 +2744,6 @@ def vision_scan(
 ) -> None:
     """Scan a single visual artifact + fold it into a
     campaign's graph."""
-    from nexusrecon.core.entity_graph import EntityGraph
     from nexusrecon.vision import (
         NoopVisionBackend,
         VisionExtractor,
@@ -2809,7 +2809,6 @@ def vision_scan_dir(
     noop: bool = typer.Option(False, "--noop"),
 ) -> None:
     """Walk a directory + scan every supported artifact."""
-    from nexusrecon.core.entity_graph import EntityGraph
     from nexusrecon.vision import (
         NoopVisionBackend,
         VisionExtractor,

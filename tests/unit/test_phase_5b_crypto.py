@@ -34,7 +34,6 @@ from pathlib import Path
 import pytest
 
 from nexusrecon.crypto import (
-    KeyMetadata,
     VerificationError,
     compute_bundle_hash,
     generate_keypair,
@@ -45,7 +44,6 @@ from nexusrecon.crypto import (
     verify_bundle,
 )
 from nexusrecon.crypto.receipt import Receipt
-
 
 # ──────────────────────────────────────────────────────────────────────
 # Fixtures
@@ -210,7 +208,7 @@ class TestSignVerify:
         self, key_dir: Path, bundle_path: Path,
     ):
         kp_a = generate_keypair("ka", "p", key_dir=key_dir)
-        kp_b = generate_keypair("kb", "p", key_dir=key_dir)
+        generate_keypair("kb", "p", key_dir=key_dir)
         sign_bundle(bundle_path, kp_a)
         receipt_path = bundle_path.with_name(
             bundle_path.name + ".receipt.json",

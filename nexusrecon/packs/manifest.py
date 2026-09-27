@@ -57,7 +57,6 @@ import hashlib
 import json
 import re
 from pathlib import Path
-from typing import Any
 
 import structlog
 import yaml

@@ -227,8 +227,8 @@ def install_pack(
             pack_name=parsed.inferred_name,
             version="", ref=parsed.ref or "",
             error=(
-                f"clone OK but no manifest.yaml at root — "
-                f"this directory is NOT a recon pack."
+                "clone OK but no manifest.yaml at root — "
+                "this directory is NOT a recon pack."
             ),
         )
     try:

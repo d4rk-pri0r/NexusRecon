@@ -36,14 +36,13 @@ refactor can't quietly remove the regression net for the agent.
 """
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 from nexusrecon.agents.base import BaseNexusAgent
 from nexusrecon.agents.phishing_drafter import PhishingDrafterAgent
 from nexusrecon.graph.agent_executor import AGENT_REGISTRY, AgentExecutor
-
 
 # ──────────────────────────────────────────────────────────────────────
 # Static configuration

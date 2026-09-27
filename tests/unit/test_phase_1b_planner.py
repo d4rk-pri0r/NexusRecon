@@ -29,14 +29,12 @@ Coverage
 """
 from __future__ import annotations
 
-import asyncio
 import json
 from typing import Any
 
 import pytest
 
 from nexusrecon.strategy import Strategy, plan_campaign, replan
-
 
 # ──────────────────────────────────────────────────────────────────────
 # Test doubles
@@ -302,7 +300,6 @@ class TestFallback:
         """When ``executor`` isn't passed and config can't build
         one, the planner degrades gracefully instead of
         crashing the campaign launch."""
-        import nexusrecon.strategy.planner as planner_mod
 
         # Force the executor constructor path to raise.
         def _boom(*_a, **_kw):

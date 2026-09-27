@@ -26,6 +26,7 @@ is absent.
 """
 from __future__ import annotations
 
+import importlib.util
 import json
 import threading
 import tomllib
@@ -204,7 +205,19 @@ class TestResponseShim:
 
 
 class TestExceptionTranslation:
+    """These raise a real ``curl_cffi`` exception to verify translation into
+    the matching ``httpx`` exception. ``fake_curl`` only fakes the session
+    and force-sets ``base._HAS_CURL_CFFI`` to True so the fallback-matrix
+    tests work without the extra — which means that flag can't be used
+    here to detect whether the real package is actually importable.
+    ``base._CurlRequestsError`` is also bound to ``()`` at import time when
+    the extra is absent, so it couldn't catch a stand-in exception anyway.
+    Like TestRealCurlCffiRoundTrip below, these need the real optional
+    extra installed and skip cleanly without it."""
+
     async def test_curl_timeout_becomes_httpx_timeout(self, fake_curl):
+        if importlib.util.find_spec("curl_cffi") is None:
+            pytest.skip("curl_cffi extra not installed")
         from curl_cffi.requests.errors import RequestsError
 
         class _TimingOutSession(_FakeAsyncSession):
@@ -220,6 +233,8 @@ class TestExceptionTranslation:
                     await client.get("/y")
 
     async def test_curl_transport_error_becomes_httpx_transport(self, fake_curl):
+        if importlib.util.find_spec("curl_cffi") is None:
+            pytest.skip("curl_cffi extra not installed")
         from curl_cffi.requests.errors import RequestsError
 
         class _FailingSession(_FakeAsyncSession):

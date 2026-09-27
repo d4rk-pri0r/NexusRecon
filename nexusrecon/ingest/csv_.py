@@ -97,7 +97,7 @@ class CSVImporter:
         confidence_default = float(mapping.get("confidence_default", 0.7))
 
         try:
-            with open(p, "r", encoding="utf-8", newline="") as f:
+            with open(p, encoding="utf-8", newline="") as f:
                 reader = csv.DictReader(f)
                 if value_column not in (reader.fieldnames or []):
                     report.warnings.append(

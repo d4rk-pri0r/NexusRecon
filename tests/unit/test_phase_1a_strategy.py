@@ -26,7 +26,6 @@ from __future__ import annotations
 import pytest
 
 from nexusrecon.strategy import (
-    DispatchPolicy,
     FullPolicy,
     LitePolicy,
     OffPolicy,
@@ -34,7 +33,6 @@ from nexusrecon.strategy import (
     get_policy,
 )
 from nexusrecon.strategy.plan import KillCriterion, SuccessCriterion
-
 
 # ──────────────────────────────────────────────────────────────────────
 # Policy bundle

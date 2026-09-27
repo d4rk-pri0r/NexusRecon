@@ -41,9 +41,9 @@ from typing import Any
 import structlog
 
 from nexusrecon.adversarial.aggregator import (
+    DEFAULT_DOWNGRADE_FACTOR_BY_SEVERITY,
     AdversarialFinding,
     append_finding,
-    DEFAULT_DOWNGRADE_FACTOR_BY_SEVERITY,
 )
 
 log = structlog.get_logger(__name__)

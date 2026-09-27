@@ -58,9 +58,8 @@ from unittest.mock import patch
 
 import pytest
 
-from nexusrecon.reports.engine import ReportEngine, collect_state_cves
 from nexusrecon import __version__ as NEXUS_VERSION
-
+from nexusrecon.reports.engine import ReportEngine, collect_state_cves
 
 # ──────────────────────────────────────────────────────────────────────
 # LLM isolation

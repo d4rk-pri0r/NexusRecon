@@ -163,6 +163,7 @@ def decode_qr_codes(image_bytes: bytes) -> list[QRDecode]:
     underlying ``zbar`` native library) isn't installed."""
     try:
         from io import BytesIO
+
         from PIL import Image  # noqa: F401
         from pyzbar.pyzbar import decode  # type: ignore[import-not-found]
     except ImportError:
@@ -170,6 +171,7 @@ def decode_qr_codes(image_bytes: bytes) -> list[QRDecode]:
         return []
     try:
         from io import BytesIO
+
         from PIL import Image
         from pyzbar.pyzbar import decode  # type: ignore[import-not-found]
         img = Image.open(BytesIO(image_bytes))

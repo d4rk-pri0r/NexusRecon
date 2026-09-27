@@ -86,10 +86,7 @@ class TestSTIXImporter:
         assert report.counts_by_type["domain"] == 1
         assert report.counts_by_type["ip_address"] == 1
         assert report.counts_by_type["cve"] == 1
-        # Source labeling.
-        dom_id = graph.get_entity_id_by_value("domain", "acme.com") \
-            if hasattr(graph, "get_entity_id_by_value") else None
-        # Direct check via graph traversal.
+        # Source labeling — direct check via graph traversal.
         domains = [
             d for _, d in graph.graph.nodes(data=True)
             if d.get("entity_type") == "domain"
@@ -250,7 +247,7 @@ class TestNessusImporter:
     def test_dedups_cves_per_host(self, graph: EntityGraph):
         """Same CVE in multiple ReportItems → still emits one
         CVE entity per host (the dedup is per host_elem)."""
-        report = NessusImporter().import_text(SAMPLE_NESSUS, graph)
+        NessusImporter().import_text(SAMPLE_NESSUS, graph)
         # CVE-2024-12345 appears in two report items but
         # should land as one CVE entity (the graph's
         # add_entity merges by (type, value), and the

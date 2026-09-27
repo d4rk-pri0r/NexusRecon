@@ -37,17 +37,11 @@ import pytest
 
 from nexusrecon.core.entity_graph import EntityGraph
 from nexusrecon.models.entities import (
-    CloudAssetEntity,
-    DomainEntity,
-    HypothesisEntity,
     LeadEntity,
     RelationshipType,
-    SubdomainEntity,
 )
 from nexusrecon.verification import (
     AdversarialSelfCheck,
-    VerificationHealth,
-    WeakLink,
     compute_verification_health,
 )
 
@@ -421,8 +415,8 @@ class TestPlannerHealthIntegration:
         """``plan_campaign`` should pull
         ``state["verification_health"]`` into the prompt
         when the operator passes state."""
+
         from nexusrecon.strategy.planner import plan_campaign
-        from unittest.mock import MagicMock
 
         class _Spy:
             name = "spy"

@@ -42,7 +42,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-
 # Jira canonical priority names. NexusRecon severity strings
 # map onto these so the emitted body lands cleanly.
 _SEVERITY_TO_PRIORITY: dict[str, str] = {
@@ -131,7 +130,7 @@ class JiraTicketEmitter:
         labels = ["nexusrecon"]
         if category:
             labels.append(_sanitize_label(category))
-        labels.extend(_sanitize_label(l) for l in self.extra_labels)
+        labels.extend(_sanitize_label(label) for label in self.extra_labels)
 
         # Multi-line Jira description.
         assets = ", ".join(finding.get("affected_assets") or []) or "(none)"

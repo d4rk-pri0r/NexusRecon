@@ -44,7 +44,6 @@ from nexusrecon.export.downstream import (
 )
 from nexusrecon.export.downstream.jira import _sanitize_label
 
-
 # ──────────────────────────────────────────────────────────────────────
 # Fixtures
 # ──────────────────────────────────────────────────────────────────────

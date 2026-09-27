@@ -251,6 +251,7 @@ class TestIdentityHygiene:
 
     def test_email_format_drops_junk_before_pattern(self):
         import asyncio
+
         from nexusrecon.tools.identity.email_format_tool import EmailFormatTool
         tool = EmailFormatTool()
         # carlos = flast-ish 'first'; abcfoo would distort the distribution.

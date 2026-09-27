@@ -31,15 +31,12 @@ from __future__ import annotations
 
 from typing import Any
 
-import pytest
-
 from nexusrecon.intent import (
     IntentRecord,
     build_scope_stub,
     extract_intent,
     plan_from_intent,
 )
-
 
 # ──────────────────────────────────────────────────────────────────────
 # Test double — scripted executor

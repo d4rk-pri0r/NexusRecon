@@ -43,23 +43,18 @@ import pytest
 from nexusrecon.core.audit import AuditLog
 from nexusrecon.core.entity_graph import EntityGraph
 from nexusrecon.models.entities import (
-    DomainEntity,
-    EntityRelationship,
     RelationshipType,
     SubdomainEntity,
 )
 from nexusrecon.verification import (
     CorroborationEngine,
     CorroborationVerdict,
-    SOURCE_INDEPENDENCE_CLASSES,
     VerificationOrchestrator,
 )
 from nexusrecon.verification.corroboration import (
-    CORROBORATION_CAP,
     _compute_boost,
     _distinct_classes,
 )
-
 
 # ──────────────────────────────────────────────────────────────────────
 # Fixtures
